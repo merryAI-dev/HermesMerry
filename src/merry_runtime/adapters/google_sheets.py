@@ -33,6 +33,118 @@ ENTITY_RESOLUTION_HEADERS: tuple[str, ...] = (
     "reviewer",
 )
 
+OPERATOR_CONSOLE_HEADERS: dict[str, tuple[str, ...]] = {
+    "Review Queue": (
+        "card_id",
+        "ac_id",
+        "entity_id",
+        "company",
+        "region",
+        "industry",
+        "total_score",
+        "priority_probability",
+        "recommended_action",
+        "queue_type",
+        "rationale",
+        "decision",
+        "review_memo",
+        "reviewer",
+        "owner",
+        "next_action",
+        "due_date",
+        "override_reason",
+        "status",
+    ),
+    "Candidate Detail": (
+        "entity_id",
+        "company",
+        "normalized_name",
+        "representative",
+        "homepage",
+        "region",
+        "industry",
+        "summary",
+        "latest_score",
+        "priority_probability",
+        "queue_type",
+        "recommended_action",
+        "status",
+        "wiki_path",
+    ),
+    "Evidence": (
+        "source_id",
+        "signal_id",
+        "entity_id",
+        "source_type",
+        "channel",
+        "title",
+        "url",
+        "signal_type",
+        "evidence_text",
+        "confidence",
+        "tags",
+        "contains_pii",
+        "raw_text_path",
+    ),
+    "Decision Log": (
+        "review_id",
+        "card_id",
+        "ac_id",
+        "entity_id",
+        "reviewer",
+        "decision",
+        "memo",
+        "reviewed_at",
+        "owner",
+        "next_action",
+        "due_date",
+    ),
+    "AC Settings": (
+        "ac_id",
+        "ac_name",
+        "fund_purpose",
+        "recruiting_area",
+        "hypothesis_tags",
+        "impact_priority",
+        "region_preferences",
+        "industry_preferences",
+        "tech_preferences",
+        "exclusion_rules",
+        "weight_overrides",
+        "active",
+    ),
+    "Exploration Queue": (
+        "card_id",
+        "ac_id",
+        "entity_id",
+        "company",
+        "uncertainty",
+        "exploration_reason",
+        "priority_probability",
+        "recommended_action",
+        "queue_type",
+        "rationale",
+        "decision",
+        "review_memo",
+        "reviewer",
+        "owner",
+        "next_action",
+        "due_date",
+        "status",
+    ),
+    "Run Log": (
+        "run_id",
+        "job_name",
+        "status",
+        "started_at",
+        "finished_at",
+        "input_count",
+        "output_count",
+        "error_message",
+        "next_action",
+    ),
+}
+
 
 @dataclass(slots=True)
 class GoogleSheetReviewQueue:
@@ -83,6 +195,8 @@ class GoogleSheetReviewQueue:
 
 
 def _headers_for_tab(sheet_tab: str) -> tuple[str, ...]:
+    if sheet_tab in OPERATOR_CONSOLE_HEADERS:
+        return OPERATOR_CONSOLE_HEADERS[sheet_tab]
     if sheet_tab == "entity_resolution":
         return ENTITY_RESOLUTION_HEADERS
     return REVIEW_QUEUE_HEADERS

@@ -566,6 +566,129 @@ def test_google_sheet_review_queue_publishes_entity_resolution_schema() -> None:
     }
 
 
+def test_google_sheet_review_queue_supports_operator_console_tabs() -> None:
+    expected_headers = {
+        "Review Queue": (
+            "card_id",
+            "ac_id",
+            "entity_id",
+            "company",
+            "region",
+            "industry",
+            "total_score",
+            "priority_probability",
+            "recommended_action",
+            "queue_type",
+            "rationale",
+            "decision",
+            "review_memo",
+            "reviewer",
+            "owner",
+            "next_action",
+            "due_date",
+            "override_reason",
+            "status",
+        ),
+        "Candidate Detail": (
+            "entity_id",
+            "company",
+            "normalized_name",
+            "representative",
+            "homepage",
+            "region",
+            "industry",
+            "summary",
+            "latest_score",
+            "priority_probability",
+            "queue_type",
+            "recommended_action",
+            "status",
+            "wiki_path",
+        ),
+        "Evidence": (
+            "source_id",
+            "signal_id",
+            "entity_id",
+            "source_type",
+            "channel",
+            "title",
+            "url",
+            "signal_type",
+            "evidence_text",
+            "confidence",
+            "tags",
+            "contains_pii",
+            "raw_text_path",
+        ),
+        "Decision Log": (
+            "review_id",
+            "card_id",
+            "ac_id",
+            "entity_id",
+            "reviewer",
+            "decision",
+            "memo",
+            "reviewed_at",
+            "owner",
+            "next_action",
+            "due_date",
+        ),
+        "AC Settings": (
+            "ac_id",
+            "ac_name",
+            "fund_purpose",
+            "recruiting_area",
+            "hypothesis_tags",
+            "impact_priority",
+            "region_preferences",
+            "industry_preferences",
+            "tech_preferences",
+            "exclusion_rules",
+            "weight_overrides",
+            "active",
+        ),
+        "Exploration Queue": (
+            "card_id",
+            "ac_id",
+            "entity_id",
+            "company",
+            "uncertainty",
+            "exploration_reason",
+            "priority_probability",
+            "recommended_action",
+            "queue_type",
+            "rationale",
+            "decision",
+            "review_memo",
+            "reviewer",
+            "owner",
+            "next_action",
+            "due_date",
+            "status",
+        ),
+        "Run Log": (
+            "run_id",
+            "job_name",
+            "status",
+            "started_at",
+            "finished_at",
+            "input_count",
+            "output_count",
+            "error_message",
+            "next_action",
+        ),
+    }
+
+    for tab, headers in expected_headers.items():
+        service = FakeSheetsService()
+        service.values_obj.get_responses.append({"values": []})
+        queue = GoogleSheetReviewQueue(service=service, spreadsheet_id="sheet_1")
+
+        queue.publish_cards(sheet_tab=tab, rows=[{headers[0]: "row_1"}])
+
+        assert service.values_obj.update_body == {"values": [list(headers)]}
+
+
 def test_google_sheet_review_queue_escapes_entity_resolution_formula_cells() -> None:
     service = FakeSheetsService()
     service.values_obj.get_responses.append({"values": []})
