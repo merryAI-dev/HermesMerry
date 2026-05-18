@@ -25,5 +25,11 @@ jobs:
         with:
           tofu_version: "1.12.0"
 
+      - name: Install audit tooling
+        run: python3 -m pip install pip-audit
+
+      - name: Audit locked Python dependencies
+        run: python3 -m pip_audit -r requirements.lock
+
       - name: Run verification
         run: make verify
