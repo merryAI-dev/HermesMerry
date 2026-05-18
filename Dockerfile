@@ -22,3 +22,4 @@ RUN chmod 755 /usr/local/bin/runpod-entrypoint
 USER hermes
 
 ENTRYPOINT ["runpod-entrypoint", "python3", "-m", "merry_runtime.jobs"]
+CMD ["loop"]

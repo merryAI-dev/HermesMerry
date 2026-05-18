@@ -123,6 +123,7 @@ def test_dockerfile_uses_runpod_entrypoint_before_jobs_cli() -> None:
 
     assert "COPY scripts/runpod_entrypoint.sh /usr/local/bin/runpod-entrypoint" in dockerfile
     assert 'ENTRYPOINT ["runpod-entrypoint", "python3", "-m", "merry_runtime.jobs"]' in dockerfile
+    assert 'CMD ["loop"]' in dockerfile
 
 
 def test_ghcr_build_script_pushes_linux_amd64_staging_image() -> None:
