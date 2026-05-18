@@ -217,13 +217,15 @@ class GoogleSheetReviewQueue:
             range=_sheet_range(sheet_tab, headers),
         ).execute()
         existing_values = existing_response.get("values", [])
-        if header_state.replaced_schema:
-            existing_values = _remap_existing_values(
-                headers=headers,
-                previous_headers=header_state.previous_headers,
-                existing_values=existing_values,
-            )
-        if len(key_fields) > 1 or header_state.replaced_schema:
+        existing_row_count = len(existing_values)
+        rewrite_projection = header_state.replaced_schema or _has_legacy_candidate_detail_rows(
+            sheet_tab=sheet_tab,
+            headers=headers,
+            existing_values=existing_values,
+        )
+        if rewrite_projection:
+            existing_values = [list(headers)]
+        if len(key_fields) > 1 or rewrite_projection:
             compacted_rows = _compact_sheet_rows(
                 sheet_tab=sheet_tab,
                 headers=headers,
@@ -238,14 +240,14 @@ class GoogleSheetReviewQueue:
                 valueInputOption="RAW",
                 body={"values": rewritten_values},
             ).execute()
-            if len(existing_values) > len(rewritten_values):
+            if existing_row_count > len(rewritten_values):
                 self.service.spreadsheets().values().clear(
                     spreadsheetId=self.spreadsheet_id,
                     range=_sheet_range_rows(
                         sheet_tab,
                         headers,
                         start_row=len(rewritten_values) + 1,
-                        end_row=len(existing_values),
+                        end_row=existing_row_count,
                     ),
                     body={},
                 ).execute()
@@ -430,19 +432,24 @@ def _row_values(row: dict[str, object], headers: tuple[str, ...], *, escape_form
     return [_safe_cell_value(value) for value in values]
 
 
-def _remap_existing_values(
+def _has_legacy_candidate_detail_rows(
     *,
+    sheet_tab: str,
     headers: tuple[str, ...],
-    previous_headers: tuple[str, ...],
     existing_values: list[list[object]],
-) -> list[list[object]]:
-    if not existing_values:
-        return []
-    remapped = [list(headers)]
+) -> bool:
+    if sheet_tab != "Candidate Detail" or not existing_values:
+        return False
     for values in existing_values[1:]:
-        row = dict(zip(previous_headers, values, strict=False))
-        remapped.append([row.get(header, "") for header in headers])
-    return remapped
+        row = dict(zip(headers, values, strict=False))
+        if _is_blank(row.get("company", "")):
+            continue
+        summary = str(row.get("summary") or "").strip()
+        if _is_blank(row.get("collected_at", "")):
+            return True
+        if summary and not summary.startswith("공개 카드 -> "):
+            return True
+    return False
 
 
 def _existing_row_index(

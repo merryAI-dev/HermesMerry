@@ -665,7 +665,7 @@ def test_google_sheet_review_queue_upserts_existing_row_by_key() -> None:
         "master@thevc.kr",
         "Seoul",
         "AI",
-        "old summary",
+        "공개 카드 -> Merry AI",
         "old model",
         "Seed",
         "undisclosed",
@@ -748,7 +748,7 @@ def test_google_sheet_review_queue_migrates_candidate_detail_from_entity_id_sche
         "",
         "Seoul",
         "AI",
-        "old summary",
+        "공개 카드 -> Merry AI",
         "91.0",
         "0.92",
         "priority",
@@ -805,6 +805,95 @@ def test_google_sheet_review_queue_migrates_candidate_detail_from_entity_id_sche
     assert rewritten[1][9] == "AI workflow automation"
 
 
+def test_google_sheet_review_queue_rewrites_legacy_candidate_detail_projection_rows() -> None:
+    service = FakeSheetsService()
+    service.sheet_titles.add("Candidate Detail")
+    headers = list(OPERATOR_CONSOLE_HEADERS["Candidate Detail"])
+    legacy_row = [
+        "",
+        "Old Co",
+        "oldco",
+        "Old Founder",
+        "https://old.example",
+        "hello@old.example",
+        "Seoul",
+        "AI",
+        "THE VC 투자/M&A 공개 카드: Old Co / Old Product.",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "new_source",
+        "score_candidates",
+        "crawled",
+        "wiki/entities/Old Co.md",
+    ]
+    stale_row = [
+        "2026-05-18T00:00:00+00:00",
+        "Stale Co",
+        "staleco",
+        "Stale Founder",
+        "https://stale.example",
+        "hello@stale.example",
+        "Seoul",
+        "AI",
+        "공개 카드 -> Merry AI",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "new_source",
+        "score_candidates",
+        "crawled",
+        "wiki/entities/Stale Co.md",
+    ]
+    service.values_obj.get_responses.extend(
+        [
+            {"values": [headers]},
+            {"values": [headers, legacy_row, stale_row]},
+        ]
+    )
+    queue = GoogleSheetReviewQueue(service=service, spreadsheet_id="sheet_1")
+
+    count = queue.upsert_cards(
+        sheet_tab="Candidate Detail",
+        rows=[
+            {
+                "collected_at": "2026-05-19T00:00:00+00:00",
+                "company": "Merry AI",
+                "normalized_name": "merryai",
+                "representative": "Founder",
+                "homepage": "https://merry.ai",
+                "contact_email": "founder@merry.ai",
+                "region": "Seoul",
+                "industry": "AI",
+                "summary": "공개 카드 -> Merry AI",
+                "business_model": "AI workflow automation",
+                "investment_round": "Seed",
+                "investment_amount": "1B KRW",
+                "investor": "Merry Ventures",
+                "queue_type": "new_source",
+                "recommended_action": "score_candidates",
+                "status": "crawled",
+                "wiki_path": "wiki/entities/Merry AI.md",
+            }
+        ],
+        key_fields=("company", "homepage"),
+    )
+
+    assert count == 1
+    rewritten = service.values_obj.update_body["values"]  # type: ignore[index]
+    assert service.values_obj.update_kwargs["range"] == "'Candidate Detail'!A1:S2"
+    assert service.values_obj.clear_kwargs["range"] == "'Candidate Detail'!A3:S3"
+    assert len(rewritten) == 2
+    assert rewritten[1][1] == "Merry AI"
+    assert rewritten[1][8] == "공개 카드 -> Merry AI"
+
+
 def test_google_sheet_review_queue_upsert_dedupes_new_rows_with_same_key_in_batch() -> None:
     service = FakeSheetsService()
     service.values_obj.get_responses.extend(
@@ -855,7 +944,7 @@ def test_google_sheet_review_queue_upsert_preserves_sheet_owned_and_custom_cells
         "hello@merry.ai",
         "Seoul",
         "AI",
-        "old summary",
+        "공개 카드 -> Merry AI",
         "old model",
         "Seed",
         "undisclosed",
@@ -927,7 +1016,7 @@ def test_google_sheet_review_queue_upsert_clears_known_bad_crawl_cells() -> None
         "master@thevc.kr",
         "Seoul",
         "AI",
-        "old summary",
+        "공개 카드 -> Merry AI",
         "old model",
         "Seed",
         "undisclosed",
