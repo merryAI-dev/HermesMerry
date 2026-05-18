@@ -6,10 +6,10 @@ least-privilege runtime service account.
 
 ## Backend
 
-Runpod runs the long-lived Hermes agent loop from a private GHCR image:
+Runpod runs the long-lived Hermes agent loop from a private Docker Hub image:
 
 ```bash
-ghcr.io/$GHCR_OWNER/hermes-merry:staging
+docker.io/boram1220/hermes-merry:staging
 ```
 
 The Pod command is:
@@ -22,7 +22,7 @@ Cloud Run is optional and belongs to `docs/runbooks/staging-canary.md`.
 
 ## Required Values
 
-- `GHCR_OWNER`
+- `DOCKERHUB_USERNAME=boram1220`
 - `GCP_PROJECT_ID`
 - `BIGQUERY_DATASET`
 - `RAW_BUCKET`
@@ -46,8 +46,8 @@ Cloud Run is optional and belongs to `docs/runbooks/staging-canary.md`.
 
 Stop before push, apply, or canary if any condition is true:
 
-- `GHCR_OWNER` is empty.
 - `docker buildx` is unavailable.
+- Docker Hub is not logged in as `boram1220`.
 - `infra/terraform/runpod-staging.tfvars` is absent.
 - The active gcloud project differs from `project_id` in
   `infra/terraform/runpod-staging.tfvars`.
@@ -64,14 +64,16 @@ Build and push the linux/amd64 staging image:
 
 ```bash
 docker buildx build --platform linux/amd64 \
-  -t "ghcr.io/$GHCR_OWNER/hermes-merry:staging" \
+  -t "docker.io/boram1220/hermes-merry:staging" \
   --push .
 ```
 
-After the helper script is added, prefer:
+Also publish an immutable tag for the exact commit:
 
 ```bash
-GHCR_OWNER="$GHCR_OWNER" PUSH_IMAGE=1 scripts/build_ghcr_staging.sh
+COMMIT="$(git rev-parse --short HEAD)"
+docker tag hermes-merry:runpod-staging "docker.io/boram1220/hermes-merry:staging-${COMMIT}"
+docker push "docker.io/boram1220/hermes-merry:staging-${COMMIT}"
 ```
 
 ## Minimum GCP Layer
@@ -114,7 +116,7 @@ Expected plan scope:
 Configure the Pod with:
 
 ```text
-Image: ghcr.io/$GHCR_OWNER/hermes-merry:staging
+Image: docker.io/boram1220/hermes-merry:staging
 Command: python3 -m merry_runtime.jobs loop
 Volume path: /workspace
 WIKI_ROOT: /workspace/hermes/wiki
@@ -125,7 +127,9 @@ AGENT_LOOP_MAX_CYCLES: 1
 ```
 
 Store sensitive values as Runpod secrets. `GOOGLE_APPLICATION_CREDENTIALS_JSON`
-must be a Runpod secret, not a committed file.
+must be a Runpod secret, not a committed file. For the private image, configure
+Runpod Container Registry Auth with the Docker Hub user `boram1220` and a Docker
+Hub access token.
 
 ## One-cycle Canary
 

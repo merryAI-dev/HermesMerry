@@ -31,10 +31,10 @@ Use `infra/terraform/runpod-staging.tfvars.example` as the primary staging varia
 
 ## Runpod-first staging
 
-The default staging runtime is a Runpod Pod that pulls a private GHCR image:
+The default staging runtime is a Runpod Pod that pulls a private Docker Hub image:
 
 ```bash
-ghcr.io/$GHCR_OWNER/hermes-merry:staging
+docker.io/boram1220/hermes-merry:staging
 ```
 
 Runpod runs the long-lived agent loop:
@@ -124,6 +124,6 @@ See `docs/SAFETY.md` for the explicit guardrail checklist.
 
 1. Bind real GCP and Google Workspace clients from environment/ADC in `merry_runtime.jobs`.
 2. Wire pipeline outputs into `SQLiteWikiStore` so each ingest updates the Obsidian wiki projection.
-3. Build and push the GHCR image, then apply the Runpod minimal GCP layer in a staging GCP project.
+3. Build and push the Docker Hub private image, then apply the Runpod minimal GCP layer in a staging GCP project.
 4. Start a one-cycle Runpod canary before switching to the always-on loop.
 5. Load the first AC profile and run a 50-candidate real-data pilot before scaling toward the 1,000-candidate Mother DB target.

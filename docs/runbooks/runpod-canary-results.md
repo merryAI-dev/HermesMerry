@@ -2,15 +2,17 @@
 
 ## Run
 
-- Date: 2026-05-18 17:40:15 KST (+0900)
+- Date: 2026-05-18 17:53:15 KST (+0900)
 - Operator: local Codex session with gcloud account `mwbyun1220@mysc.co.kr`
-- GHCR image digest: not pushed; local image
+- Docker Hub image digest:
   `sha256:3136562e304acd9f9b22714991ad4156ad1ab6393242fbff5773a24467f838d1`
+- Docker Hub image: `docker.io/boram1220/hermes-merry:staging`
+- Docker Hub immutable image: `docker.io/boram1220/hermes-merry:staging-096cbea`
+- Runpod registry auth ID: `cmpayp7w3004nlb076xogtx3r`
 - Runpod Pod ID: `yoe3dvzrjhi72r`
 - Runpod image: existing Pod image
-  `runpod/pytorch:1.0.3-cu1281-torch280-ubuntu2404`; GHCR image
-  `ghcr.io/merryai-dev/hermes-merry:staging` is still planned but push is
-  blocked by missing GitHub `write:packages` scope
+  `runpod/pytorch:1.0.3-cu1281-torch280-ubuntu2404`; Docker Hub image pull was
+  verified through a short-lived CPU smoke Pod
 - GCP project: `yapnotes-app-2`
 - BigQuery dataset: `merry_ac_discovery_staging`
 - GCS raw bucket: not created; project billing is disabled for GCS bucket creation
@@ -29,6 +31,11 @@
   with code `2` before runtime construction
 - Docker one-shot ingest: `run_bb3dcd25f56d`
 - Docker one-cycle loop: `calibrate-scores`, `run_calibrate_ac_climate_c9e58d56e2b8`
+- Docker Hub push: `staging` and `staging-096cbea` both pushed with digest
+  `sha256:3136562e304acd9f9b22714991ad4156ad1ab6393242fbff5773a24467f838d1`
+- Runpod private pull smoke: CPU Pod `6btmmuzcep26cc` started from
+  `docker.io/boram1220/hermes-merry:staging-096cbea`, reached `RUNNING`, and
+  was deleted immediately after verification
 - Runpod bootstrap: uploaded committed files only with `git archive HEAD`;
   no `.git`, `tfvars`, Terraform state, local credentials, caches, raw data, or
   wiki data were transferred
@@ -59,9 +66,9 @@
 - Canary status: local Docker canary passed and existing remote Runpod Pod
   canary passed
 - Failed job count: 0 for the focused Runpod canary path
-- Human review required: yes, approve GitHub `write:packages` scope or provide a
-  registry token, then replace the SSH bootstrap with the planned private GHCR
-  image and configure isolated Sheet/Slack targets
+- Human review required: configure durable GCP credentials for the Runpod Pod,
+  then replace the SSH bootstrap with the private Docker Hub image and configure
+  isolated Sheet/Slack targets
 
 ## Rollback command
 

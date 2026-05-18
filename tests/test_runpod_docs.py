@@ -8,7 +8,7 @@ def test_readme_marks_runpod_as_primary_staging_backend() -> None:
     readme = (REPO_ROOT / "README.md").read_text()
 
     assert "Runpod-first staging" in readme
-    assert "ghcr.io/$GHCR_OWNER/hermes-merry:staging" in readme
+    assert "docker.io/boram1220/hermes-merry:staging" in readme
     assert "Cloud Run is optional" in readme
 
 
@@ -20,7 +20,8 @@ def test_runpod_runbook_contains_required_stop_conditions() -> None:
         "/workspace/hermes/wiki",
         "infra/terraform/runpod-staging.tfvars",
         "docker buildx build --platform linux/amd64",
-        "ghcr.io/$GHCR_OWNER/hermes-merry:staging",
+        "docker.io/boram1220/hermes-merry:staging",
+        "Runpod Container Registry Auth",
         "python3 -m merry_runtime.jobs loop",
     ):
         assert required in runbook
@@ -36,7 +37,7 @@ def test_runpod_canary_results_template_captures_required_evidence() -> None:
     template = (REPO_ROOT / "docs" / "runbooks" / "runpod-canary-results.md").read_text()
 
     for required in (
-        "GHCR image digest",
+        "Docker Hub image digest",
         "Runpod Pod ID",
         "BigQuery agent_runs row",
         "GCS raw object",
