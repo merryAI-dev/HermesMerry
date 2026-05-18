@@ -1,6 +1,7 @@
 import logging
 
 import pytest
+from google.api_core.exceptions import PreconditionFailed
 
 from merry_runtime.adapters.bigquery import BigQueryStructuredStore, build_query_job_config
 from merry_runtime.adapters.gcs import GCSObjectStore
@@ -11,10 +12,14 @@ from merry_runtime.adapters.slack import SlackNotifier
 
 class FakeBlob:
     def __init__(self) -> None:
-        self.uploaded: dict[str, str] = {}
+        self.uploaded: dict[str, object] = {}
 
-    def upload_from_string(self, text: str, *, content_type: str) -> None:
-        self.uploaded = {"text": text, "content_type": content_type}
+    def upload_from_string(self, text: str, *, content_type: str, if_generation_match: int | None = None) -> None:
+        self.uploaded = {
+            "text": text,
+            "content_type": content_type,
+            "if_generation_match": if_generation_match,
+        }
 
 
 class FakeBucket:
@@ -35,6 +40,27 @@ class FakeGCSClient:
         return self.bucket_obj
 
 
+class FakeExistingBlob(FakeBlob):
+    def upload_from_string(self, text: str, *, content_type: str, if_generation_match: int | None = None) -> None:
+        self.uploaded = {
+            "text": text,
+            "content_type": content_type,
+            "if_generation_match": if_generation_match,
+        }
+        raise PreconditionFailed("object already exists")
+
+
+class FakeExistingBucket(FakeBucket):
+    def blob(self, path: str) -> FakeBlob:
+        self.blobs[path] = FakeExistingBlob()
+        return self.blobs[path]
+
+
+class FakeExistingGCSClient(FakeGCSClient):
+    def __init__(self) -> None:
+        self.bucket_obj = FakeExistingBucket()
+
+
 def test_gcs_object_store_uploads_text_and_returns_gs_uri() -> None:
     client = FakeGCSClient()
     store = GCSObjectStore(client=client, bucket="raw-bucket")
@@ -43,7 +69,25 @@ def test_gcs_object_store_uploads_text_and_returns_gs_uri() -> None:
 
     assert uri == "gs://raw-bucket/raw/a.txt"
     assert client.bucket_name == "raw-bucket"
-    assert client.bucket_obj.blobs["raw/a.txt"].uploaded == {"text": "hello", "content_type": "text/plain"}
+    assert client.bucket_obj.blobs["raw/a.txt"].uploaded == {
+        "text": "hello",
+        "content_type": "text/plain",
+        "if_generation_match": 0,
+    }
+
+
+def test_gcs_object_store_returns_existing_uri_when_raw_object_already_exists() -> None:
+    client = FakeExistingGCSClient()
+    store = GCSObjectStore(client=client, bucket="raw-bucket")
+
+    uri = store.write_raw_text(path="/raw/a.txt", text="hello", content_type="text/plain")
+
+    assert uri == "gs://raw-bucket/raw/a.txt"
+    assert client.bucket_obj.blobs["raw/a.txt"].uploaded == {
+        "text": "hello",
+        "content_type": "text/plain",
+        "if_generation_match": 0,
+    }
 
 
 class FakeQueryJob:

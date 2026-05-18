@@ -30,6 +30,13 @@ def test_terraform_separates_scheduler_identity_and_scopes_bigquery_iam_to_datas
     assert "service_account_email = google_service_account.scheduler.email" in main_tf
 
 
+def test_terraform_grants_create_only_raw_docs_bucket_access() -> None:
+    main_tf = (REPO_ROOT / "infra" / "terraform" / "main.tf").read_text()
+
+    assert "roles/storage.objectAdmin" not in main_tf
+    assert 'role   = "roles/storage.objectCreator"' in main_tf
+
+
 def test_dockerfile_runs_runtime_as_non_root_user() -> None:
     dockerfile = (REPO_ROOT / "Dockerfile").read_text()
 

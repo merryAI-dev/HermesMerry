@@ -224,9 +224,9 @@ resource "google_project_iam_member" "log_writer" {
   member  = "serviceAccount:${google_service_account.agent.email}"
 }
 
-resource "google_storage_bucket_iam_member" "raw_docs_object_admin" {
+resource "google_storage_bucket_iam_member" "raw_docs_object_creator" {
   bucket = google_storage_bucket.raw_docs.name
-  role   = "roles/storage.objectAdmin"
+  role   = "roles/storage.objectCreator"
   member = "serviceAccount:${google_service_account.agent.email}"
 }
 
