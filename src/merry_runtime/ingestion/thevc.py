@@ -406,13 +406,19 @@ def _match_first(text: str, patterns: tuple[str, ...]) -> str:
 
 def _normalize_url(value: str) -> str:
     cleaned = _clean(value).rstrip(".,)")
-    if not cleaned:
+    if not cleaned or not _looks_like_homepage(cleaned):
         return ""
     if cleaned.startswith("//"):
         return f"https:{cleaned}"
     if not cleaned.startswith(("http://", "https://")):
         return f"https://{cleaned}"
     return cleaned
+
+
+def _looks_like_homepage(value: str) -> bool:
+    if value.startswith(("http://", "https://", "//")):
+        return "." in value
+    return bool(re.fullmatch(r"[0-9A-Za-z][0-9A-Za-z.-]*\.[A-Za-z]{2,}(/[^\s]*)?", value))
 
 
 def _normalize_region(value: str) -> str:

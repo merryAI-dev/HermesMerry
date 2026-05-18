@@ -134,3 +134,16 @@ def test_extract_thevc_investment_sources_uses_homepage_contact_fallback_for_ema
     )
 
     assert "Contact Email: hello@the-aio.com" in sources[0]["payload"]
+
+
+def test_extract_thevc_company_detail_does_not_treat_company_type_as_homepage() -> None:
+    detail = extract_thevc_company_detail(
+        """
+        <div>홈페이지</div>
+        <div>주식회사</div>
+        <meta name="description" content="본사는 한국∙서울특별시에 위치해있습니다. 현재 대표자는 장영휘입니다.">
+        """
+    )
+
+    assert detail.homepage == ""
+    assert detail.representative == "장영휘"
