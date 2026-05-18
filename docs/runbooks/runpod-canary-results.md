@@ -93,6 +93,20 @@
   Pod list showed `CANARY_PRESENT 0`
 - Runpod template hardening: `hermes-merry-staging-one-cycle` now runs the loop
   once, prints `HERMES_CANARY_DONE`, then sleeps to avoid repeated restarts
+- SQLite-first image push: `docker.io/boram1220/hermes-merry:staging-cb0ddd0`
+  pushed with digest
+  `sha256:5b8c7757f960895c87d2822ddf7f5efcfde7a2c23eb373f602d266ad277ee9dd`
+- SQLite-first Docker smoke: `validate-hermes-profile` passed and
+  `run backup-export` produced SQLite, CSV, JSONL, wiki archive, and manifest
+  paths without requiring Google ADC
+- Runpod template update: template `7s0amucf96` renamed to
+  `hermes-merry-staging-sqlite-canary`, image
+  `docker.io/boram1220/hermes-merry:staging-cb0ddd0`, env
+  `STRUCTURED_STORE_BACKEND=sqlite`, `MOTHER_DB_PATH=/workspace/hermes/mother.db`,
+  `BACKUP_ROOT=/workspace/hermes/backups`
+- Runpod SQLite image pull smoke: Pod `l7tqb76utbrt8g` reached `RUNNING` from
+  the SQLite-first template at `$0.06/hr` and was deleted successfully with HTTP
+  204
 
 ## Result
 

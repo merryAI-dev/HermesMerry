@@ -139,15 +139,13 @@ Hub access token.
 The prepared one-cycle template is:
 
 ```text
-Template: hermes-merry-staging-one-cycle
+Template: hermes-merry-staging-sqlite-canary
 Template ID: 7s0amucf96
-GCP secret reference: {{ RUNPOD_SECRET_hermes_gcp_sa_staging_json }}
+Image: docker.io/boram1220/hermes-merry:staging-cb0ddd0
 ```
 
-If the Runpod REST API key cannot access GraphQL `secretCreate`, create the
-`hermes_gcp_sa_staging_json` secret in the Runpod console before launching the
-template. Do not paste the service account JSON into plain Pod environment
-variables for the always-on runtime.
+The SQLite canary does not require BigQuery billing. Add the Google service
+account secret back only when the template also enables Gmail or Sheets jobs.
 
 The one-cycle template overrides the container command to run the loop once and
 then sleep:
