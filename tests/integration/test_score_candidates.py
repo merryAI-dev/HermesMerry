@@ -18,6 +18,7 @@ def test_score_candidates_creates_ac_scores_cards_and_sheet_rows() -> None:
     assert queue.published["ac_climate"][0]["decision"] == ""
     assert queue.published["ac_climate"][0]["review_memo"] == ""
     assert queue.published["ac_climate"][0]["queue_type"] == "priority"
+    assert queue.published["ac_climate"][0]["contact_email"] == "hello@carefarm.example"
     assert store.tables["agent_runs"][0]["job_name"] == "score-candidates"
 
 

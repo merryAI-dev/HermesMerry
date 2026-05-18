@@ -18,6 +18,7 @@ REVIEW_QUEUE_HEADERS: tuple[str, ...] = (
     "decision",
     "review_memo",
     "reviewer",
+    "contact_email",
 )
 
 ENTITY_RESOLUTION_HEADERS: tuple[str, ...] = (
@@ -54,6 +55,7 @@ OPERATOR_CONSOLE_HEADERS: dict[str, tuple[str, ...]] = {
         "due_date",
         "override_reason",
         "status",
+        "contact_email",
     ),
     "Candidate Detail": (
         "entity_id",
@@ -70,6 +72,7 @@ OPERATOR_CONSOLE_HEADERS: dict[str, tuple[str, ...]] = {
         "recommended_action",
         "status",
         "wiki_path",
+        "contact_email",
     ),
     "Evidence": (
         "source_id",
@@ -131,6 +134,7 @@ OPERATOR_CONSOLE_HEADERS: dict[str, tuple[str, ...]] = {
         "next_action",
         "due_date",
         "status",
+        "contact_email",
     ),
     "Run Log": (
         "run_id",
@@ -165,8 +169,7 @@ class GoogleSheetReviewQueue:
     spreadsheet_id: str
 
     def publish_cards(self, *, sheet_tab: str, rows: list[dict[str, object]]) -> int:
-        headers = _headers_for_tab(sheet_tab)
-        self._ensure_headers(sheet_tab=sheet_tab)
+        headers = self._ensure_headers(sheet_tab=sheet_tab)
         values = [_row_values(row, headers) for row in rows]
         self.service.spreadsheets().values().append(
             spreadsheetId=self.spreadsheet_id,
@@ -190,23 +193,25 @@ class GoogleSheetReviewQueue:
         headers = [str(header) for header in values[0]]
         return [dict(zip(headers, [str(value) for value in row], strict=False)) for row in values[1:]]
 
-    def _ensure_headers(self, *, sheet_tab: str) -> None:
+    def _ensure_headers(self, *, sheet_tab: str) -> tuple[str, ...]:
         self._ensure_sheet_tab(sheet_tab=sheet_tab)
         headers = _headers_for_tab(sheet_tab)
         response = self.service.spreadsheets().values().get(
             spreadsheetId=self.spreadsheet_id,
-            range=_sheet_range(sheet_tab, headers, row="1"),
+            range=f"{sheet_tab}!1:1",
         ).execute()
         header_rows = response.get("values") or [[]]
         existing = [str(header) for header in header_rows[0]]
-        if existing == list(headers):
-            return
+        effective_headers = _merge_headers(existing=existing, canonical=list(headers))
+        if existing == effective_headers:
+            return tuple(effective_headers)
         self.service.spreadsheets().values().update(
             spreadsheetId=self.spreadsheet_id,
-            range=_sheet_range(sheet_tab, headers, row="1"),
+            range=_sheet_range(sheet_tab, tuple(effective_headers), row="1"),
             valueInputOption="USER_ENTERED",
-            body={"values": [list(headers)]},
+            body={"values": [effective_headers]},
         ).execute()
+        return tuple(effective_headers)
 
     def _ensure_sheet_tab(self, *, sheet_tab: str) -> None:
         response = self.service.spreadsheets().get(
@@ -232,6 +237,14 @@ def _headers_for_tab(sheet_tab: str) -> tuple[str, ...]:
     if sheet_tab == "entity_resolution":
         return ENTITY_RESOLUTION_HEADERS
     return REVIEW_QUEUE_HEADERS
+
+
+def _merge_headers(*, existing: list[str], canonical: list[str]) -> list[str]:
+    if not existing:
+        return canonical
+    merged = list(existing)
+    merged.extend(header for header in canonical if header not in existing)
+    return merged
 
 
 def _sheet_range(sheet_tab: str, headers: tuple[str, ...], *, row: str = "") -> str:

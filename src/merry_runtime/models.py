@@ -35,6 +35,7 @@ class MotherEntity:
     industry: str = ""
     homepage: str | None = None
     representative: str = ""
+    contact_email: str = ""
     first_seen_at: str | None = None
     last_seen_at: str | None = None
 

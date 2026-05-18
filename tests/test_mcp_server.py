@@ -63,7 +63,7 @@ def test_mcp_server_allows_crawl_public_sources_handler() -> None:
         "crawl_public_sources",
         {
             "targets": [{"url": "https://thevc.kr/", "source_kind": "thevc_investment_ma", "max_cards": 5}],
-            "reason": "hourly discovery loop",
+            "reason": "every 1 hour discovery loop",
         },
     )
 

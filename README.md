@@ -72,7 +72,11 @@ WIKI_ROOT=/workspace/hermes/wiki
 CRAWL_SHEET_TAB=Crawl Sources
 AGENT_LOOP_JOBS=crawl-sources,ingest-sources,resolve-entities,score-candidates,sync-review-sheet,calibrate-scores,backup-export
 AGENT_LOOP_INTERVAL_SECONDS=3600
+AGENT_LOOP_MAX_CYCLES=0
 ```
+
+`AGENT_LOOP_INTERVAL_SECONDS=3600` with `AGENT_LOOP_MAX_CYCLES=0` means the
+Hermes agent stays alive and repeats the configured jobs every 1 hour.
 
 Supported job commands:
 

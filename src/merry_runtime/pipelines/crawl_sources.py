@@ -47,6 +47,7 @@ def crawl_sources(
                     html,
                     source_url=target["url"],
                     max_cards=int(target.get("max_cards") or 20),
+                    fetch_detail_url=fetch_url if _truthy(target.get("detail_enrichment"), default=True) else None,
                 )
             )
             continue
@@ -104,6 +105,12 @@ def _is_active_target(target: dict[str, Any]) -> bool:
     return status not in {"done", "disabled", "skip", "skipped", "inactive"}
 
 
+def _truthy(value: Any, *, default: bool) -> bool:
+    if value is None or value == "":
+        return default
+    return str(value).strip().casefold() not in {"0", "false", "no", "n", "off", "disabled"}
+
+
 def _publish_sheet_projection(*, review_queue: ReviewQueue, sources: list[dict[str, str]]) -> None:
     parsed_sources = [_parse_projection_source(source) for source in sources]
     review_queue.publish_cards(sheet_tab="Evidence", rows=[_evidence_row(parsed) for parsed in parsed_sources])
@@ -143,6 +150,7 @@ def _candidate_detail_row(parsed: ParsedSource) -> dict[str, object]:
         "normalized_name": parsed.entity.normalized_name or "",
         "representative": parsed.entity.representative,
         "homepage": parsed.entity.homepage or "",
+        "contact_email": parsed.entity.contact_email,
         "region": parsed.entity.region,
         "industry": parsed.entity.industry,
         "summary": signal.evidence_text,

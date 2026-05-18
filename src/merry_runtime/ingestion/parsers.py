@@ -118,6 +118,7 @@ def _parsed_from_fields(
         industry=fields.get("industry", ""),
         homepage=fields.get("homepage") or None,
         representative=fields.get("representative", ""),
+        contact_email=fields.get("contact email", "") or fields.get("email", ""),
     )
     signal = Signal(
         signal_id=signal_id,

@@ -16,6 +16,25 @@ def test_crawl_sources_fetches_thevc_visible_investment_cards_into_mother_db(tmp
         review_queue=review_queue,
         wiki_store=wiki_store,
         fetch_url=lambda url: """
+            <script type="application/ld+json">
+            {
+              "@type": "Organization",
+              "sameAs": ["https://the-aio.com/"],
+              "email": "hello@the-aio.com",
+              "address": {
+                "@type": "PostalAddress",
+                "addressCountry": "한국",
+                "addressRegion": "경기도",
+                "addressLocality": "용인시"
+              },
+              "employee": [
+                {"@type": "Person", "name": "권진형", "jobTitle": "경영 · 대표이사"}
+              ]
+            }
+            </script>
+        """
+        if url == "https://thevc.kr/aio"
+        else """
             <tr>
               <td><time datetime="2026-05-15T05:14:25.919Z">2026-05-15</time><button>보도자료</button></td>
               <td><span>에이아이오</span><span>낸드컨트롤러</span><div>낸드플래시 시스템 반도체</div></td>
@@ -32,9 +51,14 @@ def test_crawl_sources_fetches_thevc_visible_investment_cards_into_mother_db(tmp
     assert result.crawled_source_count == 1
     assert result.ingested_entity_count == 1
     assert structured_store.tables["mother_entities"][0]["name"] == "에이아이오"
+    assert structured_store.tables["mother_entities"][0]["representative"] == "권진형"
+    assert structured_store.tables["mother_entities"][0]["homepage"] == "https://the-aio.com/"
+    assert structured_store.tables["mother_entities"][0]["region"] == "한국, 경기도, 용인시"
+    assert structured_store.tables["mother_entities"][0]["contact_email"] == "hello@the-aio.com"
     assert structured_store.tables["signals"][0]["signal_type"] == "investment"
     assert structured_store.tables["raw_sources"][0]["channel"] == "thevc_investment_ma"
     assert review_queue.published["Evidence"][0]["channel"] == "thevc_investment_ma"
     assert review_queue.published["Candidate Detail"][0]["company"] == "에이아이오"
+    assert review_queue.published["Candidate Detail"][0]["contact_email"] == "hello@the-aio.com"
     assert any(row["job_name"] == "crawl-sources" for row in structured_store.tables["agent_runs"])
     assert (tmp_path / "wiki" / "entities").exists()

@@ -64,6 +64,7 @@ class SQLiteStructuredStore:
                 self._validate_identifier(table)
                 columns = ", ".join(f"{field['name']} {self._sqlite_type(field['type'])}" for field in fields)
                 connection.execute(f"create table if not exists {table} ({columns})")
+                self._ensure_columns(connection=connection, table=table, fields=fields)
 
     def _ensure_unique_index(
         self,
@@ -78,6 +79,20 @@ class SQLiteStructuredStore:
         self._validate_identifier(index_name)
         fields_sql = ", ".join(key_fields)
         connection.execute(f"create unique index if not exists {index_name} on {table} ({fields_sql})")
+
+    def _ensure_columns(
+        self,
+        *,
+        connection: sqlite3.Connection,
+        table: str,
+        fields: list[dict[str, str]],
+    ) -> None:
+        existing_columns = {row[1] for row in connection.execute(f"pragma table_info({table})").fetchall()}
+        for field in fields:
+            name = field["name"]
+            if name in existing_columns:
+                continue
+            connection.execute(f"alter table {table} add column {name} {self._sqlite_type(field['type'])}")
 
     def _deserialize_row(self, *, table: str, row: sqlite3.Row) -> dict[str, object]:
         result: dict[str, object] = {}

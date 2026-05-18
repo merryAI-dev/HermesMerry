@@ -43,6 +43,7 @@ def test_mother_entity_schema_matches_development_plan_fields() -> None:
         "region",
         "industry",
         "homepage",
+        "contact_email",
         "first_seen_at",
         "last_seen_at",
     }.issubset(fields)

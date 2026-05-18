@@ -51,6 +51,7 @@ class FakeStructuredStore:
                     "region": "Jeonbuk",
                     "industry": "AgriTech",
                     "homepage": "https://carefarm.example",
+                    "contact_email": "hello@carefarm.example",
                 }
             ],
             key_fields=("entity_id",),

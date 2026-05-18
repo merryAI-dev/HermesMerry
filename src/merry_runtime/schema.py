@@ -29,6 +29,7 @@ BIGQUERY_TABLES: Final[dict[str, list[dict[str, str]]]] = {
         _field("industry", "STRING"),
         _field("homepage", "STRING"),
         _field("representative", "STRING"),
+        _field("contact_email", "STRING"),
         _field("first_seen_at", "TIMESTAMP", "REQUIRED"),
         _field("last_seen_at", "TIMESTAMP", "REQUIRED"),
     ],

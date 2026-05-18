@@ -452,8 +452,8 @@ def test_google_sheet_review_queue_publishes_rows_and_reads_reviews() -> None:
     reviews = queue.read_pending_reviews(sheet_tab="ac_climate")
 
     assert published == 1
-    assert service.values_obj.update_kwargs["range"] == "ac_climate!A1:M1"
-    assert service.values_obj.append_kwargs["range"] == "ac_climate!A:M"
+    assert service.values_obj.update_kwargs["range"] == "ac_climate!A1:N1"
+    assert service.values_obj.append_kwargs["range"] == "ac_climate!A:N"
     assert service.values_obj.append_body == {
         "values": [
             [
@@ -467,6 +467,7 @@ def test_google_sheet_review_queue_publishes_rows_and_reads_reviews() -> None:
                 "priority",
                 0.77,
                 "strong fit",
+                "",
                 "",
                 "",
                 "",
@@ -490,6 +491,43 @@ def test_google_sheet_review_queue_publishes_rows_and_reads_reviews() -> None:
             "reviewer": "boram",
         }
     ]
+
+
+def test_google_sheet_review_queue_appends_new_columns_to_existing_headers_without_reordering() -> None:
+    service = FakeSheetsService()
+    legacy_headers = [
+        "card_id",
+        "entity_id",
+        "company",
+        "region",
+        "industry",
+        "total_score",
+        "recommended_action",
+        "queue_type",
+        "priority_probability",
+        "rationale",
+        "decision",
+        "review_memo",
+        "reviewer",
+    ]
+    service.values_obj.get_responses.append({"values": [legacy_headers]})
+    queue = GoogleSheetReviewQueue(service=service, spreadsheet_id="sheet_1")
+
+    queue.publish_cards(
+        sheet_tab="ac_climate",
+        rows=[
+            {
+                "card_id": "card_1",
+                "entity_id": "ent_1",
+                "company": "Merry AI",
+                "contact_email": "hello@merry.ai",
+            }
+        ],
+    )
+
+    assert service.values_obj.update_body == {"values": [legacy_headers + ["contact_email"]]}
+    assert service.values_obj.append_kwargs["range"] == "ac_climate!A:N"
+    assert service.values_obj.append_body["values"][0][-1] == "hello@merry.ai"  # type: ignore[index]
 
 
 def test_google_sheet_review_queue_creates_missing_tab_before_headers() -> None:
@@ -620,6 +658,7 @@ def test_google_sheet_review_queue_supports_operator_console_tabs() -> None:
             "due_date",
             "override_reason",
             "status",
+            "contact_email",
         ),
         "Candidate Detail": (
             "entity_id",
@@ -636,6 +675,7 @@ def test_google_sheet_review_queue_supports_operator_console_tabs() -> None:
             "recommended_action",
             "status",
             "wiki_path",
+            "contact_email",
         ),
         "Evidence": (
             "source_id",
@@ -697,6 +737,7 @@ def test_google_sheet_review_queue_supports_operator_console_tabs() -> None:
             "next_action",
             "due_date",
             "status",
+            "contact_email",
         ),
         "Run Log": (
             "run_id",

@@ -41,7 +41,7 @@ Cloud Run is optional and belongs to `docs/runbooks/staging-canary.md`.
 - `CRAWL_SHEET_TAB=Crawl Sources`
 - `AGENT_LOOP_JOBS=crawl-sources,ingest-sources,resolve-entities,score-candidates,sync-review-sheet,calibrate-scores,backup-export`
 - `AGENT_LOOP_INTERVAL_SECONDS=3600`
-- `AGENT_LOOP_MAX_CYCLES=0` for the always-on SQLite loop
+- `AGENT_LOOP_MAX_CYCLES=0` for the always-on SQLite loop that repeats every 1 hour
 
 ## Stop Conditions
 

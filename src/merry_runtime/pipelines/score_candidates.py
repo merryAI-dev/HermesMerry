@@ -90,6 +90,7 @@ def score_candidates(
                     "decision": "",
                     "review_memo": "",
                     "reviewer": "",
+                    "contact_email": entity.contact_email,
                 }
             )
 
@@ -128,6 +129,7 @@ def _entity_from_row(row: dict[str, Any]) -> MotherEntity:
         industry=str(row.get("industry", "")),
         homepage=row.get("homepage"),
         representative=str(row.get("representative", "")),
+        contact_email=str(row.get("contact_email", "")),
     )
 
 

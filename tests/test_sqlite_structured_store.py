@@ -20,6 +20,37 @@ def test_sqlite_store_initializes_tables_from_structured_schema(tmp_path) -> Non
     assert set(BIGQUERY_TABLES).issubset(tables)
 
 
+def test_sqlite_store_adds_new_schema_columns_to_existing_tables(tmp_path) -> None:
+    db_path = tmp_path / "mother.db"
+    with sqlite3.connect(db_path) as connection:
+        connection.execute("create table mother_entities (entity_id TEXT, name TEXT)")
+
+    store = SQLiteStructuredStore(db_path=db_path)
+
+    store.upsert_rows(
+        table="mother_entities",
+        rows=[
+            {
+                "entity_id": "ent_1",
+                "entity_type": "startup",
+                "name": "AIO",
+                "normalized_name": "aio",
+                "contact_email": "hello@the-aio.com",
+                "first_seen_at": "2026-05-18T00:00:00+00:00",
+                "last_seen_at": "2026-05-18T00:00:00+00:00",
+            }
+        ],
+        key_fields=("entity_id",),
+    )
+
+    rows = store.query_rows(
+        sql="select * from mother_entities where entity_id = @entity_id",
+        parameters={"entity_id": "ent_1"},
+    )
+
+    assert rows[0]["contact_email"] == "hello@the-aio.com"
+
+
 def test_sqlite_store_upserts_by_key_fields_and_round_trips_json_values(tmp_path) -> None:
     store = SQLiteStructuredStore(db_path=tmp_path / "mother.db")
 

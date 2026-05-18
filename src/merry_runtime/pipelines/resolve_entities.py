@@ -105,7 +105,7 @@ def _observation_from_row(row: dict[str, Any], aliases: tuple[str, ...]) -> Enti
         aliases=aliases,
         founder_name=str(row.get("representative", "")),
         homepage=str(row.get("homepage", "")),
-        email=str(row.get("email", "")),
+        email=str(row.get("contact_email") or row.get("email") or ""),
         description=str(row.get("description") or row.get("industry") or ""),
         region=str(row.get("region", "")),
         observed_at=str(row.get("last_seen_at") or row.get("first_seen_at") or ""),
