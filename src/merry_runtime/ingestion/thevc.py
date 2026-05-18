@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from html.parser import HTMLParser
 import re
 from typing import Any, Callable
-from urllib.parse import urljoin, urlparse
+from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlunparse
 
 
 THEVC_INVESTMENT_CHANNEL = "thevc_investment_ma"
@@ -94,11 +94,12 @@ def extract_thevc_company_detail(html: str) -> TheVCCompanyDetail:
     parser.feed(html)
     structured_detail = _detail_from_json_ld(parser.json_ld_blocks)
     text_detail = _detail_from_text(parser.visible_text, parser.meta_descriptions)
+    anchor_homepage = _homepage_from_anchors(parser.anchors)
     contact_text = "\n".join([*parser.mailtos, *parser.visible_text, *parser.meta_descriptions])
     contact_email = structured_detail.contact_email or _extract_public_email(contact_text)
     return TheVCCompanyDetail(
         representative=structured_detail.representative or text_detail.representative,
-        homepage=structured_detail.homepage or text_detail.homepage,
+        homepage=structured_detail.homepage or anchor_homepage or text_detail.homepage,
         region=structured_detail.region or text_detail.region,
         contact_email=contact_email or text_detail.contact_email,
     )
@@ -154,10 +155,13 @@ class _CompanyDetailParser(HTMLParser):
         self.visible_text: list[str] = []
         self.meta_descriptions: list[str] = []
         self.mailtos: list[str] = []
+        self.anchors: list[tuple[str, str]] = []
         self.json_ld_blocks: list[str] = []
         self._skip_depth = 0
         self._in_json_ld = False
         self._json_ld_parts: list[str] = []
+        self._anchor_href = ""
+        self._anchor_text_parts: list[str] = []
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         attrs_by_name = {name.casefold(): value or "" for name, value in attrs}
@@ -180,6 +184,8 @@ class _CompanyDetailParser(HTMLParser):
                     self.meta_descriptions.append(content)
         if tag == "a":
             href = attrs_by_name.get("href", "")
+            self._anchor_href = href
+            self._anchor_text_parts = []
             if href.casefold().startswith("mailto:"):
                 self.mailtos.append(href.split(":", 1)[1].split("?", 1)[0])
 
@@ -193,6 +199,12 @@ class _CompanyDetailParser(HTMLParser):
             return
         if tag in {"script", "style"} and self._skip_depth:
             self._skip_depth -= 1
+            return
+        if tag == "a" and self._anchor_href:
+            text = _clean(" ".join(self._anchor_text_parts))
+            self.anchors.append((self._anchor_href, text))
+            self._anchor_href = ""
+            self._anchor_text_parts = []
 
     def handle_data(self, data: str) -> None:
         if self._in_json_ld:
@@ -203,6 +215,8 @@ class _CompanyDetailParser(HTMLParser):
         text = _clean(data)
         if text:
             self.visible_text.append(text)
+            if self._anchor_href:
+                self._anchor_text_parts.append(text)
 
 
 def _card_from_row(row: dict[str, list[str]], *, source_url: str) -> TheVCInvestmentCard | None:
@@ -380,6 +394,27 @@ def _detail_from_text(visible_text: list[str], meta_descriptions: list[str]) -> 
     )
 
 
+def _homepage_from_anchors(anchors: list[tuple[str, str]]) -> str:
+    labeled_candidates: list[str] = []
+    fallback_candidates: list[str] = []
+    for href, text in anchors:
+        homepage = _normalize_url(href)
+        if not homepage:
+            continue
+        parsed = urlparse(homepage)
+        query = dict(parse_qsl(parsed.query, keep_blank_values=True))
+        if "홈페이지" in text or "웹사이트" in text:
+            labeled_candidates.append(homepage)
+            continue
+        if query.get("ref") == "thevc":
+            fallback_candidates.append(homepage)
+    for candidate in [*labeled_candidates, *fallback_candidates]:
+        stripped = _strip_tracking_query(candidate)
+        if stripped:
+            return stripped
+    return ""
+
+
 def _find_homepage_contact_email(homepage: str, *, fetch_url: Callable[[str], str]) -> str:
     for url in _homepage_contact_candidates(homepage):
         html = _safe_fetch(fetch_url, url)
@@ -436,6 +471,13 @@ def _normalize_url(value: str) -> str:
     if _is_ignored_homepage_url(normalized):
         return ""
     return normalized
+
+
+def _strip_tracking_query(value: str) -> str:
+    parsed = urlparse(value)
+    query = [(key, item_value) for key, item_value in parse_qsl(parsed.query, keep_blank_values=True) if key != "ref"]
+    stripped = urlunparse(parsed._replace(query=urlencode(query), fragment=""))
+    return stripped
 
 
 def _looks_like_homepage(value: str) -> bool:

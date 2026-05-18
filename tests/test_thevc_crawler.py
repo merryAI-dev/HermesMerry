@@ -103,6 +103,19 @@ def test_extract_thevc_company_detail_falls_back_to_meta_description() -> None:
     assert detail.contact_email == "contact@the-aio.com"
 
 
+def test_extract_thevc_company_detail_reads_homepage_anchor() -> None:
+    detail = extract_thevc_company_detail(
+        """
+        <a href="https://the-aio.com/?ref=thevc">
+          <img alt="웹사이트 아이콘"> 홈페이지
+        </a>
+        <a href="https://www.thebell.co.kr/free/content/ArticleView.asp?key=1">기사</a>
+        """
+    )
+
+    assert detail.homepage == "https://the-aio.com/"
+
+
 def test_extract_thevc_investment_sources_uses_homepage_contact_fallback_for_email() -> None:
     def fetch_detail_url(url: str) -> str:
         if url == "https://thevc.kr/aio":
