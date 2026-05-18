@@ -15,6 +15,22 @@ def test_bigquery_schema_contains_required_mother_tables() -> None:
     }.issubset(BIGQUERY_TABLES.keys())
 
 
+def test_entity_resolution_events_schema_captures_probabilistic_decisions() -> None:
+    fields = {field["name"] for field in BIGQUERY_TABLES["entity_resolution_events"]}
+
+    assert {
+        "event_id",
+        "candidate_entity_id",
+        "matched_entity_id",
+        "action",
+        "probability",
+        "features_json",
+        "rationale",
+        "status",
+        "created_at",
+    }.issubset(fields)
+
+
 def test_mother_entity_schema_matches_development_plan_fields() -> None:
     fields = table_field_names("mother_entities")
 

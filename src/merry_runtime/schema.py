@@ -40,6 +40,17 @@ BIGQUERY_TABLES: Final[dict[str, list[dict[str, str]]]] = {
         _field("source_id", "STRING"),
         _field("created_at", "TIMESTAMP", "REQUIRED"),
     ],
+    "entity_resolution_events": [
+        _field("event_id", "STRING", "REQUIRED"),
+        _field("candidate_entity_id", "STRING", "REQUIRED"),
+        _field("matched_entity_id", "STRING"),
+        _field("action", "STRING", "REQUIRED"),
+        _field("probability", "FLOAT", "REQUIRED"),
+        _field("features_json", "STRING", "REQUIRED"),
+        _field("rationale", "STRING", "REQUIRED"),
+        _field("status", "STRING", "REQUIRED"),
+        _field("created_at", "TIMESTAMP", "REQUIRED"),
+    ],
     "signals": [
         _field("signal_id", "STRING", "REQUIRED"),
         _field("entity_id", "STRING", "REQUIRED"),

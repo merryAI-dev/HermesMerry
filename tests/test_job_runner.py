@@ -90,6 +90,46 @@ def test_run_weekly_summary_posts_slack_counts(tmp_path) -> None:
     assert "priority=1" in runtime.notifier.messages[0]["text"]
 
 
+def test_run_resolve_entities_persists_resolution_events(tmp_path) -> None:
+    store = FakeStructuredStore()
+    store.upsert_rows(
+        table="mother_entities",
+        rows=[
+            {
+                "entity_id": "ent_a",
+                "entity_type": "startup",
+                "name": "Merry AI",
+                "normalized_name": "merryai",
+                "region": "Seoul",
+                "homepage": "https://merry.example",
+                "first_seen_at": "2026-05-01T00:00:00+00:00",
+                "last_seen_at": "2026-05-01T00:00:00+00:00",
+            },
+            {
+                "entity_id": "ent_b",
+                "entity_type": "startup",
+                "name": "Merry",
+                "normalized_name": "merry",
+                "region": "Seoul",
+                "homepage": "https://merry.example",
+                "first_seen_at": "2026-05-18T00:00:00+00:00",
+                "last_seen_at": "2026-05-18T00:00:00+00:00",
+            },
+        ],
+        key_fields=("entity_id",),
+    )
+    runtime = _runtime(tmp_path, store=store)
+
+    result = run_job("resolve-entities", runtime=runtime, config=_config(tmp_path))
+
+    assert result["job_name"] == "resolve-entities"
+    assert result["event_count"] == 1
+    assert result["merge_candidate_count"] == 1
+    assert result["needs_review_count"] == 0
+    assert store.tables["entity_resolution_events"][0]["status"] == "pending_review"
+    assert [row["entity_id"] for row in store.tables["mother_entities"]] == ["ent_a", "ent_b"]
+
+
 def test_run_job_rejects_missing_ingest_sources(tmp_path) -> None:
     with pytest.raises(JobRunError):
         run_job("ingest-sources", runtime=_runtime(tmp_path), config=_config(tmp_path))

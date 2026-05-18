@@ -48,6 +48,17 @@ locals {
       { name = "source_id", type = "STRING", mode = "NULLABLE" },
       { name = "created_at", type = "TIMESTAMP", mode = "REQUIRED" }
     ]
+    entity_resolution_events = [
+      { name = "event_id", type = "STRING", mode = "REQUIRED" },
+      { name = "candidate_entity_id", type = "STRING", mode = "REQUIRED" },
+      { name = "matched_entity_id", type = "STRING", mode = "NULLABLE" },
+      { name = "action", type = "STRING", mode = "REQUIRED" },
+      { name = "probability", type = "FLOAT", mode = "REQUIRED" },
+      { name = "features_json", type = "STRING", mode = "REQUIRED" },
+      { name = "rationale", type = "STRING", mode = "REQUIRED" },
+      { name = "status", type = "STRING", mode = "REQUIRED" },
+      { name = "created_at", type = "TIMESTAMP", mode = "REQUIRED" }
+    ]
     signals = [
       { name = "signal_id", type = "STRING", mode = "REQUIRED" },
       { name = "entity_id", type = "STRING", mode = "REQUIRED" },

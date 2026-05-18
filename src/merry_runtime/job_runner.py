@@ -7,6 +7,7 @@ from typing import Any
 
 from merry_runtime.adapters.interfaces import Notifier, ObjectStore, ReviewQueue, StructuredStore
 from merry_runtime.pipelines.ingest_sources import ingest_sources
+from merry_runtime.pipelines.resolve_entities import resolve_entities
 from merry_runtime.pipelines.score_candidates import score_candidates
 from merry_runtime.pipelines.sync_review_sheet import sync_review_sheet
 from merry_runtime.runtime_config import RuntimeConfig
@@ -119,25 +120,8 @@ def _run_weekly_summary(*, runtime: RuntimeAdapters, config: RuntimeConfig) -> d
 
 
 def _run_resolve_entities(*, runtime: RuntimeAdapters) -> dict[str, object]:
-    entities = runtime.structured_store.query_rows(sql="select * from mother_entities", parameters={})
-    # The first production cut records that the resolver saw the current pool.
-    runtime.structured_store.upsert_rows(
-        table="agent_runs",
-        rows=[
-            {
-                "run_id": f"run_resolve_{len(entities)}",
-                "job_name": "resolve-entities",
-                "status": "success",
-                "started_at": "",
-                "finished_at": "",
-                "input_count": len(entities),
-                "output_count": 0,
-                "error_message": "",
-            }
-        ],
-        key_fields=("run_id",),
-    )
-    return {"job_name": "resolve-entities", "entity_count": len(entities), "merge_count": 0}
+    result = resolve_entities(structured_store=runtime.structured_store, review_queue=runtime.review_queue)
+    return {"job_name": "resolve-entities", **asdict(result)}
 
 
 def _count_by_queue(cards: list[dict[str, Any]]) -> dict[str, int]:
