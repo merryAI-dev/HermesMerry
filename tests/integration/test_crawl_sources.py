@@ -58,8 +58,16 @@ def test_crawl_sources_fetches_thevc_visible_investment_cards_into_mother_db(tmp
     assert structured_store.tables["signals"][0]["signal_type"] == "investment"
     assert structured_store.tables["raw_sources"][0]["channel"] == "thevc_investment_ma"
     assert review_queue.published["Evidence"][0]["channel"] == "thevc_investment_ma"
-    assert review_queue.published["Candidate Detail"][0]["company"] == "에이아이오"
-    assert review_queue.published["Candidate Detail"][0]["contact_email"] == "hello@the-aio.com"
+    candidate_detail = review_queue.published["Candidate Detail"][0]
+    assert "entity_id" not in candidate_detail
+    assert candidate_detail["collected_at"].startswith("20")
+    assert candidate_detail["company"] == "에이아이오"
+    assert candidate_detail["summary"] == "공개 카드 -> 에이아이오"
+    assert candidate_detail["business_model"] == "낸드컨트롤러 - 낸드플래시 시스템 반도체"
+    assert candidate_detail["investment_round"] == "Pre-IPO"
+    assert candidate_detail["investment_amount"] == "로그인 필요"
+    assert candidate_detail["investor"] == "비엔더블유인베스트먼트"
+    assert candidate_detail["contact_email"] == "hello@the-aio.com"
     assert any(row["job_name"] == "crawl-sources" for row in structured_store.tables["agent_runs"])
     assert (tmp_path / "wiki" / "entities").exists()
 

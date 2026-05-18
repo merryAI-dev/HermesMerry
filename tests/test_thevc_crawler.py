@@ -69,6 +69,7 @@ def test_extract_thevc_investment_sources_preserves_visible_card_fields() -> Non
     assert sources[0]["channel"] == "thevc_investment_ma"
     assert "Company: 에이아이오" in sources[0]["payload"]
     assert "Product: 낸드컨트롤러" in sources[0]["payload"]
+    assert "Business Model: 낸드컨트롤러 - 낸드플래시가 데이터를 읽고 쓰도록 제어하는 시스템 반도체" in sources[0]["payload"]
     assert "Industry: 반도체/디스플레이" in sources[0]["payload"]
     assert "Investment Round: Pre-IPO" in sources[0]["payload"]
     assert "Investor: 비엔더블유인베스트먼트" in sources[0]["payload"]

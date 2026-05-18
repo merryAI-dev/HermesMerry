@@ -63,7 +63,7 @@ def crawl_sources(
             run_id=f"{run_id}_ingest",
         )
         if review_queue is not None:
-            _publish_sheet_projection(review_queue=review_queue, sources=sources)
+            _publish_sheet_projection(review_queue=review_queue, sources=sources, collected_at=started_at)
 
     result = CrawlResult(
         run_id=run_id,
@@ -111,7 +111,7 @@ def _truthy(value: Any, *, default: bool) -> bool:
     return str(value).strip().casefold() not in {"0", "false", "no", "n", "off", "disabled"}
 
 
-def _publish_sheet_projection(*, review_queue: ReviewQueue, sources: list[dict[str, str]]) -> None:
+def _publish_sheet_projection(*, review_queue: ReviewQueue, sources: list[dict[str, str]], collected_at: str) -> None:
     parsed_sources = [_parse_projection_source(source) for source in sources]
     review_queue.upsert_cards(
         sheet_tab="Evidence",
@@ -120,8 +120,8 @@ def _publish_sheet_projection(*, review_queue: ReviewQueue, sources: list[dict[s
     )
     review_queue.upsert_cards(
         sheet_tab="Candidate Detail",
-        rows=[_candidate_detail_row(parsed) for parsed in parsed_sources],
-        key_fields=("entity_id", "company"),
+        rows=[_candidate_detail_row(parsed, collected_at=collected_at) for parsed in parsed_sources],
+        key_fields=("company", "homepage"),
     )
 
 
@@ -150,10 +150,11 @@ def _evidence_row(parsed: ParsedSource) -> dict[str, object]:
     }
 
 
-def _candidate_detail_row(parsed: ParsedSource) -> dict[str, object]:
+def _candidate_detail_row(parsed: ParsedSource, *, collected_at: str) -> dict[str, object]:
     signal = parsed.signals[0]
+    fields = _payload_fields(parsed.raw_text)
     return {
-        "entity_id": parsed.entity.entity_id,
+        "collected_at": collected_at,
         "company": parsed.entity.name,
         "normalized_name": parsed.entity.normalized_name or "",
         "representative": parsed.entity.representative,
@@ -161,7 +162,11 @@ def _candidate_detail_row(parsed: ParsedSource) -> dict[str, object]:
         "contact_email": parsed.entity.contact_email,
         "region": parsed.entity.region,
         "industry": parsed.entity.industry,
-        "summary": signal.evidence_text,
+        "summary": f"공개 카드 -> {parsed.entity.name}",
+        "business_model": fields.get("business model") or fields.get("product") or signal.evidence_text,
+        "investment_round": fields.get("investment round", ""),
+        "investment_amount": fields.get("investment amount", ""),
+        "investor": fields.get("investor", ""),
         "latest_score": "",
         "priority_probability": "",
         "queue_type": "new_source",
@@ -169,6 +174,16 @@ def _candidate_detail_row(parsed: ParsedSource) -> dict[str, object]:
         "status": "crawled",
         "wiki_path": f"wiki/entities/{parsed.entity.name}.md",
     }
+
+
+def _payload_fields(raw_text: str) -> dict[str, str]:
+    fields: dict[str, str] = {}
+    for line in raw_text.splitlines():
+        if ":" not in line:
+            continue
+        key, value = line.split(":", 1)
+        fields[key.strip().casefold()] = value.strip()
+    return fields
 
 
 def _stable_run_id(targets: list[dict[str, Any]]) -> str:

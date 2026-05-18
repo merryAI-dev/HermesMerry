@@ -343,27 +343,33 @@ class FakeValues:
         self.calls.append(("append", kwargs))
         self.append_kwargs = kwargs
         self.append_body = kwargs["body"]  # type: ignore[index]
+        self._pending_execute = "append"
         return self
 
     def get(self, **kwargs: object) -> "FakeValues":
         self.calls.append(("get", kwargs))
         self.get_kwargs = kwargs
+        self._pending_execute = "get"
         return self
 
     def update(self, **kwargs: object) -> "FakeValues":
         self.calls.append(("update", kwargs))
         self.update_kwargs = kwargs
         self.update_body = kwargs["body"]  # type: ignore[index]
+        self._pending_execute = "update"
         return self
 
     def clear(self, **kwargs: object) -> "FakeValues":
         self.calls.append(("clear", kwargs))
         self.clear_kwargs = kwargs
         self.clear_body = kwargs["body"]  # type: ignore[index]
+        self._pending_execute = "clear"
         return self
 
     def execute(self) -> dict[str, object]:
-        if hasattr(self, "get_kwargs"):
+        pending = getattr(self, "_pending_execute", "")
+        self._pending_execute = ""
+        if pending == "get":
             if self.get_responses:
                 return self.get_responses.pop(0)
             return {
@@ -651,21 +657,25 @@ def test_google_sheet_review_queue_upserts_existing_row_by_key() -> None:
     service.sheet_titles.add("Candidate Detail")
     headers = list(OPERATOR_CONSOLE_HEADERS["Candidate Detail"])
     existing_row = [
-        "ent_1",
+        "2026-05-18T00:00:00+00:00",
         "Merry AI",
         "merryai",
         "Old Founder",
         "",
+        "master@thevc.kr",
         "Seoul",
         "AI",
         "old summary",
+        "old model",
+        "Seed",
+        "undisclosed",
+        "Old Investor",
         "",
         "",
         "new_source",
         "score_candidates",
         "crawled",
         "wiki/entities/Merry AI.md",
-        "master@thevc.kr",
     ]
     service.values_obj.get_responses.extend(
         [
@@ -680,12 +690,17 @@ def test_google_sheet_review_queue_upserts_existing_row_by_key() -> None:
         rows=[
             {
                 "entity_id": "ent_1",
+                "collected_at": "2026-05-19T00:00:00+00:00",
                 "company": "Merry AI",
                 "normalized_name": "merryai",
                 "representative": "New Founder",
+                "business_model": "AI workflow automation",
+                "investment_round": "Seed",
+                "investment_amount": "1B KRW",
+                "investor": "Merry Ventures",
                 "region": "Seoul",
                 "industry": "AI",
-                "summary": "new summary",
+                "summary": "공개 카드 -> Merry AI",
                 "queue_type": "new_source",
                 "recommended_action": "score_candidates",
                 "status": "crawled",
@@ -693,14 +708,101 @@ def test_google_sheet_review_queue_upserts_existing_row_by_key() -> None:
                 "contact_email": "founder@merry.ai",
             }
         ],
-        key_fields=("entity_id",),
+        key_fields=("company",),
     )
 
     assert count == 1
     assert service.values_obj.append_body is None
-    assert service.values_obj.update_kwargs["range"] == "'Candidate Detail'!A2:O2"
+    assert service.values_obj.update_kwargs["range"] == "'Candidate Detail'!A2:S2"
     assert service.values_obj.update_body["values"][0][3] == "New Founder"  # type: ignore[index]
-    assert service.values_obj.update_body["values"][0][-1] == "founder@merry.ai"  # type: ignore[index]
+    assert service.values_obj.update_body["values"][0][5] == "founder@merry.ai"  # type: ignore[index]
+    assert service.values_obj.update_body["values"][0][8] == "공개 카드 -> Merry AI"  # type: ignore[index]
+    assert service.values_obj.update_body["values"][0][9] == "AI workflow automation"  # type: ignore[index]
+
+
+def test_google_sheet_review_queue_migrates_candidate_detail_from_entity_id_schema() -> None:
+    service = FakeSheetsService()
+    service.sheet_titles.add("Candidate Detail")
+    old_headers = [
+        "entity_id",
+        "company",
+        "normalized_name",
+        "representative",
+        "homepage",
+        "region",
+        "industry",
+        "summary",
+        "latest_score",
+        "priority_probability",
+        "queue_type",
+        "recommended_action",
+        "status",
+        "wiki_path",
+        "contact_email",
+    ]
+    old_row = [
+        "ent_1",
+        "Merry AI",
+        "merryai",
+        "Old Founder",
+        "",
+        "Seoul",
+        "AI",
+        "old summary",
+        "91.0",
+        "0.92",
+        "priority",
+        "advance",
+        "qualified",
+        "wiki/entities/Merry AI.md",
+        "hello@merry.ai",
+    ]
+    service.values_obj.get_responses.extend(
+        [
+            {"values": [old_headers]},
+            {"values": [old_headers, old_row]},
+        ]
+    )
+    queue = GoogleSheetReviewQueue(service=service, spreadsheet_id="sheet_1")
+
+    count = queue.upsert_cards(
+        sheet_tab="Candidate Detail",
+        rows=[
+            {
+                "collected_at": "2026-05-19T00:00:00+00:00",
+                "company": "Merry AI",
+                "normalized_name": "merryai",
+                "representative": "New Founder",
+                "homepage": "https://merry.ai",
+                "contact_email": "founder@merry.ai",
+                "region": "Seoul",
+                "industry": "AI",
+                "summary": "공개 카드 -> Merry AI",
+                "business_model": "AI workflow automation",
+                "investment_round": "Seed",
+                "investment_amount": "1B KRW",
+                "investor": "Merry Ventures",
+                "queue_type": "new_source",
+                "recommended_action": "score_candidates",
+                "status": "crawled",
+                "wiki_path": "wiki/entities/Merry AI.md",
+            }
+        ],
+        key_fields=("company", "homepage"),
+    )
+
+    assert count == 1
+    rewritten = service.values_obj.update_body["values"]  # type: ignore[index]
+    assert service.values_obj.update_kwargs["range"] == "'Candidate Detail'!A1:S2"
+    assert rewritten[0][0] == "collected_at"
+    assert "entity_id" not in rewritten[0]
+    assert rewritten[1][0] == "2026-05-19T00:00:00+00:00"
+    assert rewritten[1][1] == "Merry AI"
+    assert rewritten[1][3] == "New Founder"
+    assert rewritten[1][4] == "https://merry.ai"
+    assert rewritten[1][5] == "founder@merry.ai"
+    assert rewritten[1][8] == "공개 카드 -> Merry AI"
+    assert rewritten[1][9] == "AI workflow automation"
 
 
 def test_google_sheet_review_queue_upsert_dedupes_new_rows_with_same_key_in_batch() -> None:
@@ -717,19 +819,21 @@ def test_google_sheet_review_queue_upsert_dedupes_new_rows_with_same_key_in_batc
         sheet_tab="Candidate Detail",
         rows=[
             {
-                "entity_id": "ent_1",
+                "collected_at": "2026-05-18T00:00:00+00:00",
                 "company": "Merry AI",
+                "homepage": "https://merry.ai",
                 "representative": "Old Founder",
                 "status": "crawled",
             },
             {
-                "entity_id": "ent_1",
+                "collected_at": "2026-05-19T00:00:00+00:00",
                 "company": "Merry AI",
+                "homepage": "https://merry.ai",
                 "representative": "New Founder",
                 "status": "crawled",
             },
         ],
-        key_fields=("entity_id",),
+        key_fields=("company",),
     )
 
     assert service.values_obj.append_body is not None
@@ -743,21 +847,25 @@ def test_google_sheet_review_queue_upsert_preserves_sheet_owned_and_custom_cells
     service.sheet_titles.add("Candidate Detail")
     headers = [*OPERATOR_CONSOLE_HEADERS["Candidate Detail"], "operator_note"]
     existing_row = [
-        "ent_1",
+        "2026-05-18T00:00:00+00:00",
         "Merry AI",
         "merryai",
         "Old Founder",
         "https://merry.ai",
+        "hello@merry.ai",
         "Seoul",
         "AI",
         "old summary",
+        "old model",
+        "Seed",
+        "undisclosed",
+        "Old Investor",
         "91.0",
         "0.92",
         "priority",
         "advance",
         "qualified",
         "wiki/entities/Merry AI.md",
-        "hello@merry.ai",
         "call Tuesday",
     ]
     service.values_obj.get_responses.extend(
@@ -772,34 +880,38 @@ def test_google_sheet_review_queue_upsert_preserves_sheet_owned_and_custom_cells
         sheet_tab="Candidate Detail",
         rows=[
             {
-                "entity_id": "ent_1",
+                "collected_at": "2026-05-19T00:00:00+00:00",
                 "company": "Merry AI",
                 "normalized_name": "merryai",
                 "representative": "New Founder",
                 "homepage": "",
+                "contact_email": "",
                 "region": "Seoul",
                 "industry": "AI",
                 "summary": "new summary",
+                "business_model": "new model",
+                "investment_round": "Series A",
+                "investment_amount": "2B KRW",
+                "investor": "New Investor",
                 "latest_score": "",
                 "priority_probability": "",
                 "queue_type": "new_source",
                 "recommended_action": "score_candidates",
                 "status": "crawled",
                 "wiki_path": "wiki/entities/Merry AI.md",
-                "contact_email": "",
             }
         ],
-        key_fields=("entity_id",),
+        key_fields=("company",),
     )
 
     updated = service.values_obj.update_body["values"][0]  # type: ignore[index]
     assert updated[3] == "New Founder"
     assert updated[4] == "https://merry.ai"
-    assert updated[8] == "91.0"
-    assert updated[9] == "0.92"
-    assert updated[12] == "qualified"
-    assert updated[14] == "hello@merry.ai"
-    assert updated[15] == "call Tuesday"
+    assert updated[5] == "hello@merry.ai"
+    assert updated[13] == "91.0"
+    assert updated[14] == "0.92"
+    assert updated[17] == "qualified"
+    assert updated[19] == "call Tuesday"
 
 
 def test_google_sheet_review_queue_upsert_clears_known_bad_crawl_cells() -> None:
@@ -807,21 +919,25 @@ def test_google_sheet_review_queue_upsert_clears_known_bad_crawl_cells() -> None
     service.sheet_titles.add("Candidate Detail")
     headers = list(OPERATOR_CONSOLE_HEADERS["Candidate Detail"])
     existing_row = [
-        "ent_1",
+        "2026-05-18T00:00:00+00:00",
         "Merry AI",
         "merryai",
         "Old Founder",
         "https://주식회사",
+        "master@thevc.kr",
         "Seoul",
         "AI",
         "old summary",
+        "old model",
+        "Seed",
+        "undisclosed",
+        "Old Investor",
         "",
         "",
         "new_source",
         "score_candidates",
         "crawled",
         "wiki/entities/Merry AI.md",
-        "master@thevc.kr",
     ]
     service.values_obj.get_responses.extend(
         [
@@ -835,30 +951,34 @@ def test_google_sheet_review_queue_upsert_clears_known_bad_crawl_cells() -> None
         sheet_tab="Candidate Detail",
         rows=[
             {
-                "entity_id": "ent_1",
+                "collected_at": "2026-05-19T00:00:00+00:00",
                 "company": "Merry AI",
                 "normalized_name": "merryai",
                 "representative": "New Founder",
                 "homepage": "",
+                "contact_email": "",
                 "region": "Seoul",
                 "industry": "AI",
                 "summary": "new summary",
+                "business_model": "new model",
+                "investment_round": "Series A",
+                "investment_amount": "2B KRW",
+                "investor": "New Investor",
                 "queue_type": "new_source",
                 "recommended_action": "score_candidates",
                 "status": "crawled",
                 "wiki_path": "wiki/entities/Merry AI.md",
-                "contact_email": "",
             }
         ],
-        key_fields=("entity_id",),
+        key_fields=("company",),
     )
 
     updated = service.values_obj.update_body["values"][0]  # type: ignore[index]
     assert updated[4] == ""
-    assert updated[14] == ""
+    assert updated[5] == ""
 
 
-def test_google_sheet_review_queue_compacts_candidate_detail_by_entity_or_company() -> None:
+def test_google_sheet_review_queue_compacts_candidate_detail_by_company_or_homepage() -> None:
     service = FakeSheetsService()
     service.sheet_titles.add("Candidate Detail")
     headers = list(OPERATOR_CONSOLE_HEADERS["Candidate Detail"])
@@ -869,55 +989,67 @@ def test_google_sheet_review_queue_compacts_candidate_detail_by_entity_or_compan
                 "values": [
                     headers,
                     [
-                        "ent_good",
+                        "2026-05-18T00:00:00+00:00",
                         "Merry AI",
                         "merryai",
                         "Founder",
                         "",
+                        "",
                         "Seoul",
                         "AI",
                         "summary",
+                        "model",
+                        "Seed",
+                        "undisclosed",
+                        "Investor",
                         "",
                         "",
                         "new_source",
                         "score_candidates",
                         "crawled",
                         "wiki/entities/Merry AI.md",
-                        "",
                     ],
                     [
-                        "ent_bad",
+                        "2026-05-18T00:01:00+00:00",
                         "Merry AI",
                         "merryai",
                         "Founder",
                         "https://주식회사",
+                        "master@thevc.kr",
                         "Seoul",
                         "AI",
                         "summary",
+                        "model",
+                        "Seed",
+                        "undisclosed",
+                        "Investor",
                         "",
                         "",
                         "new_source",
                         "score_candidates",
                         "crawled",
                         "wiki/entities/Merry AI.md",
-                        "master@thevc.kr",
                     ],
                     [
-                        "ent_good",
+                        "2026-05-18T00:02:00+00:00",
                         "Merry AI",
                         "merryai",
                         "Founder",
                         "",
+                        "master@thevc.kr",
                         "Seoul",
                         "AI",
                         "summary",
+                        "model",
+                        "Seed",
+                        "undisclosed",
+                        "Investor",
                         "",
                         "",
                         "new_source",
                         "score_candidates",
                         "crawled",
                         "wiki/entities/Merry AI.md",
-                        "master@thevc.kr",
                     ],
                 ]
             },
@@ -929,35 +1061,38 @@ def test_google_sheet_review_queue_compacts_candidate_detail_by_entity_or_compan
         sheet_tab="Candidate Detail",
         rows=[
             {
-                "entity_id": "ent_good",
+                "collected_at": "2026-05-19T00:00:00+00:00",
                 "company": "Merry AI",
                 "normalized_name": "merryai",
                 "representative": "Founder",
                 "homepage": "",
+                "contact_email": "",
                 "region": "Seoul",
                 "industry": "AI",
                 "summary": "summary",
+                "business_model": "model",
+                "investment_round": "Seed",
+                "investment_amount": "undisclosed",
+                "investor": "Investor",
                 "queue_type": "new_source",
                 "recommended_action": "score_candidates",
                 "status": "crawled",
                 "wiki_path": "wiki/entities/Merry AI.md",
-                "contact_email": "",
             }
         ],
-        key_fields=("entity_id", "company"),
+        key_fields=("company", "homepage"),
     )
 
     assert count == 1
     assert service.values_obj.calls[-2][0] == "update"
     assert service.values_obj.calls[-1][0] == "clear"
-    assert service.values_obj.update_kwargs["range"] == "'Candidate Detail'!A1:O2"
-    assert service.values_obj.clear_kwargs["range"] == "'Candidate Detail'!A3:O4"
+    assert service.values_obj.update_kwargs["range"] == "'Candidate Detail'!A1:S2"
+    assert service.values_obj.clear_kwargs["range"] == "'Candidate Detail'!A3:S4"
     rewritten = service.values_obj.update_body["values"]  # type: ignore[index]
     assert len(rewritten) == 2
-    assert rewritten[1][0] == "ent_good"
     assert rewritten[1][1] == "Merry AI"
     assert rewritten[1][4] == ""
-    assert rewritten[1][14] == ""
+    assert rewritten[1][5] == ""
 
 
 def test_google_sheet_review_queue_replaces_backup_rows_before_clearing_tail() -> None:
@@ -1110,21 +1245,25 @@ def test_google_sheet_review_queue_supports_operator_console_tabs() -> None:
             "contact_email",
         ),
         "Candidate Detail": (
-            "entity_id",
+            "collected_at",
             "company",
             "normalized_name",
             "representative",
             "homepage",
+            "contact_email",
             "region",
             "industry",
             "summary",
+            "business_model",
+            "investment_round",
+            "investment_amount",
+            "investor",
             "latest_score",
             "priority_probability",
             "queue_type",
             "recommended_action",
             "status",
             "wiki_path",
-            "contact_email",
         ),
         "Evidence": (
             "source_id",

@@ -60,21 +60,25 @@ OPERATOR_CONSOLE_HEADERS: dict[str, tuple[str, ...]] = {
         "contact_email",
     ),
     "Candidate Detail": (
-        "entity_id",
+        "collected_at",
         "company",
         "normalized_name",
         "representative",
         "homepage",
+        "contact_email",
         "region",
         "industry",
         "summary",
+        "business_model",
+        "investment_round",
+        "investment_amount",
+        "investor",
         "latest_score",
         "priority_probability",
         "queue_type",
         "recommended_action",
         "status",
         "wiki_path",
-        "contact_email",
     ),
     "Evidence": (
         "source_id",
@@ -206,13 +210,20 @@ class GoogleSheetReviewQueue:
         if not rows:
             return 0
         deduped_rows = _dedupe_rows_by_key(rows=rows, key_fields=key_fields)
-        headers = self._ensure_headers(sheet_tab=sheet_tab)
+        header_state = self._ensure_headers_state(sheet_tab=sheet_tab)
+        headers = header_state.headers
         existing_response = self.service.spreadsheets().values().get(
             spreadsheetId=self.spreadsheet_id,
             range=_sheet_range(sheet_tab, headers),
         ).execute()
         existing_values = existing_response.get("values", [])
-        if len(key_fields) > 1:
+        if header_state.replaced_schema:
+            existing_values = _remap_existing_values(
+                headers=headers,
+                previous_headers=header_state.previous_headers,
+                existing_values=existing_values,
+            )
+        if len(key_fields) > 1 or header_state.replaced_schema:
             compacted_rows = _compact_sheet_rows(
                 sheet_tab=sheet_tab,
                 headers=headers,
@@ -313,6 +324,9 @@ class GoogleSheetReviewQueue:
         return [dict(zip(headers, [str(value) for value in row], strict=False)) for row in values[1:]]
 
     def _ensure_headers(self, *, sheet_tab: str) -> tuple[str, ...]:
+        return self._ensure_headers_state(sheet_tab=sheet_tab).headers
+
+    def _ensure_headers_state(self, *, sheet_tab: str) -> "HeaderState":
         self._ensure_sheet_tab(sheet_tab=sheet_tab)
         headers = _headers_for_tab(sheet_tab)
         response = self.service.spreadsheets().values().get(
@@ -321,16 +335,17 @@ class GoogleSheetReviewQueue:
         ).execute()
         header_rows = response.get("values") or [[]]
         existing = [str(header) for header in header_rows[0]]
-        effective_headers = _merge_headers(existing=existing, canonical=list(headers))
+        effective_headers = _effective_headers(sheet_tab=sheet_tab, existing=existing, canonical=list(headers))
+        replaced_schema = bool(existing) and _replaces_candidate_detail_schema(sheet_tab=sheet_tab, existing=existing)
         if existing == effective_headers:
-            return tuple(effective_headers)
+            return HeaderState(headers=tuple(effective_headers), previous_headers=tuple(existing), replaced_schema=False)
         self.service.spreadsheets().values().update(
             spreadsheetId=self.spreadsheet_id,
             range=_sheet_range(sheet_tab, tuple(effective_headers), row="1"),
             valueInputOption="USER_ENTERED",
             body={"values": [effective_headers]},
         ).execute()
-        return tuple(effective_headers)
+        return HeaderState(headers=tuple(effective_headers), previous_headers=tuple(existing), replaced_schema=replaced_schema)
 
     def _ensure_sheet_tab(self, *, sheet_tab: str) -> None:
         response = self.service.spreadsheets().get(
@@ -350,12 +365,29 @@ class GoogleSheetReviewQueue:
         ).execute()
 
 
+@dataclass(frozen=True, slots=True)
+class HeaderState:
+    headers: tuple[str, ...]
+    previous_headers: tuple[str, ...]
+    replaced_schema: bool
+
+
 def _headers_for_tab(sheet_tab: str) -> tuple[str, ...]:
     if sheet_tab in OPERATOR_CONSOLE_HEADERS:
         return OPERATOR_CONSOLE_HEADERS[sheet_tab]
     if sheet_tab == "entity_resolution":
         return ENTITY_RESOLUTION_HEADERS
     return REVIEW_QUEUE_HEADERS
+
+
+def _effective_headers(*, sheet_tab: str, existing: list[str], canonical: list[str]) -> list[str]:
+    if _replaces_candidate_detail_schema(sheet_tab=sheet_tab, existing=existing):
+        return canonical + [header for header in existing if header and header not in canonical and header != "entity_id"]
+    return _merge_headers(existing=existing, canonical=canonical)
+
+
+def _replaces_candidate_detail_schema(*, sheet_tab: str, existing: list[str]) -> bool:
+    return sheet_tab == "Candidate Detail" and "entity_id" in existing
 
 
 def _merge_headers(*, existing: list[str], canonical: list[str]) -> list[str]:
@@ -396,6 +428,21 @@ def _row_values(row: dict[str, object], headers: tuple[str, ...], *, escape_form
     if not escape_formula_cells:
         return values
     return [_safe_cell_value(value) for value in values]
+
+
+def _remap_existing_values(
+    *,
+    headers: tuple[str, ...],
+    previous_headers: tuple[str, ...],
+    existing_values: list[list[object]],
+) -> list[list[object]]:
+    if not existing_values:
+        return []
+    remapped = [list(headers)]
+    for values in existing_values[1:]:
+        row = dict(zip(previous_headers, values, strict=False))
+        remapped.append([row.get(header, "") for header in headers])
+    return remapped
 
 
 def _existing_row_index(

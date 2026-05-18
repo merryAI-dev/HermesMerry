@@ -555,6 +555,7 @@ def _card_payload(card: TheVCInvestmentCard) -> str:
             f"Source URI: {card.profile_url}",
             f"Company: {card.company}",
             f"Product: {card.product}",
+            f"Business Model: {_business_model(card)}",
             f"Industry: {card.industry}",
             f"Representative: {card.representative}",
             f"Homepage: {card.homepage}",
@@ -575,3 +576,9 @@ def _card_payload(card: TheVCInvestmentCard) -> str:
 def _tag_value(value: str) -> str:
     normalized = _ROUND_TAG_RE.sub("-", value.casefold()).strip("-")
     return normalized or "unknown"
+
+
+def _business_model(card: TheVCInvestmentCard) -> str:
+    if card.product and card.description:
+        return f"{card.product} - {card.description}"
+    return card.product or card.description
