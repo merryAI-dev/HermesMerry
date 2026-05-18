@@ -3,6 +3,7 @@ from merry_runtime.adapters.gcs import GCSObjectStore
 from merry_runtime.adapters.gmail import GmailLabelSource
 from merry_runtime.adapters.google_sheets import GoogleSheetReviewQueue
 from merry_runtime.adapters.local_files import LocalFileObjectStore
+from merry_runtime.adapters.sqlite_store import SQLiteStructuredStore
 from merry_runtime.adapters.slack import SlackNotifier
 from merry_runtime.runtime_config import RuntimeConfig
 from merry_runtime.runtime_factory import build_runtime
@@ -53,6 +54,7 @@ def test_runtime_factory_builds_production_adapters(monkeypatch, tmp_path) -> No
         gmail_label_id="Label_123",
         default_ac_id="ac_climate",
         wiki_root=tmp_path,
+        structured_store_backend="bigquery",
     )
 
     runtime = build_runtime(config, import_module=fake_import)
@@ -90,6 +92,7 @@ def test_runtime_factory_uses_local_object_store_without_storage_client(monkeypa
         wiki_root=tmp_path / "wiki",
         object_store_backend="local",
         raw_root=tmp_path / "raw",
+        structured_store_backend="bigquery",
         bigquery_write_mode="append",
     )
 
@@ -98,3 +101,37 @@ def test_runtime_factory_uses_local_object_store_without_storage_client(monkeypa
     assert isinstance(runtime.object_store, LocalFileObjectStore)
     assert runtime.structured_store.write_mode == "append"
     assert "google.cloud.storage" not in imported_modules
+
+
+def test_runtime_factory_uses_sqlite_structured_store_without_bigquery_client(monkeypatch, tmp_path) -> None:
+    imported_modules = []
+
+    def fake_build(service_name: str, version: str):
+        return {"service": service_name, "version": version}
+
+    def fake_import(name: str):
+        imported_modules.append(name)
+        modules = {
+            "googleapiclient.discovery": type("Discovery", (), {"build": staticmethod(fake_build)}),
+        }
+        return modules[name]
+
+    monkeypatch.delenv("SLACK_BOT_TOKEN", raising=False)
+    config = RuntimeConfig(
+        project_id="",
+        dataset_id="",
+        raw_bucket="",
+        review_sheet_id="sheet-1",
+        wiki_root=tmp_path / "wiki",
+        object_store_backend="local",
+        raw_root=tmp_path / "raw",
+        structured_store_backend="sqlite",
+        mother_db_path=tmp_path / "mother.db",
+    )
+
+    runtime = build_runtime(config, import_module=fake_import)
+
+    assert isinstance(runtime.object_store, LocalFileObjectStore)
+    assert isinstance(runtime.structured_store, SQLiteStructuredStore)
+    assert runtime.structured_store.db_path == tmp_path / "mother.db"
+    assert "google.cloud.bigquery" not in imported_modules

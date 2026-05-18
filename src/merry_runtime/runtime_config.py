@@ -10,6 +10,7 @@ class RuntimeConfigError(ValueError):
 
 
 _BIGQUERY_WRITE_MODES = {"merge", "append"}
+_STRUCTURED_STORE_BACKENDS = {"sqlite", "bigquery"}
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,6 +25,9 @@ class RuntimeConfig:
     wiki_root: Path = Path("/tmp/hermes-merry-wiki")
     object_store_backend: str = "gcs"
     raw_root: Path = Path("/workspace/hermes/raw")
+    structured_store_backend: str = "sqlite"
+    mother_db_path: Path = Path("/workspace/hermes/mother.db")
+    backup_root: Path = Path("/workspace/hermes/backups")
     bigquery_write_mode: str = "merge"
     agent_loop_jobs: tuple[str, ...] = (
         "ingest-sources",
@@ -48,6 +52,9 @@ class RuntimeConfig:
             wiki_root=Path(os.getenv("WIKI_ROOT", "/tmp/hermes-merry-wiki")),
             object_store_backend=os.getenv("OBJECT_STORE_BACKEND", "gcs"),
             raw_root=Path(os.getenv("RAW_ROOT", "/workspace/hermes/raw")),
+            structured_store_backend=_parse_structured_store_backend(os.getenv("STRUCTURED_STORE_BACKEND", "sqlite")),
+            mother_db_path=Path(os.getenv("MOTHER_DB_PATH", "/workspace/hermes/mother.db")),
+            backup_root=Path(os.getenv("BACKUP_ROOT", "/workspace/hermes/backups")),
             bigquery_write_mode=_parse_bigquery_write_mode(os.getenv("BIGQUERY_WRITE_MODE", "merge")),
             agent_loop_jobs=_parse_jobs(os.getenv("AGENT_LOOP_JOBS", "")),
             agent_loop_interval_seconds=_parse_int(os.getenv("AGENT_LOOP_INTERVAL_SECONDS", ""), default=1800),
@@ -55,12 +62,14 @@ class RuntimeConfig:
         )
 
     def validate_for_job(self, job_name: str, *, has_inline_sources: bool = False) -> None:
+        self._validate_structured_store_backend()
         self._validate_bigquery_write_mode()
-        required = ["GCP_PROJECT_ID", "BIGQUERY_DATASET"]
+        required = self._structured_store_required_env()
         if job_name == "ingest-sources":
             if self.object_store_backend == "local":
                 required.append("RAW_ROOT")
             else:
+                required.append("GCP_PROJECT_ID")
                 required.append("RAW_BUCKET")
             if not has_inline_sources:
                 required.append("GMAIL_LABEL_ID")
@@ -82,11 +91,19 @@ class RuntimeConfig:
             raise RuntimeConfigError(f"Missing required environment for {job_name}: {', '.join(missing)}")
 
     def validate_for_loop(self, *, max_cycles: int) -> None:
+        self._validate_structured_store_backend()
         self._validate_bigquery_write_mode()
-        if self.bigquery_write_mode == "append" and max_cycles != 1:
+        if self.structured_store_backend == "bigquery" and self.bigquery_write_mode == "append" and max_cycles != 1:
             raise RuntimeConfigError(
                 "BIGQUERY_WRITE_MODE=append is limited to one-cycle canaries; "
                 "set AGENT_LOOP_MAX_CYCLES=1 or use BIGQUERY_WRITE_MODE=merge for an always-on loop"
+            )
+
+    def _validate_structured_store_backend(self) -> None:
+        if self.structured_store_backend not in _STRUCTURED_STORE_BACKENDS:
+            allowed = ", ".join(sorted(_STRUCTURED_STORE_BACKENDS))
+            raise RuntimeConfigError(
+                f"Unsupported STRUCTURED_STORE_BACKEND={self.structured_store_backend!r}; expected one of: {allowed}"
             )
 
     def _validate_bigquery_write_mode(self) -> None:
@@ -96,11 +113,19 @@ class RuntimeConfig:
                 f"Unsupported BIGQUERY_WRITE_MODE={self.bigquery_write_mode!r}; expected one of: {allowed}"
             )
 
+    def _structured_store_required_env(self) -> list[str]:
+        if self.structured_store_backend == "bigquery":
+            return ["GCP_PROJECT_ID", "BIGQUERY_DATASET"]
+        if self.structured_store_backend == "sqlite":
+            return ["MOTHER_DB_PATH"]
+        return []
+
     def _value_for_env_name(self, name: str) -> str:
         return {
             "GCP_PROJECT_ID": self.project_id,
             "BIGQUERY_DATASET": self.dataset_id,
             "RAW_BUCKET": self.raw_bucket,
+            "MOTHER_DB_PATH": str(self.mother_db_path),
             "REVIEW_SHEET_ID": self.review_sheet_id,
             "SLACK_CHANNEL": self.slack_channel,
             "GMAIL_LABEL_ID": self.gmail_label_id,
@@ -124,6 +149,12 @@ def _parse_jobs(value: str) -> tuple[str, ...]:
 def _parse_bigquery_write_mode(value: str) -> str:
     if not value.strip():
         return "merge"
+    return value.strip().lower()
+
+
+def _parse_structured_store_backend(value: str) -> str:
+    if not value.strip():
+        return "sqlite"
     return value.strip().lower()
 
 

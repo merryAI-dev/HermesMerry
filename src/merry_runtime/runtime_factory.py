@@ -11,6 +11,7 @@ from merry_runtime.adapters.gmail import GmailLabelSource
 from merry_runtime.adapters.google_sheets import GoogleSheetReviewQueue
 from merry_runtime.adapters.local_files import LocalFileObjectStore
 from merry_runtime.adapters.slack import SlackNotifier
+from merry_runtime.adapters.sqlite_store import SQLiteStructuredStore
 from merry_runtime.job_runner import RuntimeAdapters
 from merry_runtime.runtime_config import RuntimeConfig, RuntimeConfigError
 from merry_runtime.wiki_store import SQLiteWikiStore
@@ -21,9 +22,9 @@ def build_runtime(
     *,
     import_module: Callable[[str], ModuleType | object] = importlib.import_module,
 ) -> RuntimeAdapters:
-    bigquery_module = import_module("google.cloud.bigquery")
     discovery_module = import_module("googleapiclient.discovery")
     object_store = _build_object_store(config=config, import_module=import_module)
+    structured_store = _build_structured_store(config=config, import_module=import_module)
 
     sheets_service = discovery_module.build("sheets", "v4")
     gmail_service = discovery_module.build("gmail", "v1") if config.gmail_label_id else None
@@ -39,12 +40,7 @@ def build_runtime(
 
     return RuntimeAdapters(
         object_store=object_store,
-        structured_store=BigQueryStructuredStore(
-            client=bigquery_module.Client(project=config.project_id),
-            project_id=config.project_id,
-            dataset_id=config.dataset_id,
-            write_mode=config.bigquery_write_mode,
-        ),
+        structured_store=structured_store,
         review_queue=GoogleSheetReviewQueue(service=sheets_service, spreadsheet_id=config.review_sheet_id),
         notifier=notifier,
         wiki_store=SQLiteWikiStore(root=config.wiki_root),
@@ -63,3 +59,21 @@ def _build_object_store(
         raise RuntimeConfigError(f"Unsupported OBJECT_STORE_BACKEND: {config.object_store_backend}")
     storage_module = import_module("google.cloud.storage")
     return GCSObjectStore(client=storage_module.Client(project=config.project_id), bucket=config.raw_bucket)
+
+
+def _build_structured_store(
+    *,
+    config: RuntimeConfig,
+    import_module: Callable[[str], ModuleType | object],
+) -> BigQueryStructuredStore | SQLiteStructuredStore:
+    if config.structured_store_backend == "sqlite":
+        return SQLiteStructuredStore(db_path=config.mother_db_path)
+    if config.structured_store_backend != "bigquery":
+        raise RuntimeConfigError(f"Unsupported STRUCTURED_STORE_BACKEND: {config.structured_store_backend}")
+    bigquery_module = import_module("google.cloud.bigquery")
+    return BigQueryStructuredStore(
+        client=bigquery_module.Client(project=config.project_id),
+        project_id=config.project_id,
+        dataset_id=config.dataset_id,
+        write_mode=config.bigquery_write_mode,
+    )
