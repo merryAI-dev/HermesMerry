@@ -1,0 +1,26 @@
+[
+  {
+    "channel": "hankyung_ceo_interview",
+    "source_type": "article",
+    "ingestion_mode": "scheduled_crawl",
+    "pii_expected": false
+  },
+  {
+    "channel": "info_mail",
+    "source_type": "email",
+    "ingestion_mode": "gmail_label",
+    "pii_expected": true
+  },
+  {
+    "channel": "external_referral",
+    "source_type": "sheet_row",
+    "ingestion_mode": "google_sheet",
+    "pii_expected": true
+  },
+  {
+    "channel": "internal_screening_memo",
+    "source_type": "drive_doc",
+    "ingestion_mode": "drive_folder",
+    "pii_expected": true
+  }
+]

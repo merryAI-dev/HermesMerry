@@ -1,0 +1,6 @@
+project_id      = "my-staging-project"
+region          = "asia-northeast3"
+raw_bucket_name = "my-staging-hermes-merry-raw"
+image_uri       = "asia-northeast3-docker.pkg.dev/my-staging-project/hermes-merry/runtime:staging"
+review_sheet_id = "google-sheet-id"
+slack_channel   = "slack-channel-id"

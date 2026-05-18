@@ -1,0 +1,21 @@
+{
+  "toolsets": {
+    "terminal": false,
+    "file": false,
+    "code_execution": false,
+    "computer_use": false,
+    "delegation": false,
+    "cronjob": false,
+    "merry_ac": true
+  },
+  "terminal": {
+    "backend": "docker"
+  },
+  "tool_loop_guardrails": {
+    "hard_stop_enabled": true
+  },
+  "agent": {
+    "max_turns": 20
+  },
+  "yolo": false
+}

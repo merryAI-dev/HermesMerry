@@ -1,0 +1,115 @@
+from __future__ import annotations
+
+from typing import Final
+
+
+def _field(name: str, field_type: str, mode: str = "NULLABLE") -> dict[str, str]:
+    return {"name": name, "type": field_type, "mode": mode}
+
+
+BIGQUERY_TABLES: Final[dict[str, list[dict[str, str]]]] = {
+    "raw_sources": [
+        _field("source_id", "STRING", "REQUIRED"),
+        _field("source_type", "STRING", "REQUIRED"),
+        _field("channel", "STRING", "REQUIRED"),
+        _field("url", "STRING"),
+        _field("title", "STRING"),
+        _field("raw_text_path", "STRING", "REQUIRED"),
+        _field("published_at", "TIMESTAMP"),
+        _field("collected_at", "TIMESTAMP", "REQUIRED"),
+        _field("checksum", "STRING", "REQUIRED"),
+        _field("contains_pii", "BOOL", "REQUIRED"),
+    ],
+    "mother_entities": [
+        _field("entity_id", "STRING", "REQUIRED"),
+        _field("entity_type", "STRING", "REQUIRED"),
+        _field("name", "STRING", "REQUIRED"),
+        _field("normalized_name", "STRING", "REQUIRED"),
+        _field("region", "STRING"),
+        _field("industry", "STRING"),
+        _field("homepage", "STRING"),
+        _field("representative", "STRING"),
+        _field("first_seen_at", "TIMESTAMP", "REQUIRED"),
+        _field("last_seen_at", "TIMESTAMP", "REQUIRED"),
+    ],
+    "entity_aliases": [
+        _field("alias_id", "STRING", "REQUIRED"),
+        _field("entity_id", "STRING", "REQUIRED"),
+        _field("alias", "STRING", "REQUIRED"),
+        _field("normalized_alias", "STRING", "REQUIRED"),
+        _field("source_id", "STRING"),
+        _field("created_at", "TIMESTAMP", "REQUIRED"),
+    ],
+    "signals": [
+        _field("signal_id", "STRING", "REQUIRED"),
+        _field("entity_id", "STRING", "REQUIRED"),
+        _field("signal_type", "STRING", "REQUIRED"),
+        _field("evidence_text", "STRING", "REQUIRED"),
+        _field("source_id", "STRING", "REQUIRED"),
+        _field("confidence", "FLOAT", "REQUIRED"),
+        _field("tags", "STRING", "REPEATED"),
+        _field("detected_at", "TIMESTAMP", "REQUIRED"),
+    ],
+    "ac_profiles": [
+        _field("ac_id", "STRING", "REQUIRED"),
+        _field("ac_name", "STRING", "REQUIRED"),
+        _field("fund_purpose", "STRING", "REQUIRED"),
+        _field("recruiting_area", "STRING"),
+        _field("hypothesis_tags", "STRING", "REPEATED"),
+        _field("impact_priority", "STRING", "REPEATED"),
+        _field("region_preferences", "STRING", "REPEATED"),
+        _field("industry_preferences", "STRING", "REPEATED"),
+        _field("tech_preferences", "STRING", "REPEATED"),
+    ],
+    "ac_scores": [
+        _field("score_id", "STRING", "REQUIRED"),
+        _field("ac_id", "STRING", "REQUIRED"),
+        _field("entity_id", "STRING", "REQUIRED"),
+        _field("base_score", "FLOAT", "REQUIRED"),
+        _field("fund_fit_score", "FLOAT", "REQUIRED"),
+        _field("recruiting_fit_score", "FLOAT", "REQUIRED"),
+        _field("hypothesis_fit_score", "FLOAT", "REQUIRED"),
+        _field("impact_fit_score", "FLOAT", "REQUIRED"),
+        _field("total_score", "FLOAT", "REQUIRED"),
+        _field("priority_probability", "FLOAT", "REQUIRED"),
+        _field("priority_utility", "FLOAT", "REQUIRED"),
+        _field("queue_type", "STRING", "REQUIRED"),
+        _field("uncertainty", "FLOAT", "REQUIRED"),
+        _field("model_version", "STRING", "REQUIRED"),
+        _field("rationale", "STRING", "REQUIRED"),
+        _field("recommended_action", "STRING", "REQUIRED"),
+        _field("scored_at", "TIMESTAMP", "REQUIRED"),
+    ],
+    "candidate_cards": [
+        _field("card_id", "STRING", "REQUIRED"),
+        _field("ac_id", "STRING", "REQUIRED"),
+        _field("entity_id", "STRING", "REQUIRED"),
+        _field("summary", "STRING", "REQUIRED"),
+        _field("recommended_action", "STRING", "REQUIRED"),
+        _field("queue_type", "STRING", "REQUIRED"),
+        _field("status", "STRING", "REQUIRED"),
+        _field("created_at", "TIMESTAMP", "REQUIRED"),
+    ],
+    "reviews": [
+        _field("review_id", "STRING", "REQUIRED"),
+        _field("card_id", "STRING", "REQUIRED"),
+        _field("reviewer", "STRING", "REQUIRED"),
+        _field("decision", "STRING", "REQUIRED"),
+        _field("memo", "STRING"),
+        _field("reviewed_at", "TIMESTAMP", "REQUIRED"),
+    ],
+    "agent_runs": [
+        _field("run_id", "STRING", "REQUIRED"),
+        _field("job_name", "STRING", "REQUIRED"),
+        _field("status", "STRING", "REQUIRED"),
+        _field("started_at", "TIMESTAMP", "REQUIRED"),
+        _field("finished_at", "TIMESTAMP"),
+        _field("input_count", "INTEGER"),
+        _field("output_count", "INTEGER"),
+        _field("error_message", "STRING"),
+    ],
+}
+
+
+def table_field_names(table_name: str) -> set[str]:
+    return {field["name"] for field in BIGQUERY_TABLES[table_name]}

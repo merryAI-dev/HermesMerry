@@ -1,0 +1,99 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from types import MappingProxyType
+from typing import Any
+
+
+@dataclass(frozen=True, slots=True)
+class MCPToolContract:
+    name: str
+    description: str
+    side_effect_scope: str
+    input_schema: dict[str, Any]
+
+
+_TOOLS = {
+    "ingest_raw_source": MCPToolContract(
+        name="ingest_raw_source",
+        description="Store a raw source payload in GCS and register metadata in BigQuery.",
+        side_effect_scope="gcs_bigquery",
+        input_schema={
+            "type": "object",
+            "required": ["source_type", "channel", "uri", "raw_text"],
+            "properties": {
+                "source_type": {"type": "string"},
+                "channel": {"type": "string"},
+                "uri": {"type": "string"},
+                "title": {"type": "string"},
+                "raw_text": {"type": "string"},
+            },
+        },
+    ),
+    "upsert_entity_signal": MCPToolContract(
+        name="upsert_entity_signal",
+        description="Create or merge a Mother DB entity and attach evidence-backed signals.",
+        side_effect_scope="bigquery",
+        input_schema={
+            "type": "object",
+            "required": ["entity", "signals"],
+            "properties": {
+                "entity": {"type": "object"},
+                "signals": {"type": "array", "items": {"type": "object"}},
+            },
+        },
+    ),
+    "enqueue_candidate_card": MCPToolContract(
+        name="enqueue_candidate_card",
+        description="Write an AC candidate card to BigQuery and the review Sheet queue.",
+        side_effect_scope="bigquery_sheets",
+        input_schema={
+            "type": "object",
+            "required": ["ac_id", "entity_id", "summary", "recommended_action"],
+            "properties": {
+                "ac_id": {"type": "string"},
+                "entity_id": {"type": "string"},
+                "summary": {"type": "string"},
+                "recommended_action": {"type": "string"},
+            },
+        },
+    ),
+    "record_review_feedback": MCPToolContract(
+        name="record_review_feedback",
+        description="Persist human Sheet review decisions and update card status.",
+        side_effect_scope="bigquery",
+        input_schema={
+            "type": "object",
+            "required": ["card_id", "reviewer", "decision"],
+            "properties": {
+                "card_id": {"type": "string"},
+                "reviewer": {"type": "string"},
+                "decision": {
+                    "type": "string",
+                    "enum": ["advance", "watchlist", "reject", "request_more_info"],
+                },
+                "review_memo": {"type": "string"},
+            },
+        },
+    ),
+    "send_slack_summary": MCPToolContract(
+        name="send_slack_summary",
+        description="Send a bounded summary of new cards and weekly review deltas to Slack.",
+        side_effect_scope="slack",
+        input_schema={
+            "type": "object",
+            "required": ["channel", "summary"],
+            "properties": {
+                "channel": {"type": "string"},
+                "summary": {"type": "string", "maxLength": 3000},
+            },
+        },
+    ),
+}
+
+
+TOOL_REGISTRY = MappingProxyType(_TOOLS)
+
+
+def allowed_tool_names() -> tuple[str, ...]:
+    return tuple(TOOL_REGISTRY.keys())

@@ -1,0 +1,21 @@
+{
+  "base_score": {
+    "max": 35,
+    "confidence": 20,
+    "evidence_volume": 5,
+    "growth_signal": 5,
+    "impact_signal": 5
+  },
+  "ac_specific_score": {
+    "fund_fit": 15,
+    "recruiting_fit": 15,
+    "hypothesis_fit": 15,
+    "impact_fit": 20
+  },
+  "action_thresholds": {
+    "advance": 75,
+    "watchlist": 55,
+    "request_more_info": 40,
+    "archive": 0
+  }
+}

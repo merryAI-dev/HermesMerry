@@ -1,0 +1,10 @@
+Subject: Info mail - Merry AI referral
+From: founder@merry.ai
+Company: Merry AI
+Region: Seoul
+Industry: AI
+Homepage: https://merry.ai
+Signal: traction
+Confidence: 0.81
+Tags: ai, productivity, pilot, traction
+Evidence: The team reports paid pilots with two public-sector partners. Contact founder@merry.ai / 010-1234-5678.

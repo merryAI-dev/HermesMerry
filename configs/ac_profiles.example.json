@@ -1,0 +1,24 @@
+[
+  {
+    "ac_id": "ac_climate",
+    "ac_name": "Climate Impact AC",
+    "fund_purpose": "climate impact fund",
+    "recruiting_area": "Jeonbuk",
+    "hypothesis_tags": ["climate", "agritech"],
+    "impact_priority": ["carbon", "rural"],
+    "region_preferences": ["Jeonbuk"],
+    "industry_preferences": ["AgriTech"],
+    "tech_preferences": ["MRV", "AI"]
+  },
+  {
+    "ac_id": "ac_local_care",
+    "ac_name": "Local Care AC",
+    "fund_purpose": "local care and aging society",
+    "recruiting_area": "Nationwide",
+    "hypothesis_tags": ["care", "health", "community"],
+    "impact_priority": ["accessibility", "caregiver", "senior"],
+    "region_preferences": [],
+    "industry_preferences": ["HealthTech", "Care"],
+    "tech_preferences": ["AI", "platform"]
+  }
+]

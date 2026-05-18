@@ -1,0 +1,11 @@
+Title: CareFarm Carbon wins rural climate pilot
+URL: https://example.com/hankyung/carefarm-carbon
+Company: CareFarm Carbon
+Region: Jeonbuk
+Industry: AgriTech
+Homepage: https://carefarm.example
+Published: 2026-05-01T09:00:00+09:00
+Signal: impact
+Confidence: 0.92
+Tags: climate, carbon, rural, impact
+Evidence: Reduces carbon emissions for small farms with verified pilots and cooperative adoption.

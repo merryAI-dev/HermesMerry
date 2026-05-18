@@ -1,0 +1,9 @@
+Memo: Internal screening note
+Company: Local Care Grid
+Region: Gwangju
+Industry: Care
+Homepage: https://localcare.example
+Signal: impact
+Confidence: 0.88
+Tags: care, senior, accessibility, community
+Evidence: Expands caregiver matching access for older adults in underserved districts.
