@@ -90,6 +90,69 @@ def test_run_weekly_summary_posts_slack_counts(tmp_path) -> None:
     assert "priority=1" in runtime.notifier.messages[0]["text"]
 
 
+def test_run_weekly_summary_includes_failures_reviews_and_resolution_events(tmp_path) -> None:
+    store = FakeStructuredStore.seed_candidate_card()
+    store.upsert_rows(
+        table="agent_runs",
+        rows=[
+            {
+                "run_id": "run_failed",
+                "job_name": "score-candidates",
+                "status": "failed",
+                "started_at": "2026-05-18T00:00:00+00:00",
+                "finished_at": "2026-05-18T00:01:00+00:00",
+                "input_count": 1,
+                "output_count": 0,
+                "error_message": "RuntimeError: source body included founder@example.com",
+            }
+        ],
+        key_fields=("run_id",),
+    )
+    store.upsert_rows(
+        table="reviews",
+        rows=[
+            {
+                "review_id": "review_1",
+                "card_id": "card_1",
+                "reviewer": "boram",
+                "decision": "advance",
+                "memo": "contains private notes",
+                "reviewed_at": "2026-05-18T00:02:00+00:00",
+            }
+        ],
+        key_fields=("review_id",),
+    )
+    store.upsert_rows(
+        table="entity_resolution_events",
+        rows=[
+            {
+                "event_id": "evt_1",
+                "candidate_entity_id": "ent_new",
+                "matched_entity_id": "ent_old",
+                "action": "merge_candidate",
+                "probability": 0.87,
+                "features_json": "{}",
+                "rationale": "May include private rationale",
+                "status": "pending_review",
+                "created_at": "2026-05-18T00:03:00+00:00",
+            }
+        ],
+        key_fields=("event_id",),
+    )
+    runtime = _runtime(tmp_path, store=store)
+
+    result = run_job("weekly-summary", runtime=runtime, config=_config(tmp_path))
+
+    text = runtime.notifier.messages[0]["text"]
+    assert result["job_name"] == "weekly-summary"
+    assert "failed_jobs=1" in text
+    assert "reviews=1" in text
+    assert "resolution_pending=1" in text
+    assert "priority=1" in text
+    assert "founder@example.com" not in text
+    assert "private" not in text
+
+
 def test_run_resolve_entities_persists_resolution_events(tmp_path) -> None:
     store = FakeStructuredStore()
     store.upsert_rows(

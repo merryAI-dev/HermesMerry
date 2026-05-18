@@ -10,6 +10,7 @@ from merry_runtime.pipelines.ingest_sources import ingest_sources
 from merry_runtime.pipelines.resolve_entities import resolve_entities
 from merry_runtime.pipelines.score_candidates import score_candidates
 from merry_runtime.pipelines.sync_review_sheet import sync_review_sheet
+from merry_runtime.pipelines.weekly_summary import build_weekly_summary
 from merry_runtime.runtime_config import RuntimeConfig
 from merry_runtime.wiki_store import SQLiteWikiStore
 
@@ -112,21 +113,12 @@ def _run_weekly_summary(*, runtime: RuntimeAdapters, config: RuntimeConfig) -> d
         raise JobRunError("weekly-summary requires notifier")
     if not config.slack_channel:
         raise JobRunError("weekly-summary requires SLACK_CHANNEL")
-    cards = runtime.structured_store.query_rows(sql="select * from candidate_cards", parameters={})
-    counts = _count_by_queue(cards)
-    text = "Hermes weekly summary: " + ", ".join(f"{queue}={count}" for queue, count in sorted(counts.items()))
-    message_id = runtime.notifier.send_message(channel=config.slack_channel, text=text)
-    return {"job_name": "weekly-summary", "message_id": message_id, "card_count": len(cards), "counts": counts}
+    summary = build_weekly_summary(structured_store=runtime.structured_store)
+    message_id = runtime.notifier.send_message(channel=config.slack_channel, text=summary.text)
+    return {"job_name": "weekly-summary", "message_id": message_id, "card_count": summary.card_count, "counts": summary.counts}
 
 
 def _run_resolve_entities(*, runtime: RuntimeAdapters) -> dict[str, object]:
     result = resolve_entities(structured_store=runtime.structured_store, review_queue=runtime.review_queue)
     return {"job_name": "resolve-entities", **asdict(result)}
 
-
-def _count_by_queue(cards: list[dict[str, Any]]) -> dict[str, int]:
-    counts: dict[str, int] = {}
-    for card in cards:
-        queue = str(card.get("queue_type") or "priority")
-        counts[queue] = counts.get(queue, 0) + 1
-    return counts

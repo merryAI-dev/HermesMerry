@@ -365,3 +365,58 @@ resource "google_cloud_scheduler_job" "agent_schedules" {
     }
   }
 }
+
+resource "google_monitoring_notification_channel" "ops_email" {
+  count = var.enable_ops_alerts ? 1 : 0
+
+  display_name = "Hermes Merry Ops Email"
+  type         = "email"
+
+  labels = {
+    email_address = var.ops_alert_email
+  }
+}
+
+resource "google_logging_metric" "cloud_run_job_errors" {
+  count = var.enable_ops_alerts ? 1 : 0
+
+  name        = "frontless-job-errors"
+  description = "Cloud Run job error logs emitted by Hermes Merry frontless jobs."
+  filter      = <<-EOT
+    resource.type="cloud_run_job"
+    resource.labels.job_name=~"ingest-sources|resolve-entities|score-candidates|sync-review-sheet|weekly-summary"
+    severity>=ERROR
+  EOT
+
+  metric_descriptor {
+    metric_kind = "DELTA"
+    value_type  = "INT64"
+    unit        = "1"
+  }
+}
+
+resource "google_monitoring_alert_policy" "frontless_job_failures" {
+  count = var.enable_ops_alerts ? 1 : 0
+
+  display_name = "Hermes Merry frontless job failures"
+  combiner     = "OR"
+  enabled      = true
+
+  conditions {
+    display_name = "Cloud Run job error logs"
+
+    condition_threshold {
+      filter          = "resource.type=\"cloud_run_job\" AND metric.type=\"logging.googleapis.com/user/${google_logging_metric.cloud_run_job_errors[0].name}\""
+      duration        = "0s"
+      comparison      = "COMPARISON_GT"
+      threshold_value = 0
+
+      aggregations {
+        alignment_period   = "300s"
+        per_series_aligner = "ALIGN_DELTA"
+      }
+    }
+  }
+
+  notification_channels = [google_monitoring_notification_channel.ops_email[0].name]
+}

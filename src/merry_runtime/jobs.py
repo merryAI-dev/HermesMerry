@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Sequence
 
@@ -58,6 +60,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.sources_file:
             sources_json = Path(args.sources_file).read_text(encoding="utf-8")
 
+        runtime = None
+        started_at = _now()
         config = RuntimeConfig.from_env()
         try:
             config.validate_for_job(args.job_name, has_inline_sources=bool(sources_json))
@@ -72,11 +76,57 @@ def main(argv: Sequence[str] | None = None) -> int:
         except (RuntimeConfigError, JobRunError) as exc:
             print(f"Job failed: {exc}", file=sys.stderr)
             return 2
+        except Exception as exc:
+            _record_failed_agent_run(runtime=runtime, job_name=args.job_name, started_at=started_at, exc=exc)
+            print(f"Job failed: {_bounded_error_message(exc)}", file=sys.stderr)
+            return 1
 
         print(json.dumps(result, ensure_ascii=False, sort_keys=True))
         return 0
 
     parser.error(f"Unknown command: {args.command}")
+
+
+def _record_failed_agent_run(*, runtime: object, job_name: str, started_at: str, exc: Exception) -> None:
+    structured_store = getattr(runtime, "structured_store", None)
+    if structured_store is None:
+        return
+
+    finished_at = _now()
+    run_id = f"run_failed_{_safe_job_name(job_name)}_{_short_digest(started_at, finished_at, type(exc).__name__)}"
+    structured_store.upsert_rows(
+        table="agent_runs",
+        rows=[
+            {
+                "run_id": run_id,
+                "job_name": job_name,
+                "status": "failed",
+                "started_at": started_at,
+                "finished_at": finished_at,
+                "input_count": 0,
+                "output_count": 0,
+                "error_message": _bounded_error_message(exc),
+            }
+        ],
+        key_fields=("run_id",),
+    )
+
+
+def _bounded_error_message(exc: Exception, max_length: int = 1000) -> str:
+    return f"{type(exc).__name__}: {exc}"[:max_length]
+
+
+def _safe_job_name(job_name: str) -> str:
+    return "".join(character if character.isalnum() else "_" for character in job_name)
+
+
+def _short_digest(*parts: str) -> str:
+    payload = "\n".join(parts)
+    return hashlib.sha1(payload.encode("utf-8")).hexdigest()[:12]
+
+
+def _now() -> str:
+    return datetime.now(UTC).isoformat()
 
 
 if __name__ == "__main__":

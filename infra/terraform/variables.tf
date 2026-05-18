@@ -78,3 +78,15 @@ variable "slack_bot_token_secret_id" {
   type        = string
   default     = "merry-slack-bot-token"
 }
+
+variable "ops_alert_email" {
+  description = "Email address for frontless job operational alerts."
+  type        = string
+  default     = ""
+}
+
+variable "enable_ops_alerts" {
+  description = "Whether to create operational alerting resources for scheduled frontless jobs."
+  type        = bool
+  default     = false
+}

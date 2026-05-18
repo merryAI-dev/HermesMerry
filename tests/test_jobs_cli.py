@@ -61,3 +61,46 @@ def test_jobs_cli_accepts_sources_json(monkeypatch, tmp_path, capsys) -> None:
     assert exit_code == 0
     assert output["job_name"] == "ingest-sources"
     assert output["raw_source_count"] == 1
+
+
+def test_jobs_cli_persists_unexpected_job_failure_after_runtime_creation(monkeypatch, tmp_path, capsys) -> None:
+    config = RuntimeConfig(
+        project_id="project-1",
+        dataset_id="merry",
+        raw_bucket="raw-bucket",
+        review_sheet_id="sheet-1",
+        slack_channel="C123",
+        gmail_label_id="Label_123",
+        default_ac_id="ac_climate",
+        wiki_root=tmp_path,
+    )
+    store = FakeStructuredStore.seed_climate_candidate()
+    runtime = RuntimeAdapters(
+        object_store=FakeObjectStore(bucket="raw-bucket"),
+        structured_store=store,
+        review_queue=FakeReviewQueue(),
+        notifier=FakeNotifier(),
+        wiki_store=SQLiteWikiStore(root=tmp_path),
+    )
+
+    def fail_job(*args, **kwargs):
+        raise RuntimeError("adapter exploded " + "x" * 1200)
+
+    monkeypatch.setattr("merry_runtime.jobs.RuntimeConfig.from_env", lambda: config)
+    monkeypatch.setattr("merry_runtime.jobs.build_runtime", lambda config: runtime)
+    monkeypatch.setattr("merry_runtime.jobs.run_job", fail_job)
+
+    exit_code = main(["run", "score-candidates", "--ac-id", "ac_climate"])
+
+    captured = capsys.readouterr()
+    assert exit_code != 0
+    assert "Job failed:" in captured.err
+    [failure_row] = store.tables["agent_runs"]
+    assert failure_row["job_name"] == "score-candidates"
+    assert failure_row["status"] == "failed"
+    assert failure_row["input_count"] == 0
+    assert failure_row["output_count"] == 0
+    assert failure_row["started_at"]
+    assert failure_row["finished_at"]
+    assert failure_row["error_message"].startswith("RuntimeError: adapter exploded")
+    assert len(failure_row["error_message"]) <= 1000

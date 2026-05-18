@@ -37,6 +37,20 @@ def test_terraform_grants_create_only_raw_docs_bucket_access() -> None:
     assert 'role   = "roles/storage.objectCreator"' in main_tf
 
 
+def test_terraform_defines_frontless_job_ops_alerting_shell() -> None:
+    main_tf = (REPO_ROOT / "infra" / "terraform" / "main.tf").read_text()
+    variables_tf = (REPO_ROOT / "infra" / "terraform" / "variables.tf").read_text()
+
+    assert 'variable "ops_alert_email"' in variables_tf
+    assert 'variable "enable_ops_alerts"' in variables_tf
+    assert 'google_monitoring_notification_channel" "ops_email"' in main_tf
+    assert 'google_logging_metric" "cloud_run_job_errors"' in main_tf
+    assert 'google_monitoring_alert_policy" "frontless_job_failures"' in main_tf
+    assert "count = var.enable_ops_alerts ? 1 : 0" in main_tf
+    assert 'resource.type="cloud_run_job"' in main_tf
+    assert 'severity>=ERROR' in main_tf
+
+
 def test_dockerfile_runs_runtime_as_non_root_user() -> None:
     dockerfile = (REPO_ROOT / "Dockerfile").read_text()
 
