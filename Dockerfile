@@ -8,13 +8,13 @@ WORKDIR /app
 RUN useradd --create-home --shell /usr/sbin/nologin hermes
 
 COPY requirements.lock ./
-RUN pip install --require-hashes -r requirements.lock --no-cache-dir
+RUN pip install --no-cache-dir --require-hashes -r requirements.lock
 
 COPY pyproject.toml README.md ./
 COPY src ./src
 COPY configs ./configs
 
-RUN pip install --no-deps . --no-cache-dir
+RUN pip install --no-cache-dir --no-deps .
 
 USER hermes
 
