@@ -62,3 +62,48 @@ def test_crawl_sources_fetches_thevc_visible_investment_cards_into_mother_db(tmp
     assert review_queue.published["Candidate Detail"][0]["contact_email"] == "hello@the-aio.com"
     assert any(row["job_name"] == "crawl-sources" for row in structured_store.tables["agent_runs"])
     assert (tmp_path / "wiki" / "entities").exists()
+
+
+def test_crawl_sources_does_not_republish_existing_sheet_projection_rows(tmp_path) -> None:
+    object_store = FakeObjectStore(bucket="raw-bucket")
+    structured_store = FakeStructuredStore()
+    review_queue = FakeReviewQueue()
+
+    def fetch_url(url: str) -> str:
+        if url == "https://thevc.kr/aio":
+            return """
+                <script type="application/ld+json">
+                {
+                  "@type": "Organization",
+                  "sameAs": ["https://the-aio.com/"],
+                  "email": "hello@the-aio.com",
+                  "employee": [
+                    {"@type": "Person", "name": "권진형", "jobTitle": "대표이사"}
+                  ]
+                }
+                </script>
+            """
+        return """
+            <tr>
+              <td><time datetime="2026-05-15T05:14:25.919Z">2026-05-15</time><button>보도자료</button></td>
+              <td><span>에이아이오</span><span>낸드컨트롤러</span><div>낸드플래시 시스템 반도체</div></td>
+              <td><div>투자대상분야</div><div>반도체/디스플레이</div></td>
+              <td><div>투자단계</div><div>Pre-IPO</div></td>
+              <td><div>투자금액</div><button>로그인 필요</button></td>
+              <td><div>투자자</div><span>비엔더블유인베스트먼트</span></td>
+              <td><a href="/aio">프로필 확인</a></td>
+            </tr>
+        """
+
+    for run_id in ("run_first", "run_second"):
+        crawl_sources(
+            targets=[{"url": "https://thevc.kr/", "source_kind": "thevc_investment_ma"}],
+            object_store=object_store,
+            structured_store=structured_store,
+            review_queue=review_queue,
+            fetch_url=fetch_url,
+            run_id=run_id,
+        )
+
+    assert len(review_queue.published["Evidence"]) == 1
+    assert len(review_queue.published["Candidate Detail"]) == 1

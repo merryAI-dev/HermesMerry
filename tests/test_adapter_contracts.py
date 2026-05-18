@@ -6,7 +6,7 @@ from google.api_core.exceptions import PreconditionFailed
 from merry_runtime.adapters.bigquery import BigQueryStructuredStore, build_query_job_config
 from merry_runtime.adapters.gcs import GCSObjectStore
 from merry_runtime.adapters.gmail import GmailLabelSource
-from merry_runtime.adapters.google_sheets import GoogleSheetReviewQueue
+from merry_runtime.adapters.google_sheets import GoogleSheetReviewQueue, OPERATOR_CONSOLE_HEADERS
 from merry_runtime.adapters.slack import SlackNotifier
 
 
@@ -634,6 +634,63 @@ def test_google_sheet_review_queue_publishes_entity_resolution_schema() -> None:
             ]
         ]
     }
+
+
+def test_google_sheet_review_queue_upserts_existing_row_by_key() -> None:
+    service = FakeSheetsService()
+    service.sheet_titles.add("Candidate Detail")
+    headers = list(OPERATOR_CONSOLE_HEADERS["Candidate Detail"])
+    existing_row = [
+        "ent_1",
+        "Merry AI",
+        "merryai",
+        "Old Founder",
+        "",
+        "Seoul",
+        "AI",
+        "old summary",
+        "",
+        "",
+        "new_source",
+        "score_candidates",
+        "crawled",
+        "wiki/entities/Merry AI.md",
+        "master@thevc.kr",
+    ]
+    service.values_obj.get_responses.extend(
+        [
+            {"values": [headers]},
+            {"values": [headers, existing_row]},
+        ]
+    )
+    queue = GoogleSheetReviewQueue(service=service, spreadsheet_id="sheet_1")
+
+    count = queue.upsert_cards(
+        sheet_tab="Candidate Detail",
+        rows=[
+            {
+                "entity_id": "ent_1",
+                "company": "Merry AI",
+                "normalized_name": "merryai",
+                "representative": "New Founder",
+                "region": "Seoul",
+                "industry": "AI",
+                "summary": "new summary",
+                "queue_type": "new_source",
+                "recommended_action": "score_candidates",
+                "status": "crawled",
+                "wiki_path": "wiki/entities/Merry AI.md",
+                "contact_email": "",
+            }
+        ],
+        key_fields=("entity_id",),
+    )
+
+    assert count == 1
+    assert service.values_obj.append_body is None
+    assert service.values_obj.update_kwargs["range"] == "Candidate Detail!A2:O2"
+    assert service.values_obj.update_body["values"][0][3] == "New Founder"  # type: ignore[index]
+    assert service.values_obj.update_body["values"][0][-1] == ""  # type: ignore[index]
 
 
 def test_google_sheet_review_queue_supports_operator_console_tabs() -> None:

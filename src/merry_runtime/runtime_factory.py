@@ -60,6 +60,9 @@ class UnavailableReviewQueue:
     def publish_cards(self, *, sheet_tab: str, rows: list[dict[str, object]]) -> int:
         raise RuntimeConfigError("REVIEW_SHEET_ID is required for Sheet review queue writes")
 
+    def upsert_cards(self, *, sheet_tab: str, rows: list[dict[str, object]], key_fields: tuple[str, ...]) -> int:
+        raise RuntimeConfigError("REVIEW_SHEET_ID is required for Sheet review queue writes")
+
     def read_pending_reviews(self, *, sheet_tab: str) -> list[dict[str, str]]:
         raise RuntimeConfigError("REVIEW_SHEET_ID is required for Sheet review queue reads")
 

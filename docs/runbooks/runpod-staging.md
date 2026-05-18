@@ -1,10 +1,11 @@
 # Hermes Runpod Staging Runbook
 
 Use this runbook for the primary staging path. Runpod is the execution backend.
-SQLite on the Runpod persistent volume is the primary Mother DB. Google Sheets
-is the human operating console, the Obsidian wiki is the readable projection,
-and GCP is limited to Google Workspace API access for Gmail and Sheets.
-BigQuery is optional warehouse/export infrastructure.
+SQLite on the Runpod container disk is the primary Mother DB until a persistent
+volume is explicitly attached. Google Sheets is the human operating console, the
+Obsidian wiki is the readable projection, and GCP is limited to Google Workspace
+API access for Gmail and Sheets. BigQuery is optional warehouse/export
+infrastructure.
 
 ## Backend
 
@@ -27,17 +28,17 @@ Cloud Run is optional and belongs to `docs/runbooks/staging-canary.md`.
 - `DOCKERHUB_USERNAME=boram1220`
 - `GCP_PROJECT_ID`
 - `STRUCTURED_STORE_BACKEND=sqlite`
-- `MOTHER_DB_PATH=/workspace/hermes/mother.db`
+- `MOTHER_DB_PATH=/home/hermes/hermes/mother.db`
 - `OBJECT_STORE_BACKEND=local`
-- `RAW_ROOT=/workspace/hermes/raw`
-- `BACKUP_ROOT=/workspace/hermes/backups`
+- `RAW_ROOT=/home/hermes/hermes/raw`
+- `BACKUP_ROOT=/home/hermes/hermes/backups`
 - `REVIEW_SHEET_ID`
 - `AC_ID`
 - `GMAIL_LABEL_ID`
 - `SLACK_CHANNEL`
 - `SLACK_BOT_TOKEN`
 - `GOOGLE_APPLICATION_CREDENTIALS_JSON`
-- `WIKI_ROOT=/workspace/hermes/wiki`
+- `WIKI_ROOT=/home/hermes/hermes/wiki`
 - `CRAWL_SHEET_TAB=Crawl Sources`
 - `CRAWL_TARGETS_JSON=[{"url":"https://thevc.kr/","source_kind":"thevc_investment_ma","max_cards":20}]`
 - `AGENT_LOOP_JOBS=crawl-sources,resolve-entities,backup-export`
@@ -57,8 +58,8 @@ Stop before push, apply, or canary if any condition is true:
 - `GOOGLE_APPLICATION_CREDENTIALS_JSON` is written to git, Terraform state, or
   a persistent repo file.
 - `MOTHER_DB_PATH`, `RAW_ROOT`, `BACKUP_ROOT`, or `WIKI_ROOT` is outside
-  `/workspace/hermes`.
-- `WIKI_ROOT` is not under `/workspace/hermes`.
+  `/home/hermes/hermes` for CPU Pods without an attached persistent volume.
+- `WIKI_ROOT` is not under `/home/hermes/hermes`.
 - `REVIEW_SHEET_ID`, `GMAIL_LABEL_ID`, or `SLACK_CHANNEL` points to a
   production resource.
 
@@ -104,7 +105,7 @@ tofu -chdir=infra/terraform plan -var-file=runpod-staging.tfvars
 
 Expected plan scope:
 
-- Runpod local raw storage under `/workspace/hermes/raw` when
+- Runpod local raw storage under `/home/hermes/hermes/raw` when
   `OBJECT_STORE_BACKEND=local`.
 - Hermes runtime service account with Gmail and Sheets API access.
 - No required BigQuery dataset.
@@ -122,13 +123,13 @@ Configure the Pod with:
 ```text
 Image: docker.io/boram1220/hermes-merry:staging
 Command: python3 -m merry_runtime.jobs loop
-Volume path: /workspace
-WIKI_ROOT: /workspace/hermes/wiki
+Volume path: /workspace when a persistent volume is attached; otherwise use /home/hermes/hermes
+WIKI_ROOT: /home/hermes/hermes/wiki
 STRUCTURED_STORE_BACKEND: sqlite
-MOTHER_DB_PATH: /workspace/hermes/mother.db
+MOTHER_DB_PATH: /home/hermes/hermes/mother.db
 OBJECT_STORE_BACKEND: local
-RAW_ROOT: /workspace/hermes/raw
-BACKUP_ROOT: /workspace/hermes/backups
+RAW_ROOT: /home/hermes/hermes/raw
+BACKUP_ROOT: /home/hermes/hermes/backups
 CRAWL_SHEET_TAB: Crawl Sources
 CRAWL_TARGETS_JSON: [{"url":"https://thevc.kr/","source_kind":"thevc_investment_ma","max_cards":20}]
 AGENT_LOOP_JOBS: crawl-sources,resolve-entities,backup-export
@@ -179,15 +180,15 @@ python3 -m merry_runtime.jobs loop
 Verify the SQLite Mother DB and backup artifacts inside the Runpod shell:
 
 ```bash
-test -f /workspace/hermes/mother.db
-find /workspace/hermes/backups -maxdepth 3 -type f | sort | tail
+test -f /home/hermes/hermes/mother.db
+find /home/hermes/hermes/backups -maxdepth 3 -type f | sort | tail
 ```
 
 Verify the persistent wiki path inside the Runpod shell:
 
 ```bash
-test -d /workspace/hermes/wiki
-find /workspace/hermes/wiki -maxdepth 2 -type f | sort | head
+test -d /home/hermes/hermes/wiki
+find /home/hermes/hermes/wiki -maxdepth 2 -type f | sort | head
 ```
 
 Verify Sheet console tabs:

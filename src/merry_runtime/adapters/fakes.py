@@ -136,8 +136,21 @@ class FakeReviewQueue:
         self.published[sheet_tab].extend(dict(row) for row in rows)
         return len(rows)
 
+    def upsert_cards(self, *, sheet_tab: str, rows: list[dict[str, object]], key_fields: tuple[str, ...]) -> int:
+        existing_rows = self.published[sheet_tab]
+        for row in rows:
+            row_copy = dict(row)
+            match_index = FakeStructuredStore._find_index(existing_rows, row_copy, key_fields)
+            if match_index is None:
+                existing_rows.append(row_copy)
+            else:
+                existing_rows[match_index] = row_copy
+        return len(rows)
+
     def read_pending_reviews(self, *, sheet_tab: str) -> list[dict[str, str]]:
-        return [dict(row) for row in self.reviews.get(sheet_tab, [])]
+        rows = [dict(row) for row in self.reviews.get(sheet_tab, [])]
+        rows.extend({key: str(value) for key, value in row.items()} for row in self.published.get(sheet_tab, []))
+        return rows
 
     def seed_reviews(self, sheet_tab: str, rows: list[dict[str, str]]) -> None:
         self.reviews[sheet_tab].extend(dict(row) for row in rows)

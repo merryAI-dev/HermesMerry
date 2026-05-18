@@ -113,8 +113,16 @@ def _truthy(value: Any, *, default: bool) -> bool:
 
 def _publish_sheet_projection(*, review_queue: ReviewQueue, sources: list[dict[str, str]]) -> None:
     parsed_sources = [_parse_projection_source(source) for source in sources]
-    review_queue.publish_cards(sheet_tab="Evidence", rows=[_evidence_row(parsed) for parsed in parsed_sources])
-    review_queue.publish_cards(sheet_tab="Candidate Detail", rows=[_candidate_detail_row(parsed) for parsed in parsed_sources])
+    review_queue.upsert_cards(
+        sheet_tab="Evidence",
+        rows=[_evidence_row(parsed) for parsed in parsed_sources],
+        key_fields=("source_id",),
+    )
+    review_queue.upsert_cards(
+        sheet_tab="Candidate Detail",
+        rows=[_candidate_detail_row(parsed) for parsed in parsed_sources],
+        key_fields=("entity_id",),
+    )
 
 
 def _parse_projection_source(source: dict[str, str]) -> ParsedSource:

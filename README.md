@@ -57,18 +57,18 @@ The container entrypoint is `python3 -m merry_runtime.jobs`. Runtime adapters ar
 ```bash
 GCP_PROJECT_ID=my-project
 STRUCTURED_STORE_BACKEND=sqlite
-MOTHER_DB_PATH=/workspace/hermes/mother.db
+MOTHER_DB_PATH=/home/hermes/hermes/mother.db
 BIGQUERY_DATASET=merry_ac_discovery
 RAW_BUCKET=my-raw-bucket
 OBJECT_STORE_BACKEND=local
-RAW_ROOT=/workspace/hermes/raw
-BACKUP_ROOT=/workspace/hermes/backups
+RAW_ROOT=/home/hermes/hermes/raw
+BACKUP_ROOT=/home/hermes/hermes/backups
 REVIEW_SHEET_ID=google-sheet-id
 AC_ID=ac_climate
 GMAIL_LABEL_ID=Label_123
 SLACK_CHANNEL=C123
 SLACK_BOT_TOKEN=xoxb-...
-WIKI_ROOT=/workspace/hermes/wiki
+WIKI_ROOT=/home/hermes/hermes/wiki
 CRAWL_SHEET_TAB=Crawl Sources
 CRAWL_TARGETS_JSON=[{"url":"https://thevc.kr/","source_kind":"thevc_investment_ma","max_cards":20}]
 AGENT_LOOP_JOBS=crawl-sources,resolve-entities,backup-export

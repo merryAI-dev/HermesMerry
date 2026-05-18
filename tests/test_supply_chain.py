@@ -113,8 +113,8 @@ def test_runpod_env_defaults_to_sqlite_sheet_runtime() -> None:
     env_example = (REPO_ROOT / "configs" / "runpod.env.example").read_text()
 
     assert "STRUCTURED_STORE_BACKEND=sqlite" in env_example
-    assert "MOTHER_DB_PATH=/workspace/hermes/mother.db" in env_example
-    assert "BACKUP_ROOT=/workspace/hermes/backups" in env_example
+    assert "MOTHER_DB_PATH=/home/hermes/hermes/mother.db" in env_example
+    assert "BACKUP_ROOT=/home/hermes/hermes/backups" in env_example
     assert "OBJECT_STORE_BACKEND=local" in env_example
 
 

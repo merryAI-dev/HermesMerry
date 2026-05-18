@@ -153,3 +153,22 @@ def test_extract_thevc_company_detail_ignores_thevc_platform_email() -> None:
     detail = extract_thevc_company_detail('<a href="mailto:master@thevc.kr">THE VC</a>')
 
     assert detail.contact_email == ""
+
+
+def test_extract_thevc_company_detail_ignores_social_links_before_homepage() -> None:
+    detail = extract_thevc_company_detail(
+        """
+        <script type="application/ld+json">
+        {
+          "@type": "Organization",
+          "sameAs": [
+            "https://www.linkedin.com/company/the-aio",
+            "https://facebook.com/theaio",
+            "https://the-aio.com/"
+          ]
+        }
+        </script>
+        """
+    )
+
+    assert detail.homepage == "https://the-aio.com/"

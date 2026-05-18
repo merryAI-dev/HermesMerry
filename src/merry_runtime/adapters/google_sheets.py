@@ -180,6 +180,35 @@ class GoogleSheetReviewQueue:
         ).execute()
         return len(values)
 
+    def upsert_cards(self, *, sheet_tab: str, rows: list[dict[str, object]], key_fields: tuple[str, ...]) -> int:
+        if not rows:
+            return 0
+        headers = self._ensure_headers(sheet_tab=sheet_tab)
+        existing_response = self.service.spreadsheets().values().get(
+            spreadsheetId=self.spreadsheet_id,
+            range=_sheet_range(sheet_tab, headers),
+        ).execute()
+        existing_values = existing_response.get("values", [])
+        existing_index = _existing_row_index(existing_values=existing_values, headers=headers, key_fields=key_fields)
+
+        append_rows: list[dict[str, object]] = []
+        for row in rows:
+            key = _row_key(row, key_fields=key_fields)
+            row_number = existing_index.get(key) if key else None
+            if row_number is None:
+                append_rows.append(row)
+                continue
+            self.service.spreadsheets().values().update(
+                spreadsheetId=self.spreadsheet_id,
+                range=_sheet_range(sheet_tab, headers, row=str(row_number)),
+                valueInputOption="RAW",
+                body={"values": [_row_values(row, headers)]},
+            ).execute()
+
+        if append_rows:
+            self.publish_cards(sheet_tab=sheet_tab, rows=append_rows)
+        return len(rows)
+
     def read_pending_reviews(self, *, sheet_tab: str) -> list[dict[str, str]]:
         self._ensure_sheet_tab(sheet_tab=sheet_tab)
         headers = _headers_for_tab(sheet_tab)
@@ -262,6 +291,31 @@ def _column_name(index: int) -> str:
 
 def _row_values(row: dict[str, object], headers: tuple[str, ...]) -> list[object]:
     return [_safe_cell_value(row.get(key, "")) for key in headers]
+
+
+def _existing_row_index(
+    *,
+    existing_values: list[list[object]],
+    headers: tuple[str, ...],
+    key_fields: tuple[str, ...],
+) -> dict[tuple[str, str], int]:
+    if not existing_values:
+        return {}
+    row_index: dict[tuple[str, str], int] = {}
+    for sheet_row_number, values in enumerate(existing_values[1:], start=2):
+        row = dict(zip(headers, values, strict=False))
+        key = _row_key(row, key_fields=key_fields)
+        if key and key not in row_index:
+            row_index[key] = sheet_row_number
+    return row_index
+
+
+def _row_key(row: dict[str, object], *, key_fields: tuple[str, ...]) -> tuple[str, str] | None:
+    for field in key_fields:
+        value = str(row.get(field) or "").strip()
+        if value:
+            return (field, value.casefold())
+    return None
 
 
 def _safe_cell_value(value: object) -> object:

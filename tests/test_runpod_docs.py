@@ -18,8 +18,8 @@ def test_runpod_runbook_contains_required_stop_conditions() -> None:
 
     for required in (
         "GOOGLE_APPLICATION_CREDENTIALS_JSON",
-        "/workspace/hermes/wiki",
-        "/workspace/hermes/mother.db",
+        "/home/hermes/hermes/wiki",
+        "/home/hermes/hermes/mother.db",
         "backup-export",
         "infra/terraform/runpod-staging.tfvars",
         "docker buildx build --platform linux/amd64",
@@ -57,8 +57,8 @@ def test_runpod_sqlite_mode_is_documented_as_primary_runtime() -> None:
     runbook = (REPO_ROOT / "docs" / "runbooks" / "runpod-staging.md").read_text()
 
     assert "STRUCTURED_STORE_BACKEND=sqlite" in env_example
-    assert "MOTHER_DB_PATH=/workspace/hermes/mother.db" in env_example
-    assert "BACKUP_ROOT=/workspace/hermes/backups" in env_example
+    assert "MOTHER_DB_PATH=/home/hermes/hermes/mother.db" in env_example
+    assert "BACKUP_ROOT=/home/hermes/hermes/backups" in env_example
     assert "AGENT_LOOP_MAX_CYCLES=0" in env_example
     assert "BigQuery is optional" in runbook
     assert "STRUCTURED_STORE_BACKEND=bigquery" in runbook

@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from html.parser import HTMLParser
 import re
 from typing import Any, Callable
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 
 THEVC_INVESTMENT_CHANNEL = "thevc_investment_ma"
@@ -18,6 +18,16 @@ _EMAIL_RE = re.compile(
     r"(?![A-Za-z0-9._%+-])"
 )
 _SOURCE_LABELS = {"보도자료", "기타"}
+_IGNORED_HOMEPAGE_DOMAINS = {
+    "thevc.kr",
+    "linkedin.com",
+    "facebook.com",
+    "instagram.com",
+    "twitter.com",
+    "x.com",
+    "youtube.com",
+    "youtu.be",
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -307,9 +317,9 @@ def _json_homepage(node: dict[str, Any]) -> str:
     same_as = node.get("sameAs")
     candidates = same_as if isinstance(same_as, list) else [same_as]
     for candidate in candidates:
-        value = str(candidate or "").strip()
-        if value and "thevc.kr" not in value:
-            return _normalize_url(value)
+        homepage = _normalize_url(str(candidate or "").strip())
+        if homepage:
+            return homepage
     return ""
 
 
@@ -413,16 +423,27 @@ def _normalize_url(value: str) -> str:
     if not cleaned or not _looks_like_homepage(cleaned):
         return ""
     if cleaned.startswith("//"):
-        return f"https:{cleaned}"
-    if not cleaned.startswith(("http://", "https://")):
-        return f"https://{cleaned}"
-    return cleaned
+        normalized = f"https:{cleaned}"
+    elif not cleaned.startswith(("http://", "https://")):
+        normalized = f"https://{cleaned}"
+    else:
+        normalized = cleaned
+    if _is_ignored_homepage_url(normalized):
+        return ""
+    return normalized
 
 
 def _looks_like_homepage(value: str) -> bool:
     if value.startswith(("http://", "https://", "//")):
         return "." in value
     return bool(re.fullmatch(r"[0-9A-Za-z][0-9A-Za-z.-]*\.[A-Za-z]{2,}(/[^\s]*)?", value))
+
+
+def _is_ignored_homepage_url(value: str) -> bool:
+    hostname = urlparse(value).netloc.casefold()
+    if hostname.startswith("www."):
+        hostname = hostname[4:]
+    return any(hostname == domain or hostname.endswith(f".{domain}") for domain in _IGNORED_HOMEPAGE_DOMAINS)
 
 
 def _normalize_region(value: str) -> str:
