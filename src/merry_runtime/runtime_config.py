@@ -39,6 +39,8 @@ class RuntimeConfig:
             required.append("RAW_BUCKET")
             if not has_inline_sources:
                 required.append("GMAIL_LABEL_ID")
+        elif job_name == "ingest-ac-profiles":
+            pass
         elif job_name in {"score-candidates", "sync-review-sheet"}:
             required.extend(["REVIEW_SHEET_ID", "AC_ID"])
         elif job_name == "weekly-summary":

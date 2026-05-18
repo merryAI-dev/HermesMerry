@@ -37,3 +37,12 @@ def test_runtime_config_requires_job_specific_fields(monkeypatch) -> None:
 
     assert "REVIEW_SHEET_ID" in str(error.value)
     assert "AC_ID" in str(error.value)
+
+
+def test_runtime_config_accepts_ingest_ac_profiles_without_raw_bucket_or_scheduler_inputs(monkeypatch) -> None:
+    monkeypatch.setenv("GCP_PROJECT_ID", "project-1")
+    monkeypatch.setenv("BIGQUERY_DATASET", "merry")
+
+    config = RuntimeConfig.from_env()
+
+    config.validate_for_job("ingest-ac-profiles", has_inline_sources=True)

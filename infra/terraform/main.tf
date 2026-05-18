@@ -129,7 +129,7 @@ locals {
     ]
   }
 
-  jobs = {
+  scheduled_jobs = {
     ingest-sources = {
       args     = ["-m", "merry_runtime.jobs", "run", "ingest-sources"]
       schedule = "0 * * * *"
@@ -151,6 +151,14 @@ locals {
       schedule = "0 9 * * MON"
     }
   }
+
+  manual_jobs = {
+    ingest-ac-profiles = {
+      args = ["-m", "merry_runtime.jobs", "run", "ingest-ac-profiles"]
+    }
+  }
+
+  jobs = merge(local.scheduled_jobs, local.manual_jobs)
 }
 
 resource "google_bigquery_dataset" "merry" {
@@ -348,7 +356,7 @@ resource "google_cloud_run_v2_job_iam_member" "scheduler_invoker" {
 }
 
 resource "google_cloud_scheduler_job" "agent_schedules" {
-  for_each = local.jobs
+  for_each = local.scheduled_jobs
 
   name      = "${each.key}-schedule"
   region    = var.region
@@ -384,7 +392,7 @@ resource "google_logging_metric" "cloud_run_job_errors" {
   description = "Cloud Run job error logs emitted by Hermes Merry frontless jobs."
   filter      = <<-EOT
     resource.type="cloud_run_job"
-    resource.labels.job_name=~"ingest-sources|resolve-entities|score-candidates|sync-review-sheet|weekly-summary"
+    resource.labels.job_name=~"ingest-sources|ingest-ac-profiles|resolve-entities|score-candidates|sync-review-sheet|weekly-summary"
     severity>=ERROR
   EOT
 

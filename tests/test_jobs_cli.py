@@ -70,6 +70,48 @@ def test_jobs_cli_accepts_sources_json(monkeypatch, tmp_path, capsys) -> None:
     assert output["raw_source_count"] == 1
 
 
+def test_jobs_cli_accepts_sources_file_for_ingest_ac_profiles(monkeypatch, tmp_path, capsys) -> None:
+    config = RuntimeConfig(
+        project_id="project-1",
+        dataset_id="merry",
+        raw_bucket="",
+        wiki_root=tmp_path,
+    )
+    runtime = RuntimeAdapters(
+        object_store=FakeObjectStore(bucket="raw-bucket"),
+        structured_store=FakeStructuredStore(),
+        review_queue=FakeReviewQueue(),
+        wiki_store=SQLiteWikiStore(root=tmp_path),
+    )
+    sources_file = tmp_path / "ac-reports.json"
+    sources_file.write_text(
+        json.dumps(
+            [
+                {
+                    "payload": """
+                        AC ID: ac_climate_local
+                        AC Name: Climate Local Impact AC
+                        Fund Purpose: climate adaptation fund
+                        Hypothesis Tags: climate
+                        Impact Priorities: carbon
+                    """,
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr("merry_runtime.jobs.RuntimeConfig.from_env", lambda: config)
+    monkeypatch.setattr("merry_runtime.jobs.build_runtime", lambda config: runtime)
+
+    exit_code = main(["run", "ingest-ac-profiles", "--sources-file", str(sources_file)])
+
+    output = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert output["job_name"] == "ingest-ac-profiles"
+    assert output["profile_count"] == 1
+
+
 def test_jobs_cli_persists_unexpected_job_failure_after_runtime_creation(monkeypatch, tmp_path, capsys) -> None:
     config = RuntimeConfig(
         project_id="project-1",

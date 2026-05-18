@@ -33,10 +33,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     run_parser = subparsers.add_parser("run")
     run_parser.add_argument(
         "job_name",
-        choices=["ingest-sources", "resolve-entities", "score-candidates", "sync-review-sheet", "weekly-summary"],
+        choices=[
+            "ingest-sources",
+            "ingest-ac-profiles",
+            "resolve-entities",
+            "score-candidates",
+            "sync-review-sheet",
+            "weekly-summary",
+        ],
     )
-    run_parser.add_argument("--sources-json", default="", help="Inline JSON source list for ingest-sources.")
-    run_parser.add_argument("--sources-file", default="", help="Path to JSON source list for ingest-sources.")
+    run_parser.add_argument("--sources-json", default="", help="Inline JSON source list for ingestion jobs.")
+    run_parser.add_argument("--sources-file", default="", help="Path to JSON source list for ingestion jobs.")
     run_parser.add_argument("--ac-id", default="", help="AC profile ID for score/review jobs. Defaults to AC_ID env.")
 
     args = parser.parse_args(argv)

@@ -56,6 +56,30 @@ def test_run_ingest_sources_uses_sources_json_and_updates_wiki(tmp_path) -> None
     assert (tmp_path / "wiki" / "entities" / "carefarm-carbon.md").exists()
 
 
+def test_run_ingest_ac_profiles_uses_sources_json_and_updates_wiki(tmp_path) -> None:
+    runtime = _runtime(tmp_path)
+    sources_json = json.dumps(
+        [
+            {
+                "payload": """
+                    AC ID: ac_climate_local
+                    AC Name: Climate Local Impact AC
+                    Fund Purpose: climate adaptation fund
+                    Hypothesis Tags: climate
+                    Impact Priorities: carbon
+                """,
+            }
+        ]
+    )
+
+    result = run_job("ingest-ac-profiles", runtime=runtime, config=_config(tmp_path), sources_json=sources_json)
+
+    assert result["job_name"] == "ingest-ac-profiles"
+    assert result["profile_count"] == 1
+    assert runtime.structured_store.tables["ac_profiles"][0]["ac_id"] == "ac_climate_local"
+    assert (tmp_path / "wiki" / "ac" / "climate-local-impact-ac.md").exists()
+
+
 def test_run_score_candidates_routes_to_sheet_queue(tmp_path) -> None:
     store = FakeStructuredStore.seed_climate_candidate()
     runtime = _runtime(tmp_path, store=store)
@@ -205,3 +229,8 @@ def test_run_resolve_entities_persists_resolution_events(tmp_path) -> None:
 def test_run_job_rejects_missing_ingest_sources(tmp_path) -> None:
     with pytest.raises(JobRunError):
         run_job("ingest-sources", runtime=_runtime(tmp_path), config=_config(tmp_path))
+
+
+def test_run_job_rejects_missing_ingest_ac_profile_sources(tmp_path) -> None:
+    with pytest.raises(JobRunError):
+        run_job("ingest-ac-profiles", runtime=_runtime(tmp_path), config=_config(tmp_path))

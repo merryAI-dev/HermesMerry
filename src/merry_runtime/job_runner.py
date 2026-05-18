@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from merry_runtime.adapters.interfaces import Notifier, ObjectStore, ReviewQueue, StructuredStore
+from merry_runtime.pipelines.ingest_ac_profiles import ingest_ac_profiles
 from merry_runtime.pipelines.ingest_sources import ingest_sources
 from merry_runtime.pipelines.resolve_entities import resolve_entities
 from merry_runtime.pipelines.score_candidates import score_candidates
@@ -46,6 +47,17 @@ def run_job(
         result = ingest_sources(
             sources=sources,
             object_store=runtime.object_store,
+            structured_store=runtime.structured_store,
+            wiki_store=runtime.wiki_store,
+        )
+        return {"job_name": job_name, **asdict(result)}
+
+    if job_name == "ingest-ac-profiles":
+        sources = _sources_from_json(sources_json) if sources_json else []
+        if not sources:
+            raise JobRunError("ingest-ac-profiles requires --sources-json or --sources-file")
+        result = ingest_ac_profiles(
+            sources=sources,
             structured_store=runtime.structured_store,
             wiki_store=runtime.wiki_store,
         )

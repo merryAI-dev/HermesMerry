@@ -51,6 +51,17 @@ def test_terraform_defines_frontless_job_ops_alerting_shell() -> None:
     assert 'severity>=ERROR' in main_tf
 
 
+def test_terraform_defines_manual_ingest_ac_profiles_job_without_default_schedule() -> None:
+    main_tf = (REPO_ROOT / "infra" / "terraform" / "main.tf").read_text()
+
+    assert "ingest-ac-profiles" in main_tf
+    assert '"run", "ingest-ac-profiles"' in main_tf
+    assert "manual_jobs" in main_tf
+    assert "scheduled_jobs" in main_tf
+    assert 'name      = "${each.key}-schedule"' in main_tf
+    assert 'for_each = local.scheduled_jobs' in main_tf
+
+
 def test_dockerfile_runs_runtime_as_non_root_user() -> None:
     dockerfile = (REPO_ROOT / "Dockerfile").read_text()
 

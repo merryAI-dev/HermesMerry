@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 import re
 
+from merry_runtime.models import ACProfile
 from merry_runtime.ontology import EdgeKind, NodeKind, StartupKnowledgeGraph, project_startup_wiki
 
 
@@ -35,10 +36,12 @@ class SQLiteWikiStore:
     def initialize(self) -> None:
         self.raw_dir.mkdir(parents=True, exist_ok=True)
         self.wiki_dir.mkdir(parents=True, exist_ok=True)
+        (self.wiki_dir / "ac").mkdir(parents=True, exist_ok=True)
         (self.wiki_dir / "entities").mkdir(parents=True, exist_ok=True)
         (self.wiki_dir / "channels").mkdir(parents=True, exist_ok=True)
         (self.wiki_dir / "concepts" / "social_problem").mkdir(parents=True, exist_ok=True)
         (self.wiki_dir / "concepts" / "beneficiary").mkdir(parents=True, exist_ok=True)
+        (self.wiki_dir / "concepts" / "impact_thesis").mkdir(parents=True, exist_ok=True)
         self._write_if_missing(self.wiki_dir / "index.md", "# Index\n\n")
         self._write_if_missing(self.wiki_dir / "log.md", "# Log\n\n")
         self._write_if_missing(self.root / "AGENTS.md", _schema_doc())
@@ -144,6 +147,64 @@ class SQLiteWikiStore:
         self._append_log(operation=operation, title=source_title, page_path=page_path, timestamp=now)
         return WikiWriteResult(page_path=page_path, link_count=len(links), source_count=len(sources))
 
+    def upsert_ac_profile(
+        self,
+        profile: ACProfile,
+        *,
+        operation: str,
+        source_title: str,
+    ) -> WikiWriteResult:
+        self.initialize()
+        page_path = f"ac/{_slugify(profile.ac_name)}.md"
+        thesis_values = _dedupe([*profile.impact_priority, *profile.hypothesis_tags])
+        thesis_pages = [(value, f"concepts/impact_thesis/{_slugify(value)}.md") for value in thesis_values]
+
+        page_file = self.wiki_dir / page_path
+        page_file.parent.mkdir(parents=True, exist_ok=True)
+        page_file.write_text(_frontmatter(title=profile.ac_name, kind=NodeKind.AC.value) + _obsidian_ac_page(profile, thesis_pages), encoding="utf-8")
+
+        for thesis, thesis_path in thesis_pages:
+            thesis_file = self.wiki_dir / thesis_path
+            thesis_file.parent.mkdir(parents=True, exist_ok=True)
+            thesis_file.write_text(
+                _frontmatter(title=thesis, kind=NodeKind.IMPACT_THESIS.value)
+                + _obsidian_impact_thesis_page(thesis=thesis, ac_page_path=page_path, ac_name=profile.ac_name),
+                encoding="utf-8",
+            )
+
+        now = _now()
+        links = [(page_path, thesis_path, EdgeKind.MATCHES_THESIS.value, None, 1.0) for _thesis, thesis_path in thesis_pages]
+        pages = [(page_path, profile.ac_name, NodeKind.AC.value, profile.fund_purpose)]
+        pages.extend((thesis_path, thesis, NodeKind.IMPACT_THESIS.value, "Impact thesis") for thesis, thesis_path in thesis_pages)
+
+        with sqlite3.connect(self.db_path) as connection:
+            connection.executemany(
+                """
+                insert into pages(path, title, kind, summary, updated_at)
+                values(?, ?, ?, ?, ?)
+                on conflict(path) do update set
+                    title=excluded.title,
+                    kind=excluded.kind,
+                    summary=excluded.summary,
+                    updated_at=excluded.updated_at
+                """,
+                [(path, title, kind, summary, now) for path, title, kind, summary in pages],
+            )
+            connection.executemany(
+                """
+                insert into links(from_path, to_path, relation, source_id, confidence)
+                values(?, ?, ?, ?, ?)
+                on conflict(from_path, to_path, relation) do update set
+                    source_id=excluded.source_id,
+                    confidence=excluded.confidence
+                """,
+                links,
+            )
+
+        self._rewrite_index()
+        self._append_log(operation=operation, title=source_title, page_path=page_path, timestamp=now)
+        return WikiWriteResult(page_path=page_path, link_count=len(links), source_count=0)
+
     def _rewrite_index(self) -> None:
         with sqlite3.connect(self.db_path) as connection:
             rows = connection.execute("select path, title, kind, summary from pages order by kind, title").fetchall()
@@ -183,6 +244,30 @@ def _obsidian_startup_page(graph: StartupKnowledgeGraph, startup_id: str) -> str
     base = project_startup_wiki(graph, startup_id=startup_id)
     links = _page_link_lines(graph, startup_id)
     return base + "\n\n## Obsidian Links\n" + "\n".join(links) + "\n"
+
+
+def _obsidian_ac_page(profile: ACProfile, thesis_pages: list[tuple[str, str]]) -> str:
+    lines = [
+        f"# {profile.ac_name}",
+        "",
+        f"- AC ID: {profile.ac_id}",
+        f"- Fund Purpose: {profile.fund_purpose}",
+        f"- Recruiting Area: {profile.recruiting_area}",
+        "",
+        "## Preferences",
+        f"- Regions: {_join(profile.region_preferences)}",
+        f"- Industries: {_join(profile.industry_preferences)}",
+        f"- Technologies: {_join(profile.tech_preferences)}",
+        "",
+        "## Impact Thesis",
+    ]
+    for thesis, thesis_path in thesis_pages:
+        lines.append(f"- [[{thesis_path.removesuffix('.md')}]]")
+    return "\n".join(lines) + "\n"
+
+
+def _obsidian_impact_thesis_page(*, thesis: str, ac_page_path: str, ac_name: str) -> str:
+    return f"# {thesis}\n\n## AC Profiles\n- [[{ac_page_path.removesuffix('.md')}|{ac_name}]]\n"
 
 
 def _page_link_lines(graph: StartupKnowledgeGraph, startup_id: str) -> list[str]:
@@ -263,6 +348,23 @@ def _slugify(label: str) -> str:
     slug = re.sub(r"[^0-9A-Za-z가-힣._ -]+", " ", label).strip().casefold()
     slug = re.sub(r"[./\\\s_-]+", "-", slug).strip("-")
     return slug or "untitled"
+
+
+def _dedupe(values: list[str]) -> tuple[str, ...]:
+    seen: set[str] = set()
+    unique: list[str] = []
+    for value in values:
+        cleaned = value.strip()
+        key = cleaned.casefold()
+        if not cleaned or key in seen:
+            continue
+        seen.add(key)
+        unique.append(cleaned)
+    return tuple(unique)
+
+
+def _join(values: tuple[str, ...]) -> str:
+    return ", ".join(values)
 
 
 def _frontmatter(*, title: str, kind: str) -> str:
