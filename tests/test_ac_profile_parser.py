@@ -63,7 +63,8 @@ def test_parse_ac_hypothesis_report_normalizes_tags_for_scoring_without_losing_r
     assert profile.impact_priority == ("Patient Access", "health equity")
 
 
-def test_parse_ac_hypothesis_report_does_not_leak_unknown_section_bullets_into_previous_field() -> None:
+@pytest.mark.parametrize("notes_heading", ["Notes:", "## Notes"])
+def test_parse_ac_hypothesis_report_does_not_leak_unknown_section_bullets_into_previous_field(notes_heading: str) -> None:
     report = """
     AC ID: ac_notes
     AC Name: Notes Leakage AC
@@ -71,12 +72,12 @@ def test_parse_ac_hypothesis_report_does_not_leak_unknown_section_bullets_into_p
     Hypothesis Tags: climate
     Impact Priorities:
     - carbon
-    Notes:
+    {notes_heading}
     - private partner concern should stay out of scoring fields
     - another note
     Region Preferences:
     - Jeonbuk
-    """
+    """.format(notes_heading=notes_heading)
 
     profile = parse_ac_hypothesis_report(report)
 

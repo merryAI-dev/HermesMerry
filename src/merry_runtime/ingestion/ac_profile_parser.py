@@ -89,6 +89,9 @@ def _extract_fields(text: str) -> dict[str, list[str]]:
             value = _clean_value(bullet_match.group(1))
             if value:
                 fields.setdefault(current_key, []).append(value)
+            continue
+
+        current_key = ""
 
     return fields
 
