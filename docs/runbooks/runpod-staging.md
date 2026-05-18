@@ -122,6 +122,12 @@ must be a Runpod secret, not a committed file.
 Set `AGENT_LOOP_MAX_CYCLES=1` for the first Runpod run. Start the Pod and wait
 for one loop result.
 
+The Pod command remains:
+
+```bash
+python3 -m merry_runtime.jobs loop
+```
+
 Verify BigQuery from the operator machine:
 
 ```bash

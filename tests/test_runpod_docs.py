@@ -30,3 +30,19 @@ def test_cloud_run_canary_is_marked_optional_backend() -> None:
     runbook = (REPO_ROOT / "docs" / "runbooks" / "staging-canary.md").read_text()
 
     assert "Optional Cloud Run backend" in runbook
+
+
+def test_runpod_canary_results_template_captures_required_evidence() -> None:
+    template = (REPO_ROOT / "docs" / "runbooks" / "runpod-canary-results.md").read_text()
+
+    for required in (
+        "GHCR image digest",
+        "Runpod Pod ID",
+        "BigQuery agent_runs row",
+        "GCS raw object",
+        "Sheet tab",
+        "Slack message timestamp",
+        "Wiki path",
+        "Rollback command",
+    ):
+        assert required in template
