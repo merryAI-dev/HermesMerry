@@ -27,6 +27,8 @@ make verify
 
 OpenTofu is the primary IaC runner for this repo. Terraform is installed for compatibility checks, but do not alternate Terraform and OpenTofu against the same `.terraform.lock.hcl` in one working tree; each tool records provider sources differently.
 
+Use `infra/terraform/staging.tfvars.example` as the staging variable template. Slack and LLM tokens are referenced through Secret Manager; create secret versions before running the scheduled jobs.
+
 ## Cloud Run Jobs
 
 The container entrypoint is `python3 -m merry_runtime.jobs`. Runtime adapters are built from env/ADC:

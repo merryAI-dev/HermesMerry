@@ -24,6 +24,7 @@ ToolHandler = Callable[[dict[str, Any]], dict[str, Any]]
 class MerryMCPServer:
     handlers: dict[str, ToolHandler]
     max_payload_bytes: int = 32_768
+    slack_channel: str = ""
 
     def list_tools(self) -> tuple[str, ...]:
         return allowed_tool_names()
@@ -32,7 +33,7 @@ class MerryMCPServer:
         if name not in TOOL_REGISTRY:
             raise UnknownMCPToolError(f"Tool is not allowed: {name}")
         self._validate_payload_size(payload)
-        self._validate_required_fields(name, payload)
+        self._validate_payload_schema(name, payload)
 
         sanitized_payload = self._sanitize_payload(name, payload)
         if name not in self.handlers:
@@ -44,16 +45,41 @@ class MerryMCPServer:
         if payload_size > self.max_payload_bytes:
             raise MCPPayloadError(f"Payload exceeds max size: {payload_size} > {self.max_payload_bytes}")
 
-    @staticmethod
-    def _validate_required_fields(name: str, payload: dict[str, Any]) -> None:
+    @classmethod
+    def _validate_payload_schema(cls, name: str, payload: dict[str, Any]) -> None:
         schema = TOOL_REGISTRY[name].input_schema
         missing = [field for field in schema.get("required", []) if field not in payload]
         if missing:
             raise MCPPayloadError(f"Missing required fields for {name}: {missing}")
+        properties = schema.get("properties", {})
+        if schema.get("additionalProperties") is False:
+            extra_fields = sorted(set(payload) - set(properties))
+            if extra_fields:
+                raise MCPPayloadError(f"Payload contains additional fields for {name}: {extra_fields}")
+        for field, value in payload.items():
+            cls._validate_field(name, field, value, properties[field])
 
     @staticmethod
-    def _sanitize_payload(name: str, payload: dict[str, Any]) -> dict[str, Any]:
+    def _validate_field(name: str, field: str, value: Any, field_schema: dict[str, Any]) -> None:
+        field_type = field_schema.get("type")
+        if field_type == "string" and not isinstance(value, str):
+            raise MCPPayloadError(f"{name}.{field} must be string")
+        if field_type == "object" and not isinstance(value, dict):
+            raise MCPPayloadError(f"{name}.{field} must be object")
+        if field_type == "array" and not isinstance(value, list):
+            raise MCPPayloadError(f"{name}.{field} must be array")
+        allowed_values = field_schema.get("enum")
+        if allowed_values and value not in allowed_values:
+            raise MCPPayloadError(f"{name}.{field} value is not allowed: {value}")
+        max_length = field_schema.get("maxLength")
+        if max_length is not None and isinstance(value, str) and len(value) > int(max_length):
+            raise MCPPayloadError(f"{name}.{field} is too long: {len(value)} > {max_length}")
+
+    def _sanitize_payload(self, name: str, payload: dict[str, Any]) -> dict[str, Any]:
         sanitized = dict(payload)
-        if name == "send_slack_summary" and "summary" in sanitized:
+        if name == "send_slack_summary":
+            if not self.slack_channel:
+                raise MCPPayloadError("send_slack_summary requires a configured Slack channel")
+            sanitized["channel"] = self.slack_channel
             sanitized["summary"] = redact_pii(str(sanitized["summary"]))
         return sanitized

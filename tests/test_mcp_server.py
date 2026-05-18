@@ -24,6 +24,24 @@ def test_mcp_server_validates_required_payload_fields() -> None:
         server.call_tool("enqueue_candidate_card", {"ac_id": "ac_1"})
 
 
+def test_mcp_server_enforces_schema_types_enums_lengths_and_extra_fields() -> None:
+    server = MerryMCPServer(handlers={"record_review_feedback": lambda payload: {"ok": True}})
+
+    with pytest.raises(MCPPayloadError, match="additional"):
+        server.call_tool(
+            "record_review_feedback",
+            {"card_id": "card_1", "reviewer": "boram", "decision": "advance", "shell": "rm -rf /"},
+        )
+    with pytest.raises(MCPPayloadError, match="must be string"):
+        server.call_tool("record_review_feedback", {"card_id": "card_1", "reviewer": ["boram"], "decision": "advance"})
+    with pytest.raises(MCPPayloadError, match="not allowed"):
+        server.call_tool("record_review_feedback", {"card_id": "card_1", "reviewer": "boram", "decision": "maybe"})
+
+    slack_server = MerryMCPServer(handlers={"send_slack_summary": lambda payload: {"ok": True}}, slack_channel="C123")
+    with pytest.raises(MCPPayloadError, match="too long"):
+        slack_server.call_tool("send_slack_summary", {"summary": "x" * 3001})
+
+
 def test_mcp_server_calls_registered_handler() -> None:
     seen_payloads = []
     server = MerryMCPServer(handlers={"record_review_feedback": lambda payload: seen_payloads.append(payload) or {"ok": True}})
@@ -39,8 +57,16 @@ def test_mcp_server_calls_registered_handler() -> None:
 
 def test_mcp_server_redacts_pii_before_slack_summary_handler() -> None:
     seen_payloads = []
-    server = MerryMCPServer(handlers={"send_slack_summary": lambda payload: seen_payloads.append(payload) or {"ok": True}})
+    server = MerryMCPServer(handlers={"send_slack_summary": lambda payload: seen_payloads.append(payload) or {"ok": True}}, slack_channel="C123")
 
-    server.call_tool("send_slack_summary", {"channel": "C123", "summary": "Contact min@example.com / 010-1234-5678"})
+    server.call_tool("send_slack_summary", {"summary": "Contact min@example.com / 010-1234-5678"})
 
+    assert seen_payloads[0]["channel"] == "C123"
     assert seen_payloads[0]["summary"] == "Contact [REDACTED_EMAIL] / [REDACTED_PHONE]"
+
+
+def test_mcp_server_rejects_agent_supplied_slack_channel() -> None:
+    server = MerryMCPServer(handlers={"send_slack_summary": lambda payload: {"ok": True}}, slack_channel="C123")
+
+    with pytest.raises(MCPPayloadError, match="additional"):
+        server.call_tool("send_slack_summary", {"channel": "C999", "summary": "Weekly update"})

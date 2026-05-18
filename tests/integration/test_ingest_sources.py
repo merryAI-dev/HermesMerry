@@ -84,8 +84,8 @@ def test_ingest_sources_can_update_sqlite_obsidian_wiki(tmp_path) -> None:
         wiki_store=wiki_store,
     )
 
-    startup_page = tmp_path / "wiki" / "entities" / "CareFarm Carbon.md"
+    startup_page = tmp_path / "wiki" / "entities" / "carefarm-carbon.md"
     assert startup_page.exists()
-    assert "[[channels/external_referral]]" in startup_page.read_text()
+    assert "[[channels/external-referral]]" in startup_page.read_text()
     assert "CareFarm Carbon" in (tmp_path / "wiki" / "index.md").read_text()
     assert "ingest | Referral: CareFarm Carbon" in (tmp_path / "wiki" / "log.md").read_text()

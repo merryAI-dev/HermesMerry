@@ -35,6 +35,10 @@ def score_candidates(
         structured_store.query_rows(sql="select * from ac_profiles where ac_id=@ac_id", parameters={"ac_id": ac_id}),
         ac_id,
     )
+    existing_cards = {
+        str(row["card_id"]): row
+        for row in structured_store.query_rows(sql="select * from candidate_cards where ac_id=@ac_id", parameters={"ac_id": ac_id})
+    }
 
     score_rows: list[dict[str, object]] = []
     card_rows: list[dict[str, object]] = []
@@ -51,6 +55,7 @@ def score_candidates(
 
         card_id = f"card_{_short_digest(profile.ac_id, entity.entity_id)}"
         summary = _candidate_summary(entity, score.rationale)
+        existing_card = existing_cards.get(card_id)
         card_row = {
             "card_id": card_id,
             "ac_id": profile.ac_id,
@@ -58,27 +63,28 @@ def score_candidates(
             "summary": summary,
             "recommended_action": score.recommended_action,
             "queue_type": score.queue_type,
-            "status": "new",
-            "created_at": started_at,
+            "status": str(existing_card.get("status", "new")) if existing_card else "new",
+            "created_at": existing_card.get("created_at", started_at) if existing_card else started_at,
         }
         card_rows.append(card_row)
-        sheet_rows.append(
-            {
-                "card_id": card_id,
-                "entity_id": entity.entity_id,
-                "company": entity.name,
-                "region": entity.region,
-                "industry": entity.industry,
-                "total_score": score.total_score,
-                "recommended_action": score.recommended_action,
-                "queue_type": score.queue_type,
-                "priority_probability": score.priority_probability,
-                "rationale": score.rationale,
-                "decision": "",
-                "review_memo": "",
-                "reviewer": "",
-            }
-        )
+        if existing_card is None:
+            sheet_rows.append(
+                {
+                    "card_id": card_id,
+                    "entity_id": entity.entity_id,
+                    "company": entity.name,
+                    "region": entity.region,
+                    "industry": entity.industry,
+                    "total_score": score.total_score,
+                    "recommended_action": score.recommended_action,
+                    "queue_type": score.queue_type,
+                    "priority_probability": score.priority_probability,
+                    "rationale": score.rationale,
+                    "decision": "",
+                    "review_memo": "",
+                    "reviewer": "",
+                }
+            )
 
     structured_store.upsert_rows(table="ac_scores", rows=score_rows, key_fields=("score_id",))
     structured_store.upsert_rows(table="candidate_cards", rows=card_rows, key_fields=("card_id",))

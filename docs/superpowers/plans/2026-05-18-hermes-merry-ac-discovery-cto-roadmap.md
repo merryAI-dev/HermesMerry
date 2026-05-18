@@ -31,8 +31,17 @@ Completed:
 - Implemented probabilistic entity resolution using name/alias, founder, domain, email domain, description, region, and observation context.
 - Implemented logit/probit priority scoring with utility, probability, uncertainty, model version, and exploration queue routing.
 - Implemented Cloud Run job entrypoint wiring through env-backed runtime config, production adapter factory, and job runner.
+- Ran gstack-review and gstack-cso subagent verification against the previous stage.
+- Hardened Google Sheets review queue with fixed headers, fixed column order, RAW value writes, formula-injection escaping, and full review metadata columns.
+- Hardened production BigQuery reads with a default dataset on query jobs.
+- Hardened score reruns so human review card status is preserved and existing cards are not republished to Sheets.
+- Hardened SQLite/Obsidian wiki paths with safe slugs while preserving display titles through Obsidian aliases.
+- Hardened MCP payload validation with schema enforcement for required fields, type, enum, max length, and additional-property rejection; Slack summaries now use configured channel routing.
+- Hardened Cloud Run container execution with a non-root `hermes` user.
+- Hardened Terraform runtime wiring with `AC_ID`, `GMAIL_LABEL_ID`, `WIKI_ROOT`, Slack token Secret Manager wiring, Scheduler/runtime service account separation, job invoker IAM, and dataset-scoped BigQuery data editor IAM.
+- Added `infra/terraform/staging.tfvars.example`.
 - Added `Makefile` and GitHub Actions CI workflow.
-- Verified `python3 -m pytest` with 74 passing tests.
+- Verified `python3 -m pytest` with 82 passing tests.
 - Verified `tofu fmt -check`, `tofu init -backend=false`, and `tofu validate`.
 
 Not completed:
@@ -40,12 +49,16 @@ Not completed:
 - Production adapter wrappers and `merry_runtime.jobs` now bind Google/Slack clients from environment and ADC; real GCP credentials and API enablement still need staging validation.
 - MCP dispatcher exists, but a full stdio/SSE MCP protocol runner is not wired yet.
 - Cloud Run image has not been built or pushed to Artifact Registry.
-- GCP project variables, secrets, service account permissions, and API enablement are not configured.
+- GCP project variables, secret versions, API enablement, and staging ADC/service account impersonation are not configured.
 - No staging `terraform.tfvars` or production state backend is configured.
 - AC hypothesis report ingestion is not implemented.
 - Score calibration from human review feedback is not implemented beyond manual priors and stored decisions.
-- Monitoring, alerting, and weekly report generation are not implemented.
+- Monitoring, alerting, and production-grade weekly report generation are not implemented.
 - 1,000-candidate Mother DB acquisition process is not implemented.
+- BigQuery production upsert still uses delete-then-insert and must be replaced with a target-atomic `MERGE` path before production data is trusted.
+- `resolve-entities` Cloud Run job still records a resolver run but does not persist probabilistic merge/ambiguous-review outcomes.
+- Docker/Python dependency reproducibility is not locked by hashes or image digest yet.
+- GCS bucket permissions still need a production least-privilege pass once overwrite/read requirements are finalized.
 
 ## CTO Decisions
 

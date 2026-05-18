@@ -189,22 +189,22 @@ resource "google_service_account" "agent" {
   display_name = "Hermes Merry AC discovery agent"
 }
 
+resource "google_service_account" "scheduler" {
+  account_id   = var.scheduler_service_account_id
+  display_name = "Hermes Merry scheduler invoker"
+}
+
 resource "google_project_iam_member" "bigquery_job_user" {
   project = var.project_id
   role    = "roles/bigquery.jobUser"
   member  = "serviceAccount:${google_service_account.agent.email}"
 }
 
-resource "google_project_iam_member" "bigquery_data_editor" {
-  project = var.project_id
-  role    = "roles/bigquery.dataEditor"
-  member  = "serviceAccount:${google_service_account.agent.email}"
-}
-
-resource "google_project_iam_member" "run_developer" {
-  project = var.project_id
-  role    = "roles/run.developer"
-  member  = "serviceAccount:${google_service_account.agent.email}"
+resource "google_bigquery_dataset_iam_member" "bigquery_data_editor" {
+  project    = var.project_id
+  dataset_id = google_bigquery_dataset.merry.dataset_id
+  role       = "roles/bigquery.dataEditor"
+  member     = "serviceAccount:${google_service_account.agent.email}"
 }
 
 resource "google_project_iam_member" "log_writer" {
@@ -229,6 +229,20 @@ resource "google_secret_manager_secret" "llm_api_key" {
 
 resource "google_secret_manager_secret_iam_member" "llm_secret_accessor" {
   secret_id = google_secret_manager_secret.llm_api_key.secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.agent.email}"
+}
+
+resource "google_secret_manager_secret" "slack_bot_token" {
+  secret_id = var.slack_bot_token_secret_id
+
+  replication {
+    auto {}
+  }
+}
+
+resource "google_secret_manager_secret_iam_member" "slack_secret_accessor" {
+  secret_id = google_secret_manager_secret.slack_bot_token.secret_id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.agent.email}"
 }
@@ -269,6 +283,21 @@ resource "google_cloud_run_v2_job" "agent_jobs" {
         }
 
         env {
+          name  = "AC_ID"
+          value = var.ac_id
+        }
+
+        env {
+          name  = "GMAIL_LABEL_ID"
+          value = var.gmail_label_id
+        }
+
+        env {
+          name  = "WIKI_ROOT"
+          value = var.wiki_root
+        }
+
+        env {
           name  = "SLACK_CHANNEL"
           value = var.slack_channel
         }
@@ -282,9 +311,29 @@ resource "google_cloud_run_v2_job" "agent_jobs" {
             }
           }
         }
+
+        env {
+          name = "SLACK_BOT_TOKEN"
+          value_source {
+            secret_key_ref {
+              secret  = google_secret_manager_secret.slack_bot_token.secret_id
+              version = "latest"
+            }
+          }
+        }
       }
     }
   }
+}
+
+resource "google_cloud_run_v2_job_iam_member" "scheduler_invoker" {
+  for_each = google_cloud_run_v2_job.agent_jobs
+
+  project  = var.project_id
+  location = var.region
+  name     = each.value.name
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${google_service_account.scheduler.email}"
 }
 
 resource "google_cloud_scheduler_job" "agent_schedules" {
@@ -300,7 +349,7 @@ resource "google_cloud_scheduler_job" "agent_schedules" {
     uri         = "https://run.googleapis.com/v2/projects/${var.project_id}/locations/${var.region}/jobs/${google_cloud_run_v2_job.agent_jobs[each.key].name}:run"
 
     oauth_token {
-      service_account_email = google_service_account.agent.email
+      service_account_email = google_service_account.scheduler.email
       scope                 = "https://www.googleapis.com/auth/cloud-platform"
     }
   }

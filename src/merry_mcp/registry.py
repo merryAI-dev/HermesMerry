@@ -21,12 +21,13 @@ _TOOLS = {
         input_schema={
             "type": "object",
             "required": ["source_type", "channel", "uri", "raw_text"],
+            "additionalProperties": False,
             "properties": {
                 "source_type": {"type": "string"},
                 "channel": {"type": "string"},
                 "uri": {"type": "string"},
                 "title": {"type": "string"},
-                "raw_text": {"type": "string"},
+                "raw_text": {"type": "string", "maxLength": 20000},
             },
         },
     ),
@@ -37,6 +38,7 @@ _TOOLS = {
         input_schema={
             "type": "object",
             "required": ["entity", "signals"],
+            "additionalProperties": False,
             "properties": {
                 "entity": {"type": "object"},
                 "signals": {"type": "array", "items": {"type": "object"}},
@@ -50,10 +52,11 @@ _TOOLS = {
         input_schema={
             "type": "object",
             "required": ["ac_id", "entity_id", "summary", "recommended_action"],
+            "additionalProperties": False,
             "properties": {
                 "ac_id": {"type": "string"},
                 "entity_id": {"type": "string"},
-                "summary": {"type": "string"},
+                "summary": {"type": "string", "maxLength": 3000},
                 "recommended_action": {"type": "string"},
             },
         },
@@ -65,6 +68,7 @@ _TOOLS = {
         input_schema={
             "type": "object",
             "required": ["card_id", "reviewer", "decision"],
+            "additionalProperties": False,
             "properties": {
                 "card_id": {"type": "string"},
                 "reviewer": {"type": "string"},
@@ -72,7 +76,7 @@ _TOOLS = {
                     "type": "string",
                     "enum": ["advance", "watchlist", "reject", "request_more_info"],
                 },
-                "review_memo": {"type": "string"},
+                "review_memo": {"type": "string", "maxLength": 3000},
             },
         },
     ),
@@ -82,9 +86,9 @@ _TOOLS = {
         side_effect_scope="slack",
         input_schema={
             "type": "object",
-            "required": ["channel", "summary"],
+            "required": ["summary"],
+            "additionalProperties": False,
             "properties": {
-                "channel": {"type": "string"},
                 "summary": {"type": "string", "maxLength": 3000},
             },
         },

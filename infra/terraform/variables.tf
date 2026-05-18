@@ -31,6 +31,12 @@ variable "service_account_id" {
   default     = "hermes-merry-agent"
 }
 
+variable "scheduler_service_account_id" {
+  description = "Service account ID used by Cloud Scheduler to invoke Cloud Run jobs."
+  type        = string
+  default     = "hermes-merry-scheduler"
+}
+
 variable "llm_api_key_secret_id" {
   description = "Secret Manager secret ID for the selected LLM provider API key."
   type        = string
@@ -43,8 +49,32 @@ variable "review_sheet_id" {
   default     = ""
 }
 
+variable "ac_id" {
+  description = "Default AC profile ID used by score and review sync jobs."
+  type        = string
+  default     = ""
+}
+
+variable "gmail_label_id" {
+  description = "Gmail label ID used by the scheduled ingest job."
+  type        = string
+  default     = ""
+}
+
+variable "wiki_root" {
+  description = "Writable path for the SQLite-backed Obsidian wiki projection."
+  type        = string
+  default     = "/tmp/hermes-merry-wiki"
+}
+
 variable "slack_channel" {
   description = "Slack channel ID for summaries."
   type        = string
   default     = ""
+}
+
+variable "slack_bot_token_secret_id" {
+  description = "Secret Manager secret ID for the Slack bot token."
+  type        = string
+  default     = "merry-slack-bot-token"
 }

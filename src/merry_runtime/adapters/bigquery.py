@@ -25,7 +25,10 @@ class BigQueryStructuredStore:
         return len(rows)
 
     def query_rows(self, *, sql: str, parameters: dict[str, object]) -> list[dict[str, object]]:
-        query_job = self.client.query(sql, job_config=build_query_job_config(parameters))
+        query_job = self.client.query(
+            sql,
+            job_config=build_query_job_config(parameters, default_dataset=f"{self.project_id}.{self.dataset_id}"),
+        )
         return [dict(row) for row in query_job.result()]
 
     def _table_id(self, table: str) -> str:
@@ -40,18 +43,26 @@ class BigQueryStructuredStore:
         return f"DELETE FROM `{table_id}` WHERE {' AND '.join(predicates)}", parameters
 
 
-def build_query_job_config(parameters: dict[str, object], *, bigquery_module: Any | None = None) -> object:
+def build_query_job_config(
+    parameters: dict[str, object],
+    *,
+    bigquery_module: Any | None = None,
+    default_dataset: str | None = None,
+) -> object:
     if bigquery_module is None:
         try:
             bigquery_module = importlib.import_module("google.cloud.bigquery")
         except ImportError:
-            return SimpleNamespace(parameters=dict(parameters))
+            return SimpleNamespace(parameters=dict(parameters), default_dataset=default_dataset)
 
-    return bigquery_module.QueryJobConfig(
+    config = bigquery_module.QueryJobConfig(
         query_parameters=[
             bigquery_module.ScalarQueryParameter(name, _bigquery_type(value), value) for name, value in parameters.items()
         ]
     )
+    if default_dataset:
+        config.default_dataset = default_dataset
+    return config
 
 
 def _job_config(parameters: dict[str, object]) -> object:

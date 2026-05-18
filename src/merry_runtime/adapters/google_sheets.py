@@ -4,17 +4,35 @@ from dataclasses import dataclass
 from typing import Any
 
 
+REVIEW_QUEUE_HEADERS: tuple[str, ...] = (
+    "card_id",
+    "entity_id",
+    "company",
+    "region",
+    "industry",
+    "total_score",
+    "recommended_action",
+    "queue_type",
+    "priority_probability",
+    "rationale",
+    "decision",
+    "review_memo",
+    "reviewer",
+)
+
+
 @dataclass(slots=True)
 class GoogleSheetReviewQueue:
     service: Any
     spreadsheet_id: str
 
     def publish_cards(self, *, sheet_tab: str, rows: list[dict[str, object]]) -> int:
+        self._ensure_headers(sheet_tab=sheet_tab)
         values = [_row_values(row) for row in rows]
         self.service.spreadsheets().values().append(
             spreadsheetId=self.spreadsheet_id,
-            range=f"{sheet_tab}!A:K",
-            valueInputOption="USER_ENTERED",
+            range=f"{sheet_tab}!A:M",
+            valueInputOption="RAW",
             insertDataOption="INSERT_ROWS",
             body={"values": values},
         ).execute()
@@ -23,7 +41,7 @@ class GoogleSheetReviewQueue:
     def read_pending_reviews(self, *, sheet_tab: str) -> list[dict[str, str]]:
         response = self.service.spreadsheets().values().get(
             spreadsheetId=self.spreadsheet_id,
-            range=f"{sheet_tab}!A:K",
+            range=f"{sheet_tab}!A:M",
         ).execute()
         values = response.get("values", [])
         if not values:
@@ -31,6 +49,30 @@ class GoogleSheetReviewQueue:
         headers = [str(header) for header in values[0]]
         return [dict(zip(headers, [str(value) for value in row], strict=False)) for row in values[1:]]
 
+    def _ensure_headers(self, *, sheet_tab: str) -> None:
+        response = self.service.spreadsheets().values().get(
+            spreadsheetId=self.spreadsheet_id,
+            range=f"{sheet_tab}!A1:M1",
+        ).execute()
+        header_rows = response.get("values") or [[]]
+        existing = [str(header) for header in header_rows[0]]
+        if existing == list(REVIEW_QUEUE_HEADERS):
+            return
+        self.service.spreadsheets().values().update(
+            spreadsheetId=self.spreadsheet_id,
+            range=f"{sheet_tab}!A1:M1",
+            valueInputOption="USER_ENTERED",
+            body={"values": [list(REVIEW_QUEUE_HEADERS)]},
+        ).execute()
+
 
 def _row_values(row: dict[str, object]) -> list[object]:
-    return [row[key] for key in row.keys()]
+    return [_safe_cell_value(row.get(key, "")) for key in REVIEW_QUEUE_HEADERS]
+
+
+def _safe_cell_value(value: object) -> object:
+    if not isinstance(value, str):
+        return value
+    if value.startswith(("=", "+", "-", "@", "\t", "\r")):
+        return f"'{value}"
+    return value

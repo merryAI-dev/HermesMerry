@@ -34,3 +34,18 @@ def test_score_candidates_skips_entities_without_signals() -> None:
 
     assert result.score_count == 1
     assert [row["entity_id"] for row in store.tables["ac_scores"]] == ["ent_climate"]
+
+
+def test_score_candidates_preserves_human_status_and_does_not_republish_existing_cards() -> None:
+    store = FakeStructuredStore.seed_climate_candidate()
+    queue = FakeReviewQueue()
+    score_candidates(structured_store=store, review_queue=queue, ac_id="ac_climate")
+    existing_card = dict(store.tables["candidate_cards"][0])
+    existing_card["status"] = "watchlist"
+    store.upsert_rows(table="candidate_cards", rows=[existing_card], key_fields=("card_id",))
+
+    result = score_candidates(structured_store=store, review_queue=queue, ac_id="ac_climate")
+
+    assert result.card_count == 1
+    assert store.tables["candidate_cards"][0]["status"] == "watchlist"
+    assert len(queue.published["ac_climate"]) == 1

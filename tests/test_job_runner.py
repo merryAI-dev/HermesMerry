@@ -53,7 +53,7 @@ def test_run_ingest_sources_uses_sources_json_and_updates_wiki(tmp_path) -> None
 
     assert result["job_name"] == "ingest-sources"
     assert result["raw_source_count"] == 1
-    assert (tmp_path / "wiki" / "entities" / "CareFarm Carbon.md").exists()
+    assert (tmp_path / "wiki" / "entities" / "carefarm-carbon.md").exists()
 
 
 def test_run_score_candidates_routes_to_sheet_queue(tmp_path) -> None:

@@ -10,6 +10,10 @@ output "agent_service_account" {
   value = google_service_account.agent.email
 }
 
+output "scheduler_service_account" {
+  value = google_service_account.scheduler.email
+}
+
 output "cloud_run_jobs" {
   value = sort(keys(google_cloud_run_v2_job.agent_jobs))
 }

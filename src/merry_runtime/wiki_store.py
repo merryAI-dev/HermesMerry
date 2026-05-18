@@ -4,6 +4,7 @@ import sqlite3
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+import re
 
 from merry_runtime.ontology import EdgeKind, NodeKind, StartupKnowledgeGraph, project_startup_wiki
 
@@ -92,7 +93,7 @@ class SQLiteWikiStore:
     ) -> WikiWriteResult:
         self.initialize()
         startup = graph.node(startup_id)
-        page_path = f"entities/{startup.label}.md"
+        page_path = _node_page_path(startup)
         page_file = self.wiki_dir / page_path
         page_file.parent.mkdir(parents=True, exist_ok=True)
         page_file.write_text(_frontmatter(title=startup.label, kind=startup.kind.value) + _obsidian_startup_page(graph, startup_id), encoding="utf-8")
@@ -154,7 +155,7 @@ class SQLiteWikiStore:
                 lines.extend(["", f"## {kind}"])
             link = path.removesuffix(".md")
             suffix = f" - {summary}" if summary else f" - {kind}"
-            lines.append(f"- [[{link}]]{suffix}")
+            lines.append(f"- [[{link}|{title}]]{suffix}")
         (self.wiki_dir / "index.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
     def _append_log(self, *, operation: str, title: str, page_path: str, timestamp: str) -> None:
@@ -242,20 +243,26 @@ def _sources(graph: StartupKnowledgeGraph) -> list[tuple[str, str, str, str, str
 
 def _node_page_path(node) -> str:
     if node.kind is NodeKind.STARTUP:
-        return f"entities/{node.label}.md"
+        return f"entities/{_slugify(node.label)}.md"
     if node.kind is NodeKind.DISCOVERY_CHANNEL:
-        return f"channels/{node.label}.md"
+        return f"channels/{_slugify(node.label)}.md"
     if node.kind is NodeKind.SOCIAL_PROBLEM:
-        return f"concepts/social_problem/{node.label}.md"
+        return f"concepts/social_problem/{_slugify(node.label)}.md"
     if node.kind is NodeKind.BENEFICIARY:
-        return f"concepts/beneficiary/{node.label}.md"
+        return f"concepts/beneficiary/{_slugify(node.label)}.md"
     if node.kind is NodeKind.IMPACT_THESIS:
-        return f"concepts/impact_thesis/{node.label}.md"
+        return f"concepts/impact_thesis/{_slugify(node.label)}.md"
     if node.kind is NodeKind.AC:
-        return f"ac/{node.label}.md"
+        return f"ac/{_slugify(node.label)}.md"
     if node.kind is NodeKind.DECISION:
-        return f"decisions/{node.label}.md"
+        return f"decisions/{_slugify(node.label)}.md"
     return ""
+
+
+def _slugify(label: str) -> str:
+    slug = re.sub(r"[^0-9A-Za-z가-힣._ -]+", " ", label).strip().casefold()
+    slug = re.sub(r"[./\\\s_-]+", "-", slug).strip("-")
+    return slug or "untitled"
 
 
 def _frontmatter(*, title: str, kind: str) -> str:
