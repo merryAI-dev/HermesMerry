@@ -24,6 +24,7 @@ def test_runtime_config_reads_required_environment(monkeypatch) -> None:
     assert config.default_ac_id == "ac_climate"
     assert str(config.wiki_root) == "/tmp/wiki"
     assert config.object_store_backend == "gcs"
+    assert config.bigquery_write_mode == "merge"
 
 
 def test_runtime_config_requires_job_specific_fields(monkeypatch) -> None:
@@ -70,3 +71,25 @@ def test_runtime_config_accepts_local_object_store_for_ingest(monkeypatch, tmp_p
     config.validate_for_job("ingest-sources", has_inline_sources=True)
     assert config.object_store_backend == "local"
     assert config.raw_root == tmp_path / "raw"
+
+
+def test_runtime_config_reads_bigquery_append_write_mode(monkeypatch) -> None:
+    monkeypatch.setenv("BIGQUERY_WRITE_MODE", "append")
+
+    config = RuntimeConfig.from_env()
+
+    assert config.bigquery_write_mode == "append"
+
+
+def test_runtime_config_rejects_unknown_bigquery_write_mode(monkeypatch) -> None:
+    monkeypatch.setenv("GCP_PROJECT_ID", "project-1")
+    monkeypatch.setenv("BIGQUERY_DATASET", "merry")
+    monkeypatch.setenv("BIGQUERY_WRITE_MODE", "truncate")
+
+    config = RuntimeConfig.from_env()
+
+    with pytest.raises(RuntimeConfigError) as error:
+        config.validate_for_job("resolve-entities")
+
+    assert "BIGQUERY_WRITE_MODE" in str(error.value)
+    assert "truncate" in str(error.value)

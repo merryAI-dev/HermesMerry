@@ -104,7 +104,9 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.command == "loop":
         config = RuntimeConfig.from_env()
+        max_cycles = args.max_cycles if args.max_cycles is not None else config.agent_loop_max_cycles
         try:
+            config.validate_for_loop(max_cycles=max_cycles)
             for job_name in config.agent_loop_jobs:
                 config.validate_for_job(job_name, has_inline_sources=False)
             runtime = build_runtime(config)
@@ -115,7 +117,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 interval_seconds=args.interval_seconds
                 if args.interval_seconds is not None
                 else config.agent_loop_interval_seconds,
-                max_cycles=args.max_cycles if args.max_cycles is not None else config.agent_loop_max_cycles,
+                max_cycles=max_cycles,
                 sleep_fn=time.sleep,
             )
         except RuntimeConfigError as exc:

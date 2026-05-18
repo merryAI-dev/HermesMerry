@@ -112,3 +112,27 @@ def test_jobs_cli_loop_runs_one_cycle(monkeypatch, tmp_path, capsys) -> None:
     assert output["cycle_count"] == 1
     assert output["failure_count"] == 0
     assert output["results"][0]["job_name"] == "score-candidates"
+
+
+def test_jobs_cli_loop_rejects_append_mode_for_unbounded_loop(monkeypatch, capsys) -> None:
+    config = RuntimeConfig(
+        project_id="project-1",
+        dataset_id="merry",
+        raw_bucket="raw-bucket",
+        bigquery_write_mode="append",
+        agent_loop_jobs=("resolve-entities",),
+        agent_loop_max_cycles=0,
+    )
+
+    monkeypatch.setattr("merry_runtime.jobs.RuntimeConfig.from_env", lambda: config)
+    monkeypatch.setattr(
+        "merry_runtime.jobs.build_runtime",
+        lambda config: (_ for _ in ()).throw(AssertionError("build_runtime should not be called")),
+    )
+
+    exit_code = main(["loop"])
+
+    stderr = capsys.readouterr().err
+    assert exit_code == 2
+    assert "BIGQUERY_WRITE_MODE=append" in stderr
+    assert "AGENT_LOOP_MAX_CYCLES=1" in stderr

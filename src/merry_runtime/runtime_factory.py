@@ -43,6 +43,7 @@ def build_runtime(
             client=bigquery_module.Client(project=config.project_id),
             project_id=config.project_id,
             dataset_id=config.dataset_id,
+            write_mode=config.bigquery_write_mode,
         ),
         review_queue=GoogleSheetReviewQueue(service=sheets_service, spreadsheet_id=config.review_sheet_id),
         notifier=notifier,

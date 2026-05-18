@@ -19,11 +19,21 @@ class BigQueryStructuredStore:
     client: Any
     project_id: str
     dataset_id: str
+    write_mode: str = "merge"
 
     def upsert_rows(self, *, table: str, rows: list[dict[str, object]], key_fields: tuple[str, ...]) -> int:
         if not rows:
             return 0
         _validate_unique_batch_keys(rows, key_fields)
+        if self.write_mode == "append":
+            self.client.load_table_from_json(
+                rows,
+                self._table_id(table),
+                job_config=_load_job_config(table, write_disposition="WRITE_APPEND"),
+            ).result()
+            return len(rows)
+        if self.write_mode != "merge":
+            raise ValueError(f"unsupported BigQuery write mode: {self.write_mode}")
         table_id = self._table_id(table)
         staging_table_id = self._table_id(f"_staging_{table}_{uuid.uuid4().hex}")
         field_names = _field_names(table, rows)
@@ -37,7 +47,7 @@ class BigQueryStructuredStore:
             self.client.load_table_from_json(
                 rows,
                 staging_table_id,
-                job_config=_load_job_config(table),
+                job_config=_load_job_config(table, write_disposition="WRITE_TRUNCATE"),
             ).result()
             self.client.query(
                 merge_sql,
@@ -83,19 +93,19 @@ def build_query_job_config(
     return config
 
 
-def _load_job_config(table: str) -> object:
+def _load_job_config(table: str, *, write_disposition: str) -> object:
     schema = BIGQUERY_TABLES.get(table, [])
     try:
         bigquery_module = importlib.import_module("google.cloud.bigquery")
     except ImportError:
-        return SimpleNamespace(schema=list(schema), write_disposition="WRITE_TRUNCATE")
+        return SimpleNamespace(schema=list(schema), write_disposition=write_disposition)
 
     return bigquery_module.LoadJobConfig(
         schema=[
             bigquery_module.SchemaField(field["name"], field["type"], mode=field.get("mode", "NULLABLE"))
             for field in schema
         ],
-        write_disposition=bigquery_module.WriteDisposition.WRITE_TRUNCATE,
+        write_disposition=getattr(bigquery_module.WriteDisposition, write_disposition),
     )
 
 

@@ -28,6 +28,9 @@ Cloud Run is optional and belongs to `docs/runbooks/staging-canary.md`.
 - `RAW_BUCKET`
 - `OBJECT_STORE_BACKEND=local`
 - `RAW_ROOT=/workspace/hermes/raw`
+- `BIGQUERY_WRITE_MODE=merge` for the always-on loop
+- `BIGQUERY_WRITE_MODE=append` only with `AGENT_LOOP_MAX_CYCLES=1` when the
+  staging GCP project has billing disabled and BigQuery DML is unavailable
 - `REVIEW_SHEET_ID`
 - `AC_ID`
 - `GMAIL_LABEL_ID`
@@ -117,6 +120,7 @@ Volume path: /workspace
 WIKI_ROOT: /workspace/hermes/wiki
 OBJECT_STORE_BACKEND: local
 RAW_ROOT: /workspace/hermes/raw
+BIGQUERY_WRITE_MODE: append
 AGENT_LOOP_MAX_CYCLES: 1
 ```
 
@@ -148,9 +152,13 @@ test -d /workspace/hermes/wiki
 find /workspace/hermes/wiki -maxdepth 2 -type f | sort | head
 ```
 
+`BIGQUERY_WRITE_MODE=append` only with `AGENT_LOOP_MAX_CYCLES=1`; it writes
+direct load-job appends and can duplicate logical rows if left on in a loop.
+
 Only after the one-cycle canary is reviewed, switch:
 
 ```text
+BIGQUERY_WRITE_MODE=merge
 AGENT_LOOP_MAX_CYCLES=0
 AGENT_LOOP_INTERVAL_SECONDS=1800
 ```

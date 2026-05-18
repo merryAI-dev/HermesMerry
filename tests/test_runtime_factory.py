@@ -63,6 +63,7 @@ def test_runtime_factory_builds_production_adapters(monkeypatch, tmp_path) -> No
     assert isinstance(runtime.gmail_source, GmailLabelSource)
     assert isinstance(runtime.notifier, SlackNotifier)
     assert isinstance(runtime.wiki_store, SQLiteWikiStore)
+    assert runtime.structured_store.write_mode == "merge"
     assert built_services == [("sheets", "v4"), ("gmail", "v1")]
 
 
@@ -89,9 +90,11 @@ def test_runtime_factory_uses_local_object_store_without_storage_client(monkeypa
         wiki_root=tmp_path / "wiki",
         object_store_backend="local",
         raw_root=tmp_path / "raw",
+        bigquery_write_mode="append",
     )
 
     runtime = build_runtime(config, import_module=fake_import)
 
     assert isinstance(runtime.object_store, LocalFileObjectStore)
+    assert runtime.structured_store.write_mode == "append"
     assert "google.cloud.storage" not in imported_modules

@@ -189,6 +189,35 @@ def test_bigquery_upsert_loads_staging_table_and_merges_without_target_delete() 
     assert client.deleted_tables[0].startswith("p.d._staging_mother_entities_")
 
 
+def test_bigquery_append_mode_loads_directly_without_dml() -> None:
+    client = FakeBigQueryClient()
+    store = BigQueryStructuredStore(client=client, project_id="p", dataset_id="d", write_mode="append")
+
+    count = store.upsert_rows(
+        table="mother_entities",
+        rows=[
+            {
+                "entity_id": "ent_1",
+                "entity_type": "startup",
+                "name": "Runpod Canary",
+                "normalized_name": "runpod canary",
+                "region": "Seoul",
+                "industry": "AI",
+                "homepage": "https://runpod.example",
+                "representative": "Canary",
+                "first_seen_at": "2026-05-18T00:00:00+00:00",
+                "last_seen_at": "2026-05-18T00:00:00+00:00",
+            }
+        ],
+        key_fields=("entity_id",),
+    )
+
+    assert count == 1
+    assert client.loaded_rows[0][0] == "p.d.mother_entities"
+    assert client.loaded_rows[0][2].write_disposition == "WRITE_APPEND"
+    assert client.queries == []
+
+
 def test_bigquery_upsert_rejects_duplicate_batch_keys_before_bigquery_calls() -> None:
     client = FakeBigQueryClient()
     store = BigQueryStructuredStore(client=client, project_id="p", dataset_id="d")
