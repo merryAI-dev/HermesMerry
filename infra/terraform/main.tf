@@ -185,6 +185,13 @@ resource "google_bigquery_dataset" "merry" {
   dataset_id                 = var.dataset_id
   location                   = "asia-northeast3"
   delete_contents_on_destroy = false
+
+  lifecycle {
+    ignore_changes = [
+      default_partition_expiration_ms,
+      default_table_expiration_ms,
+    ]
+  }
 }
 
 resource "google_bigquery_table" "tables" {
@@ -197,6 +204,8 @@ resource "google_bigquery_table" "tables" {
 }
 
 resource "google_storage_bucket" "raw_docs" {
+  count = var.create_raw_bucket ? 1 : 0
+
   name                        = var.raw_bucket_name
   location                    = var.region
   uniform_bucket_level_access = true
@@ -257,7 +266,9 @@ resource "google_project_iam_member" "log_writer" {
 }
 
 resource "google_storage_bucket_iam_member" "raw_docs_object_creator" {
-  bucket = google_storage_bucket.raw_docs.name
+  count = var.create_raw_bucket ? 1 : 0
+
+  bucket = google_storage_bucket.raw_docs[0].name
   role   = "roles/storage.objectCreator"
   member = "serviceAccount:${google_service_account.agent.email}"
 }
@@ -299,7 +310,7 @@ resource "google_secret_manager_secret_iam_member" "slack_secret_accessor" {
 }
 
 resource "google_cloud_run_v2_job" "agent_jobs" {
-  for_each = var.execution_backend == "cloud_run" ? local.jobs : {}
+  for_each = { for name, job in local.jobs : name => job if var.execution_backend == "cloud_run" }
 
   name     = each.key
   location = var.region
@@ -325,7 +336,7 @@ resource "google_cloud_run_v2_job" "agent_jobs" {
 
         env {
           name  = "RAW_BUCKET"
-          value = google_storage_bucket.raw_docs.name
+          value = var.raw_bucket_name
         }
 
         env {
@@ -378,7 +389,7 @@ resource "google_cloud_run_v2_job" "agent_jobs" {
 }
 
 resource "google_cloud_run_v2_job_iam_member" "scheduler_invoker" {
-  for_each = var.execution_backend == "cloud_run" ? local.scheduled_jobs : {}
+  for_each = { for name, job in local.scheduled_jobs : name => job if var.execution_backend == "cloud_run" }
 
   project  = var.project_id
   location = var.region
@@ -388,7 +399,7 @@ resource "google_cloud_run_v2_job_iam_member" "scheduler_invoker" {
 }
 
 resource "google_cloud_scheduler_job" "agent_schedules" {
-  for_each = var.execution_backend == "cloud_run" ? local.scheduled_jobs : {}
+  for_each = { for name, job in local.scheduled_jobs : name => job if var.execution_backend == "cloud_run" }
 
   name      = "${each.key}-schedule"
   region    = var.region

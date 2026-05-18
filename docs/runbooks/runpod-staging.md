@@ -26,6 +26,8 @@ Cloud Run is optional and belongs to `docs/runbooks/staging-canary.md`.
 - `GCP_PROJECT_ID`
 - `BIGQUERY_DATASET`
 - `RAW_BUCKET`
+- `OBJECT_STORE_BACKEND=local`
+- `RAW_ROOT=/workspace/hermes/raw`
 - `REVIEW_SHEET_ID`
 - `AC_ID`
 - `GMAIL_LABEL_ID`
@@ -94,7 +96,9 @@ tofu -chdir=infra/terraform plan -var-file=runpod-staging.tfvars
 Expected plan scope:
 
 - Staging BigQuery dataset and tables.
-- Staging GCS raw bucket.
+- Staging GCS raw bucket only when `create_raw_bucket = true`.
+- Runpod local raw storage under `/workspace/hermes/raw` when
+  `OBJECT_STORE_BACKEND=local`.
 - Hermes runtime service account and least-privilege IAM.
 - No Cloud Run jobs.
 - No Cloud Scheduler jobs.
@@ -111,6 +115,8 @@ Image: ghcr.io/$GHCR_OWNER/hermes-merry:staging
 Command: python3 -m merry_runtime.jobs loop
 Volume path: /workspace
 WIKI_ROOT: /workspace/hermes/wiki
+OBJECT_STORE_BACKEND: local
+RAW_ROOT: /workspace/hermes/raw
 AGENT_LOOP_MAX_CYCLES: 1
 ```
 

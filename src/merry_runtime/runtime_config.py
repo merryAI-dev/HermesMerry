@@ -19,6 +19,8 @@ class RuntimeConfig:
     gmail_label_id: str = ""
     default_ac_id: str = ""
     wiki_root: Path = Path("/tmp/hermes-merry-wiki")
+    object_store_backend: str = "gcs"
+    raw_root: Path = Path("/workspace/hermes/raw")
     agent_loop_jobs: tuple[str, ...] = (
         "ingest-sources",
         "resolve-entities",
@@ -40,6 +42,8 @@ class RuntimeConfig:
             gmail_label_id=os.getenv("GMAIL_LABEL_ID", ""),
             default_ac_id=os.getenv("AC_ID", ""),
             wiki_root=Path(os.getenv("WIKI_ROOT", "/tmp/hermes-merry-wiki")),
+            object_store_backend=os.getenv("OBJECT_STORE_BACKEND", "gcs"),
+            raw_root=Path(os.getenv("RAW_ROOT", "/workspace/hermes/raw")),
             agent_loop_jobs=_parse_jobs(os.getenv("AGENT_LOOP_JOBS", "")),
             agent_loop_interval_seconds=_parse_int(os.getenv("AGENT_LOOP_INTERVAL_SECONDS", ""), default=1800),
             agent_loop_max_cycles=_parse_int(os.getenv("AGENT_LOOP_MAX_CYCLES", ""), default=0),
@@ -48,7 +52,10 @@ class RuntimeConfig:
     def validate_for_job(self, job_name: str, *, has_inline_sources: bool = False) -> None:
         required = ["GCP_PROJECT_ID", "BIGQUERY_DATASET"]
         if job_name == "ingest-sources":
-            required.append("RAW_BUCKET")
+            if self.object_store_backend == "local":
+                required.append("RAW_ROOT")
+            else:
+                required.append("RAW_BUCKET")
             if not has_inline_sources:
                 required.append("GMAIL_LABEL_ID")
         elif job_name == "ingest-ac-profiles":
@@ -77,6 +84,7 @@ class RuntimeConfig:
             "SLACK_CHANNEL": self.slack_channel,
             "GMAIL_LABEL_ID": self.gmail_label_id,
             "AC_ID": self.default_ac_id,
+            "RAW_ROOT": str(self.raw_root),
         }[name]
 
 

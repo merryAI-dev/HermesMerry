@@ -9,6 +9,7 @@ from merry_runtime.adapters.bigquery import BigQueryStructuredStore
 from merry_runtime.adapters.gcs import GCSObjectStore
 from merry_runtime.adapters.gmail import GmailLabelSource
 from merry_runtime.adapters.google_sheets import GoogleSheetReviewQueue
+from merry_runtime.adapters.local_files import LocalFileObjectStore
 from merry_runtime.adapters.slack import SlackNotifier
 from merry_runtime.job_runner import RuntimeAdapters
 from merry_runtime.runtime_config import RuntimeConfig, RuntimeConfigError
@@ -20,9 +21,9 @@ def build_runtime(
     *,
     import_module: Callable[[str], ModuleType | object] = importlib.import_module,
 ) -> RuntimeAdapters:
-    storage_module = import_module("google.cloud.storage")
     bigquery_module = import_module("google.cloud.bigquery")
     discovery_module = import_module("googleapiclient.discovery")
+    object_store = _build_object_store(config=config, import_module=import_module)
 
     sheets_service = discovery_module.build("sheets", "v4")
     gmail_service = discovery_module.build("gmail", "v1") if config.gmail_label_id else None
@@ -37,7 +38,7 @@ def build_runtime(
         raise RuntimeConfigError("SLACK_CHANNEL is configured but SLACK_BOT_TOKEN is missing")
 
     return RuntimeAdapters(
-        object_store=GCSObjectStore(client=storage_module.Client(project=config.project_id), bucket=config.raw_bucket),
+        object_store=object_store,
         structured_store=BigQueryStructuredStore(
             client=bigquery_module.Client(project=config.project_id),
             project_id=config.project_id,
@@ -48,3 +49,16 @@ def build_runtime(
         wiki_store=SQLiteWikiStore(root=config.wiki_root),
         gmail_source=GmailLabelSource(service=gmail_service, user_id="me", label_id=config.gmail_label_id) if gmail_service else None,
     )
+
+
+def _build_object_store(
+    *,
+    config: RuntimeConfig,
+    import_module: Callable[[str], ModuleType | object],
+) -> GCSObjectStore | LocalFileObjectStore:
+    if config.object_store_backend == "local":
+        return LocalFileObjectStore(root=config.raw_root)
+    if config.object_store_backend != "gcs":
+        raise RuntimeConfigError(f"Unsupported OBJECT_STORE_BACKEND: {config.object_store_backend}")
+    storage_module = import_module("google.cloud.storage")
+    return GCSObjectStore(client=storage_module.Client(project=config.project_id), bucket=config.raw_bucket)

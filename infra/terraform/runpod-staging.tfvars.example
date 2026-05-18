@@ -1,5 +1,6 @@
 execution_backend            = "runpod"
 create_artifact_registry     = false
+create_raw_bucket            = false
 project_id                   = "hermes-staging-example"
 region                       = "asia-northeast3"
 dataset_id                   = "merry_ac_discovery_staging"

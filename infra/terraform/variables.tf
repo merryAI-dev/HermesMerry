@@ -31,6 +31,12 @@ variable "raw_bucket_name" {
   type        = string
 }
 
+variable "create_raw_bucket" {
+  description = "Whether to create a GCS raw document bucket. Disable for Runpod local-volume raw storage."
+  type        = bool
+  default     = true
+}
+
 variable "image_uri" {
   description = "Container image URI for Cloud Run jobs."
   type        = string

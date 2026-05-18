@@ -2,6 +2,7 @@ from merry_runtime.adapters.bigquery import BigQueryStructuredStore
 from merry_runtime.adapters.gcs import GCSObjectStore
 from merry_runtime.adapters.gmail import GmailLabelSource
 from merry_runtime.adapters.google_sheets import GoogleSheetReviewQueue
+from merry_runtime.adapters.local_files import LocalFileObjectStore
 from merry_runtime.adapters.slack import SlackNotifier
 from merry_runtime.runtime_config import RuntimeConfig
 from merry_runtime.runtime_factory import build_runtime
@@ -63,3 +64,34 @@ def test_runtime_factory_builds_production_adapters(monkeypatch, tmp_path) -> No
     assert isinstance(runtime.notifier, SlackNotifier)
     assert isinstance(runtime.wiki_store, SQLiteWikiStore)
     assert built_services == [("sheets", "v4"), ("gmail", "v1")]
+
+
+def test_runtime_factory_uses_local_object_store_without_storage_client(monkeypatch, tmp_path) -> None:
+    imported_modules = []
+
+    def fake_build(service_name: str, version: str):
+        return {"service": service_name, "version": version}
+
+    def fake_import(name: str):
+        imported_modules.append(name)
+        modules = {
+            "google.cloud.bigquery": FakeBigQueryModule,
+            "googleapiclient.discovery": type("Discovery", (), {"build": staticmethod(fake_build)}),
+        }
+        return modules[name]
+
+    monkeypatch.delenv("SLACK_BOT_TOKEN", raising=False)
+    config = RuntimeConfig(
+        project_id="project-1",
+        dataset_id="merry",
+        raw_bucket="",
+        review_sheet_id="sheet-1",
+        wiki_root=tmp_path / "wiki",
+        object_store_backend="local",
+        raw_root=tmp_path / "raw",
+    )
+
+    runtime = build_runtime(config, import_module=fake_import)
+
+    assert isinstance(runtime.object_store, LocalFileObjectStore)
+    assert "google.cloud.storage" not in imported_modules

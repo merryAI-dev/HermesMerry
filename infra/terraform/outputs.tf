@@ -3,7 +3,7 @@ output "dataset_id" {
 }
 
 output "raw_bucket" {
-  value = google_storage_bucket.raw_docs.name
+  value = var.raw_bucket_name
 }
 
 output "agent_service_account" {

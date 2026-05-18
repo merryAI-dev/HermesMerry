@@ -32,7 +32,10 @@ def test_terraform_separates_scheduler_identity_and_scopes_bigquery_iam_to_datas
 
 def test_terraform_grants_create_only_raw_docs_bucket_access() -> None:
     main_tf = (REPO_ROOT / "infra" / "terraform" / "main.tf").read_text()
+    variables_tf = (REPO_ROOT / "infra" / "terraform" / "variables.tf").read_text()
 
+    assert 'variable "create_raw_bucket"' in variables_tf
+    assert "count = var.create_raw_bucket ? 1 : 0" in main_tf
     assert "roles/storage.objectAdmin" not in main_tf
     assert 'role   = "roles/storage.objectCreator"' in main_tf
 
@@ -59,7 +62,7 @@ def test_terraform_defines_manual_ingest_ac_profiles_job_without_default_schedul
     assert "manual_jobs" in main_tf
     assert "scheduled_jobs" in main_tf
     assert 'name      = "${each.key}-schedule"' in main_tf
-    assert 'for_each = var.execution_backend == "cloud_run" ? local.scheduled_jobs : {}' in main_tf
+    assert 'for_each = { for name, job in local.scheduled_jobs : name => job if var.execution_backend == "cloud_run" }' in main_tf
 
 
 def test_terraform_defines_scheduled_calibrate_scores_job_after_review_sync() -> None:
@@ -77,7 +80,7 @@ def test_terraform_scheduler_invoker_only_grants_scheduled_jobs() -> None:
     main_tf = (REPO_ROOT / "infra" / "terraform" / "main.tf").read_text()
 
     scheduler_invoker_block = main_tf.split('resource "google_cloud_run_v2_job_iam_member" "scheduler_invoker" {', 1)[1].split("\n}", 1)[0]
-    assert 'for_each = var.execution_backend == "cloud_run" ? local.scheduled_jobs : {}' in scheduler_invoker_block
+    assert 'for_each = { for name, job in local.scheduled_jobs : name => job if var.execution_backend == "cloud_run" }' in scheduler_invoker_block
     assert "for_each = google_cloud_run_v2_job.agent_jobs" not in scheduler_invoker_block
     assert 'name     = google_cloud_run_v2_job.agent_jobs[each.key].name' in scheduler_invoker_block
 
@@ -89,8 +92,8 @@ def test_terraform_supports_runpod_execution_backend_without_cloud_run_resources
     assert 'variable "execution_backend"' in variables_tf
     assert '"runpod"' in variables_tf
     assert '"cloud_run"' in variables_tf
-    assert 'var.execution_backend == "cloud_run" ? local.jobs : {}' in main_tf
-    assert 'var.execution_backend == "cloud_run" ? local.scheduled_jobs : {}' in main_tf
+    assert 'for_each = { for name, job in local.jobs : name => job if var.execution_backend == "cloud_run" }' in main_tf
+    assert 'for_each = { for name, job in local.scheduled_jobs : name => job if var.execution_backend == "cloud_run" }' in main_tf
     assert 'count = var.execution_backend == "cloud_run" && var.create_artifact_registry ? 1 : 0' in main_tf
     assert 'count = var.execution_backend == "cloud_run" ? 1 : 0' in main_tf
 
@@ -100,6 +103,7 @@ def test_runpod_staging_tfvars_example_uses_minimal_gcp_layer() -> None:
 
     assert 'execution_backend            = "runpod"' in tfvars
     assert "create_artifact_registry     = false" in tfvars
+    assert "create_raw_bucket            = false" in tfvars
     assert 'wiki_root                    = "/workspace/hermes/wiki"' in tfvars
     assert "image_uri" not in tfvars
 

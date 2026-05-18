@@ -23,6 +23,7 @@ def test_runtime_config_reads_required_environment(monkeypatch) -> None:
     assert config.gmail_label_id == "Label_123"
     assert config.default_ac_id == "ac_climate"
     assert str(config.wiki_root) == "/tmp/wiki"
+    assert config.object_store_backend == "gcs"
 
 
 def test_runtime_config_requires_job_specific_fields(monkeypatch) -> None:
@@ -56,3 +57,16 @@ def test_runtime_config_accepts_calibrate_scores_without_review_sheet(monkeypatc
     config = RuntimeConfig.from_env()
 
     config.validate_for_job("calibrate-scores")
+
+
+def test_runtime_config_accepts_local_object_store_for_ingest(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("GCP_PROJECT_ID", "project-1")
+    monkeypatch.setenv("BIGQUERY_DATASET", "merry")
+    monkeypatch.setenv("OBJECT_STORE_BACKEND", "local")
+    monkeypatch.setenv("RAW_ROOT", str(tmp_path / "raw"))
+
+    config = RuntimeConfig.from_env()
+
+    config.validate_for_job("ingest-sources", has_inline_sources=True)
+    assert config.object_store_backend == "local"
+    assert config.raw_root == tmp_path / "raw"
