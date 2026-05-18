@@ -19,6 +19,15 @@ class RuntimeConfig:
     gmail_label_id: str = ""
     default_ac_id: str = ""
     wiki_root: Path = Path("/tmp/hermes-merry-wiki")
+    agent_loop_jobs: tuple[str, ...] = (
+        "ingest-sources",
+        "resolve-entities",
+        "score-candidates",
+        "sync-review-sheet",
+        "calibrate-scores",
+    )
+    agent_loop_interval_seconds: int = 1800
+    agent_loop_max_cycles: int = 0
 
     @classmethod
     def from_env(cls) -> RuntimeConfig:
@@ -31,6 +40,9 @@ class RuntimeConfig:
             gmail_label_id=os.getenv("GMAIL_LABEL_ID", ""),
             default_ac_id=os.getenv("AC_ID", ""),
             wiki_root=Path(os.getenv("WIKI_ROOT", "/tmp/hermes-merry-wiki")),
+            agent_loop_jobs=_parse_jobs(os.getenv("AGENT_LOOP_JOBS", "")),
+            agent_loop_interval_seconds=_parse_int(os.getenv("AGENT_LOOP_INTERVAL_SECONDS", ""), default=1800),
+            agent_loop_max_cycles=_parse_int(os.getenv("AGENT_LOOP_MAX_CYCLES", ""), default=0),
         )
 
     def validate_for_job(self, job_name: str, *, has_inline_sources: bool = False) -> None:
@@ -66,3 +78,21 @@ class RuntimeConfig:
             "GMAIL_LABEL_ID": self.gmail_label_id,
             "AC_ID": self.default_ac_id,
         }[name]
+
+
+def _parse_jobs(value: str) -> tuple[str, ...]:
+    if not value.strip():
+        return (
+            "ingest-sources",
+            "resolve-entities",
+            "score-candidates",
+            "sync-review-sheet",
+            "calibrate-scores",
+        )
+    return tuple(part.strip() for part in value.split(",") if part.strip())
+
+
+def _parse_int(value: str, *, default: int) -> int:
+    if not value.strip():
+        return default
+    return int(value)

@@ -4,11 +4,14 @@ import argparse
 import hashlib
 import json
 import sys
+import time
+from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Sequence
 
 from merry_mcp.registry import allowed_tool_names
+from merry_runtime.agent_loop import run_agent_loop
 from merry_runtime.hermes_profile import validate_tool_lockdown
 from merry_runtime.job_runner import JobRunError, run_job
 from merry_runtime.runtime_config import RuntimeConfig, RuntimeConfigError
@@ -46,6 +49,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     run_parser.add_argument("--sources-json", default="", help="Inline JSON source list for ingestion jobs.")
     run_parser.add_argument("--sources-file", default="", help="Path to JSON source list for ingestion jobs.")
     run_parser.add_argument("--ac-id", default="", help="AC profile ID for score/review jobs. Defaults to AC_ID env.")
+
+    loop_parser = subparsers.add_parser("loop")
+    loop_parser.add_argument("--max-cycles", type=int, default=None, help="Override AGENT_LOOP_MAX_CYCLES.")
+    loop_parser.add_argument("--interval-seconds", type=int, default=None, help="Override AGENT_LOOP_INTERVAL_SECONDS.")
 
     args = parser.parse_args(argv)
 
@@ -94,6 +101,29 @@ def main(argv: Sequence[str] | None = None) -> int:
 
         print(json.dumps(result, ensure_ascii=False, sort_keys=True))
         return 0
+
+    if args.command == "loop":
+        config = RuntimeConfig.from_env()
+        try:
+            for job_name in config.agent_loop_jobs:
+                config.validate_for_job(job_name, has_inline_sources=False)
+            runtime = build_runtime(config)
+            result = run_agent_loop(
+                runtime=runtime,
+                config=config,
+                jobs=config.agent_loop_jobs,
+                interval_seconds=args.interval_seconds
+                if args.interval_seconds is not None
+                else config.agent_loop_interval_seconds,
+                max_cycles=args.max_cycles if args.max_cycles is not None else config.agent_loop_max_cycles,
+                sleep_fn=time.sleep,
+            )
+        except RuntimeConfigError as exc:
+            print(f"Job failed: {exc}", file=sys.stderr)
+            return 2
+
+        print(json.dumps(asdict(result), ensure_ascii=False, sort_keys=True))
+        return 0 if result.failure_count == 0 else 1
 
     parser.error(f"Unknown command: {args.command}")
 
