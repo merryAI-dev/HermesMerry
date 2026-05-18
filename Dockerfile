@@ -16,6 +16,9 @@ COPY configs ./configs
 
 RUN pip install --no-cache-dir --no-deps --no-build-isolation .
 
+COPY scripts/runpod_entrypoint.sh /usr/local/bin/runpod-entrypoint
+RUN chmod 755 /usr/local/bin/runpod-entrypoint
+
 USER hermes
 
-ENTRYPOINT ["python3", "-m", "merry_runtime.jobs"]
+ENTRYPOINT ["runpod-entrypoint", "python3", "-m", "merry_runtime.jobs"]

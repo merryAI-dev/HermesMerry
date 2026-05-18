@@ -98,3 +98,28 @@ def test_dev_test_tooling_is_hash_locked() -> None:
         "pytest",
         PYTEST_VERSION,
     )
+
+
+def test_runpod_entrypoint_materializes_gcp_credentials_to_tmp_only() -> None:
+    entrypoint = (REPO_ROOT / "scripts" / "runpod_entrypoint.sh").read_text()
+
+    assert "GOOGLE_APPLICATION_CREDENTIALS_JSON" in entrypoint
+    assert "mktemp /tmp/hermes-gcp-" in entrypoint
+    assert "chmod 600" in entrypoint
+    assert "/workspace" not in entrypoint
+
+
+def test_dockerfile_uses_runpod_entrypoint_before_jobs_cli() -> None:
+    dockerfile = (REPO_ROOT / "Dockerfile").read_text()
+
+    assert "COPY scripts/runpod_entrypoint.sh /usr/local/bin/runpod-entrypoint" in dockerfile
+    assert 'ENTRYPOINT ["runpod-entrypoint", "python3", "-m", "merry_runtime.jobs"]' in dockerfile
+
+
+def test_ghcr_build_script_pushes_linux_amd64_staging_image() -> None:
+    script = (REPO_ROOT / "scripts" / "build_ghcr_staging.sh").read_text()
+
+    assert "docker buildx build" in script
+    assert "--platform linux/amd64" in script
+    assert "ghcr.io/${GHCR_OWNER}/hermes-merry:${IMAGE_TAG}" in script
+    assert "--push" in script
