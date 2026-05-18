@@ -242,6 +242,96 @@ env -i \
   python3 -m merry_runtime.jobs run ingest-sources --sources-json '[{"channel":"external_referral","payload":{"company":"Canary CareFarm","region":"Jeonbuk","industry":"AgriTech","reason":"Canary synthetic referral","tags":"social_problem:rural_income, beneficiary:older_farmers","confidence":"0.91"}}]'
 ```
 
+## Curated Candidate Batch Import
+
+Use curated CSV imports only for controlled Sheet, Gmail, or Drive exports. The
+CSV must contain exactly these columns:
+
+```text
+company,brand,representative,homepage,region,industry,channel,evidence,confidence,tags,source_uri
+```
+
+Allowed `channel` values are `hankyung_ceo_interview`, `info_mail`,
+`external_referral`, and `internal_screening_memo`. Keep the original export
+location in `source_uri`; it is written through to `raw_sources.url` and linked
+to each imported signal through the raw source row.
+
+Run the no-write quality gate before staging import. This parses the file,
+redacts PII in `evidence`, validates channels, and rejects batches where rows in
+duplicate normalized company-name groups with conflicting non-empty homepages
+exceed 5% of the batch.
+
+```bash
+export CANDIDATE_BATCH_CSV='tests/fixtures/candidate_batch_100.csv'
+
+PYTHONPATH=src python3 - <<'PY'
+import json
+import os
+from pathlib import Path
+
+from merry_runtime.ingestion.batch_import import parse_candidate_batch_csv
+
+batch = parse_candidate_batch_csv(Path(os.environ["CANDIDATE_BATCH_CSV"]).read_text(encoding="utf-8"))
+print(json.dumps(
+    {
+        "row_count": batch.row_count,
+        "quality_gate": {
+            "passed": batch.quality_report.passed,
+            "conflict_rate": batch.quality_report.conflict_rate,
+            "conflicting_row_count": batch.quality_report.conflicting_row_count,
+            "duplicate_conflicts": batch.quality_report.duplicate_conflicts[:10],
+        },
+    },
+    ensure_ascii=False,
+    sort_keys=True,
+))
+raise SystemExit(0 if batch.quality_report.passed else 2)
+PY
+```
+
+After the quality gate passes, import into staging from a clean environment
+using only the staging values copied above.
+
+```bash
+env -i \
+  PATH="$PATH" \
+  HOME="$HOME" \
+  PYTHONPATH=src \
+  GCP_PROJECT_ID="$GCP_PROJECT_ID" \
+  BIGQUERY_DATASET="$BIGQUERY_DATASET" \
+  RAW_BUCKET="$RAW_BUCKET" \
+  WIKI_ROOT="$WIKI_ROOT" \
+  CANDIDATE_BATCH_CSV="$CANDIDATE_BATCH_CSV" \
+  python3 - <<'PY'
+import json
+import os
+from pathlib import Path
+
+from merry_runtime.pipelines.import_candidate_batch import import_candidate_batch
+from merry_runtime.runtime_config import RuntimeConfig
+from merry_runtime.runtime_factory import build_runtime
+
+runtime = build_runtime(RuntimeConfig.from_env())
+result = import_candidate_batch(
+    csv_text=Path(os.environ["CANDIDATE_BATCH_CSV"]).read_text(encoding="utf-8"),
+    object_store=runtime.object_store,
+    structured_store=runtime.structured_store,
+    wiki_store=runtime.wiki_store,
+    run_id="run_staging_curated_candidate_batch",
+)
+print(json.dumps(
+    {
+        "run_id": result.run_id,
+        "row_count": result.row_count,
+        "imported_count": result.imported_count,
+        "quality_gate_passed": result.quality_report.passed,
+    },
+    ensure_ascii=False,
+    sort_keys=True,
+))
+PY
+```
+
 ## Cloud Run Job Order
 
 Run manual Cloud Run jobs in this order after Terraform apply and image push.

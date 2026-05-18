@@ -25,7 +25,7 @@ def parse_article(text: str) -> ParsedSource:
         raw_text=text,
         source_type="article",
         channel="hankyung_ceo_interview",
-        uri=fields.get("url", ""),
+        uri=_source_uri(fields, "url"),
         title=fields.get("title", ""),
     )
 
@@ -37,7 +37,7 @@ def parse_email(text: str) -> ParsedSource:
         raw_text=text,
         source_type="email",
         channel="info_mail",
-        uri=fields.get("from", ""),
+        uri=_source_uri(fields, "from"),
         title=fields.get("subject", ""),
     )
 
@@ -49,7 +49,7 @@ def parse_internal_memo(text: str) -> ParsedSource:
         raw_text=text,
         source_type="drive_doc",
         channel="internal_screening_memo",
-        uri=fields.get("homepage", ""),
+        uri=_source_uri(fields, "homepage"),
         title=fields.get("memo", ""),
     )
 
@@ -64,7 +64,7 @@ def parse_referral_row(row: dict[str, Any]) -> ParsedSource:
         raw_text=raw_text,
         source_type="sheet_row",
         channel="external_referral",
-        uri="google-sheet://external-referrals",
+        uri=_source_uri(fields, "source_uri", default="google-sheet://external-referrals"),
         title=f"Referral: {fields.get('company', '')}",
     )
 
@@ -105,6 +105,7 @@ def _parsed_from_fields(
         region=fields.get("region", ""),
         industry=fields.get("industry", ""),
         homepage=fields.get("homepage") or None,
+        representative=fields.get("representative", ""),
     )
     signal = Signal(
         signal_id=signal_id,
@@ -137,6 +138,14 @@ def _parse_confidence(value: str) -> float:
         return max(0.0, min(1.0, float(value)))
     except ValueError:
         return 0.5
+
+
+def _source_uri(fields: dict[str, str], fallback_key: str, *, default: str = "") -> str:
+    if fields.get("source_uri"):
+        return fields["source_uri"]
+    if fields.get("url"):
+        return fields["url"]
+    return fields.get(fallback_key, default)
 
 
 def _stable_id(prefix: str, *parts: str) -> str:
