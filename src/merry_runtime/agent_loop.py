@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from typing import Any
 
 from merry_runtime.job_runner import run_job
@@ -43,6 +45,7 @@ def run_agent_loop(
             try:
                 payload = run_job_fn(job_name, runtime=runtime, config=config)
             except Exception as exc:
+                _record_failed_job(runtime=runtime, job_name=job_name, exc=exc)
                 results.append(
                     LoopJobResult(
                         job_name=job_name,
@@ -65,3 +68,39 @@ def run_agent_loop(
         failure_count=failure_count,
         results=tuple(results),
     )
+
+
+def _record_failed_job(*, runtime: Any, job_name: str, exc: Exception) -> None:
+    structured_store = getattr(runtime, "structured_store", None)
+    if structured_store is None:
+        return
+    now = datetime.now(UTC).isoformat()
+    run_id = f"run_failed_{_safe_job_name(job_name)}_{_short_digest(now, type(exc).__name__, str(exc))}"
+    try:
+        structured_store.upsert_rows(
+            table="agent_runs",
+            rows=[
+                {
+                    "run_id": run_id,
+                    "job_name": job_name,
+                    "status": "failed",
+                    "started_at": now,
+                    "finished_at": now,
+                    "input_count": 0,
+                    "output_count": 0,
+                    "error_message": f"{type(exc).__name__}: {exc}"[:1000],
+                }
+            ],
+            key_fields=("run_id",),
+        )
+    except Exception:
+        return
+
+
+def _safe_job_name(job_name: str) -> str:
+    return "".join(character if character.isalnum() else "_" for character in job_name)
+
+
+def _short_digest(*parts: str) -> str:
+    payload = "\n".join(parts)
+    return hashlib.sha1(payload.encode("utf-8")).hexdigest()[:12]

@@ -61,6 +61,38 @@ def test_agent_loop_records_failures_and_continues_to_next_job() -> None:
     assert "RuntimeError: score failed" in result.results[1].error_message
 
 
+def test_agent_loop_persists_failed_job_run_for_backup_visibility() -> None:
+    runtime = RuntimeAdapters(
+        object_store=FakeObjectStore(bucket="raw-bucket"),
+        structured_store=FakeStructuredStore(),
+        review_queue=FakeReviewQueue(),
+    )
+
+    def run_job_fn(job_name, *, runtime, config, sources_json="", ac_id=""):
+        if job_name == "crawl-sources":
+            raise RuntimeError("crawl failed")
+        return {"job_name": job_name, "status": "success"}
+
+    result = run_agent_loop(
+        runtime=runtime,
+        config=object(),
+        jobs=("crawl-sources", "backup-export"),
+        interval_seconds=0,
+        max_cycles=1,
+        run_job_fn=run_job_fn,
+        sleep_fn=lambda seconds: None,
+    )
+
+    failed_rows = [
+        row
+        for row in runtime.structured_store.tables["agent_runs"]
+        if row["job_name"] == "crawl-sources" and row["status"] == "failed"
+    ]
+    assert result.failure_count == 1
+    assert len(failed_rows) == 1
+    assert "RuntimeError: crawl failed" in failed_rows[0]["error_message"]
+
+
 def test_runtime_config_reads_agent_loop_environment(monkeypatch) -> None:
     monkeypatch.setenv("AGENT_LOOP_JOBS", "resolve-entities,score-candidates")
     monkeypatch.setenv("AGENT_LOOP_INTERVAL_SECONDS", "90")
