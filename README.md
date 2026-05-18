@@ -50,6 +50,11 @@ access for Gmail and Sheets. BigQuery is optional warehouse/export
 infrastructure. Cloud Run is optional and remains available only through the `cloud_run`
 Terraform backend mode.
 
+When `REVIEW_SHEET_ID` is configured, `backup-export` also treats the same
+Google Sheet as the first backup surface. It rewrites `SQLite Backup`,
+`Wiki Backup`, and `Backup Manifest` with the latest Mother DB rows, markdown
+wiki chunks, and artifact manifest on every loop.
+
 ## Runtime Jobs
 
 The container entrypoint is `python3 -m merry_runtime.jobs`. Runtime adapters are built from env/ADC:

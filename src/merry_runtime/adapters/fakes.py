@@ -131,6 +131,7 @@ class FakeStructuredStore:
 class FakeReviewQueue:
     published: dict[str, list[dict[str, object]]] = field(default_factory=lambda: defaultdict(list))
     reviews: dict[str, list[dict[str, str]]] = field(default_factory=lambda: defaultdict(list))
+    replaced_headers: dict[str, tuple[str, ...]] = field(default_factory=dict)
 
     def publish_cards(self, *, sheet_tab: str, rows: list[dict[str, object]]) -> int:
         self.published[sheet_tab].extend(dict(row) for row in rows)
@@ -145,6 +146,11 @@ class FakeReviewQueue:
                 existing_rows.append(row_copy)
             else:
                 existing_rows[match_index] = row_copy
+        return len(rows)
+
+    def replace_rows(self, *, sheet_tab: str, headers: tuple[str, ...], rows: list[dict[str, object]]) -> int:
+        self.replaced_headers[sheet_tab] = tuple(headers)
+        self.published[sheet_tab] = [dict(row) for row in rows]
         return len(rows)
 
     def read_pending_reviews(self, *, sheet_tab: str) -> list[dict[str, str]]:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlparse
@@ -176,6 +177,9 @@ KNOWN_BAD_HOMEPAGE_DOMAINS = {
     "youtube.com",
     "youtu.be",
 }
+SIMPLE_SHEET_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+REPLACE_ROWS_BATCH_SIZE = 500
+LOSSLESS_REPLACE_TABS = {"SQLite Backup", "Wiki Backup", "Backup Manifest"}
 
 
 @dataclass(slots=True)
@@ -258,6 +262,43 @@ class GoogleSheetReviewQueue:
             self._append_rows(sheet_tab=sheet_tab, headers=headers, rows=append_rows)
         return len(deduped_rows)
 
+    def replace_rows(self, *, sheet_tab: str, headers: tuple[str, ...], rows: list[dict[str, object]]) -> int:
+        if not headers:
+            raise ValueError("replace_rows requires at least one header")
+        self._ensure_sheet_tab(sheet_tab=sheet_tab)
+        existing_response = self.service.spreadsheets().values().get(
+            spreadsheetId=self.spreadsheet_id,
+            range=_sheet_range(sheet_tab, headers),
+        ).execute()
+        existing_values = existing_response.get("values", [])
+        escape_formula_cells = sheet_tab not in LOSSLESS_REPLACE_TABS
+        rewritten_values = [
+            list(headers),
+            *[_row_values(row, headers, escape_formula_cells=escape_formula_cells) for row in rows],
+        ]
+        for start_index in range(0, len(rewritten_values), REPLACE_ROWS_BATCH_SIZE):
+            batch = rewritten_values[start_index : start_index + REPLACE_ROWS_BATCH_SIZE]
+            start_row = start_index + 1
+            end_row = start_row + len(batch) - 1
+            self.service.spreadsheets().values().update(
+                spreadsheetId=self.spreadsheet_id,
+                range=_sheet_range_rows(sheet_tab, headers, start_row=start_row, end_row=end_row),
+                valueInputOption="RAW",
+                body={"values": batch},
+            ).execute()
+        if len(existing_values) > len(rewritten_values):
+            self.service.spreadsheets().values().clear(
+                spreadsheetId=self.spreadsheet_id,
+                range=_sheet_range_rows(
+                    sheet_tab,
+                    headers,
+                    start_row=len(rewritten_values) + 1,
+                    end_row=len(existing_values),
+                ),
+                body={},
+            ).execute()
+        return len(rows)
+
     def read_pending_reviews(self, *, sheet_tab: str) -> list[dict[str, str]]:
         self._ensure_sheet_tab(sheet_tab=sheet_tab)
         headers = _headers_for_tab(sheet_tab)
@@ -276,7 +317,7 @@ class GoogleSheetReviewQueue:
         headers = _headers_for_tab(sheet_tab)
         response = self.service.spreadsheets().values().get(
             spreadsheetId=self.spreadsheet_id,
-            range=f"{sheet_tab}!1:1",
+            range=f"{_sheet_name(sheet_tab)}!1:1",
         ).execute()
         header_rows = response.get("values") or [[]]
         existing = [str(header) for header in header_rows[0]]
@@ -327,12 +368,19 @@ def _merge_headers(*, existing: list[str], canonical: list[str]) -> list[str]:
 
 def _sheet_range(sheet_tab: str, headers: tuple[str, ...], *, row: str = "") -> str:
     last_column = _column_name(len(headers))
-    return f"{sheet_tab}!A{row}:{last_column}{row}"
+    return f"{_sheet_name(sheet_tab)}!A{row}:{last_column}{row}"
 
 
 def _sheet_range_rows(sheet_tab: str, headers: tuple[str, ...], *, start_row: int, end_row: int) -> str:
     last_column = _column_name(len(headers))
-    return f"{sheet_tab}!A{start_row}:{last_column}{end_row}"
+    return f"{_sheet_name(sheet_tab)}!A{start_row}:{last_column}{end_row}"
+
+
+def _sheet_name(sheet_tab: str) -> str:
+    if SIMPLE_SHEET_NAME.fullmatch(sheet_tab):
+        return sheet_tab
+    escaped = sheet_tab.replace("'", "''")
+    return f"'{escaped}'"
 
 
 def _column_name(index: int) -> str:
@@ -343,8 +391,11 @@ def _column_name(index: int) -> str:
     return name
 
 
-def _row_values(row: dict[str, object], headers: tuple[str, ...]) -> list[object]:
-    return [_safe_cell_value(row.get(key, "")) for key in headers]
+def _row_values(row: dict[str, object], headers: tuple[str, ...], *, escape_formula_cells: bool = True) -> list[object]:
+    values = [row.get(key, "") for key in headers]
+    if not escape_formula_cells:
+        return values
+    return [_safe_cell_value(value) for value in values]
 
 
 def _existing_row_index(

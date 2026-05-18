@@ -202,7 +202,14 @@ Decision Log
 AC Settings
 Exploration Queue
 Run Log
+SQLite Backup
+Wiki Backup
+Backup Manifest
 ```
+
+`SQLite Backup`, `Wiki Backup`, and `Backup Manifest` are agent-owned backup
+tabs. Each `backup-export` run rewrites them as the latest snapshot, then clears
+stale tail rows only after the new snapshot has been written.
 
 Seed the `Crawl Sources` tab with at least:
 

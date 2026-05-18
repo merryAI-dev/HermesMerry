@@ -698,7 +698,7 @@ def test_google_sheet_review_queue_upserts_existing_row_by_key() -> None:
 
     assert count == 1
     assert service.values_obj.append_body is None
-    assert service.values_obj.update_kwargs["range"] == "Candidate Detail!A2:O2"
+    assert service.values_obj.update_kwargs["range"] == "'Candidate Detail'!A2:O2"
     assert service.values_obj.update_body["values"][0][3] == "New Founder"  # type: ignore[index]
     assert service.values_obj.update_body["values"][0][-1] == "founder@merry.ai"  # type: ignore[index]
 
@@ -950,14 +950,139 @@ def test_google_sheet_review_queue_compacts_candidate_detail_by_entity_or_compan
     assert count == 1
     assert service.values_obj.calls[-2][0] == "update"
     assert service.values_obj.calls[-1][0] == "clear"
-    assert service.values_obj.update_kwargs["range"] == "Candidate Detail!A1:O2"
-    assert service.values_obj.clear_kwargs["range"] == "Candidate Detail!A3:O4"
+    assert service.values_obj.update_kwargs["range"] == "'Candidate Detail'!A1:O2"
+    assert service.values_obj.clear_kwargs["range"] == "'Candidate Detail'!A3:O4"
     rewritten = service.values_obj.update_body["values"]  # type: ignore[index]
     assert len(rewritten) == 2
     assert rewritten[1][0] == "ent_good"
     assert rewritten[1][1] == "Merry AI"
     assert rewritten[1][4] == ""
     assert rewritten[1][14] == ""
+
+
+def test_google_sheet_review_queue_replaces_backup_rows_before_clearing_tail() -> None:
+    service = FakeSheetsService()
+    service.sheet_titles.add("SQLite Backup")
+    headers = ("backup_run_id", "table_name", "row_index", "chunk_index", "chunk_count", "sha256", "row_json")
+    service.values_obj.get_responses.append(
+        {
+            "values": [
+                list(headers),
+                ["old_run", "mother_entities", "0", "0", "1", "hash", "{}"],
+                ["old_run", "signals", "0", "0", "1", "hash", "{}"],
+                ["old_run", "sources", "0", "0", "1", "hash", "{}"],
+            ]
+        }
+    )
+    queue = GoogleSheetReviewQueue(service=service, spreadsheet_id="sheet_1")
+
+    count = queue.replace_rows(
+        sheet_tab="SQLite Backup",
+        headers=headers,
+        rows=[
+            {
+                "backup_run_id": "backup_1",
+                "table_name": "=mother_entities",
+                "row_index": 0,
+                "chunk_index": 0,
+                "chunk_count": 1,
+                "sha256": "abc",
+                "row_json": "={\"entity_id\":\"ent_1\"}",
+            }
+        ],
+    )
+
+    assert count == 1
+    assert service.values_obj.calls[-2][0] == "update"
+    assert service.values_obj.calls[-1][0] == "clear"
+    assert service.values_obj.update_kwargs["range"] == "'SQLite Backup'!A1:G2"
+    assert service.values_obj.update_kwargs["valueInputOption"] == "RAW"
+    assert service.values_obj.update_body == {
+        "values": [
+            list(headers),
+            ["backup_1", "=mother_entities", 0, 0, 1, "abc", "={\"entity_id\":\"ent_1\"}"],
+        ]
+    }
+    assert service.values_obj.clear_kwargs["range"] == "'SQLite Backup'!A3:G4"
+
+
+def test_google_sheet_review_queue_replaces_backup_rows_with_header_when_snapshot_is_empty() -> None:
+    service = FakeSheetsService()
+    service.sheet_titles.add("Wiki Backup")
+    headers = ("backup_run_id", "path", "chunk_index", "chunk_count", "sha256", "content")
+    service.values_obj.get_responses.append({"values": [list(headers), ["old_run", "old.md", "0", "1", "hash", "old"]]})
+    queue = GoogleSheetReviewQueue(service=service, spreadsheet_id="sheet_1")
+
+    count = queue.replace_rows(sheet_tab="Wiki Backup", headers=headers, rows=[])
+
+    assert count == 0
+    assert service.values_obj.update_kwargs["range"] == "'Wiki Backup'!A1:F1"
+    assert service.values_obj.update_body == {"values": [list(headers)]}
+    assert service.values_obj.clear_kwargs["range"] == "'Wiki Backup'!A2:F2"
+
+
+def test_google_sheet_review_queue_preserves_backup_content_cells_losslessly() -> None:
+    service = FakeSheetsService()
+    service.sheet_titles.add("Wiki Backup")
+    headers = ("backup_run_id", "path", "chunk_index", "chunk_count", "sha256", "content")
+    service.values_obj.get_responses.append({"values": [list(headers)]})
+    queue = GoogleSheetReviewQueue(service=service, spreadsheet_id="sheet_1")
+
+    queue.replace_rows(
+        sheet_tab="Wiki Backup",
+        headers=headers,
+        rows=[
+            {
+                "backup_run_id": "backup_1",
+                "path": "formulas.md",
+                "chunk_index": 0,
+                "chunk_count": 1,
+                "sha256": "abc",
+                "content": "=literal markdown heading\n+not a formula\n@handle",
+            }
+        ],
+    )
+
+    assert service.values_obj.update_kwargs["valueInputOption"] == "RAW"
+    assert service.values_obj.update_body["values"][1][-1] == "=literal markdown heading\n+not a formula\n@handle"
+
+
+def test_google_sheet_review_queue_replaces_large_snapshots_in_batches_before_clearing() -> None:
+    service = FakeSheetsService()
+    service.sheet_titles.add("SQLite Backup")
+    headers = ("backup_run_id", "table_name", "row_index", "chunk_index", "chunk_count", "sha256", "row_json")
+    service.values_obj.get_responses.append(
+        {
+            "values": [
+                list(headers),
+                *[["old_run", "signals", str(index), "0", "1", "hash", "{}"] for index in range(600)],
+            ]
+        }
+    )
+    queue = GoogleSheetReviewQueue(service=service, spreadsheet_id="sheet_1")
+
+    count = queue.replace_rows(
+        sheet_tab="SQLite Backup",
+        headers=headers,
+        rows=[
+            {
+                "backup_run_id": "backup_1",
+                "table_name": "signals",
+                "row_index": index,
+                "chunk_index": 0,
+                "chunk_count": 1,
+                "sha256": "abc",
+                "row_json": "{}",
+            }
+            for index in range(501)
+        ],
+    )
+
+    update_ranges = [kwargs["range"] for method, kwargs in service.values_obj.calls if method == "update"]
+    assert count == 501
+    assert update_ranges == ["'SQLite Backup'!A1:G500", "'SQLite Backup'!A501:G502"]
+    assert service.values_obj.calls[-1][0] == "clear"
+    assert service.values_obj.clear_kwargs["range"] == "'SQLite Backup'!A503:G601"
 
 
 def test_google_sheet_review_queue_supports_operator_console_tabs() -> None:

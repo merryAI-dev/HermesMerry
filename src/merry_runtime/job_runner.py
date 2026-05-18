@@ -111,6 +111,7 @@ def run_job(
             structured_store=runtime.structured_store,
             backup_root=config.backup_root,
             wiki_root=config.wiki_root,
+            review_queue=runtime.review_queue if config.review_sheet_id else None,
         )
         return {"job_name": job_name, **asdict(result)}
 
