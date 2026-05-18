@@ -216,17 +216,24 @@ class GoogleSheetReviewQueue:
                 incoming_rows=deduped_rows,
                 key_fields=key_fields,
             )
-            self.service.spreadsheets().values().clear(
-                spreadsheetId=self.spreadsheet_id,
-                range=_sheet_range(sheet_tab, headers),
-                body={},
-            ).execute()
+            rewritten_values = [list(headers), *[_row_values(row, headers) for row in compacted_rows]]
             self.service.spreadsheets().values().update(
                 spreadsheetId=self.spreadsheet_id,
-                range=_sheet_range(sheet_tab, headers, row="1"),
+                range=_sheet_range_rows(sheet_tab, headers, start_row=1, end_row=len(rewritten_values)),
                 valueInputOption="RAW",
-                body={"values": [list(headers), *[_row_values(row, headers) for row in compacted_rows]]},
+                body={"values": rewritten_values},
             ).execute()
+            if len(existing_values) > len(rewritten_values):
+                self.service.spreadsheets().values().clear(
+                    spreadsheetId=self.spreadsheet_id,
+                    range=_sheet_range_rows(
+                        sheet_tab,
+                        headers,
+                        start_row=len(rewritten_values) + 1,
+                        end_row=len(existing_values),
+                    ),
+                    body={},
+                ).execute()
             return len(deduped_rows)
 
         existing_index = _existing_row_index(existing_values=existing_values, headers=headers, key_fields=key_fields)
@@ -321,6 +328,11 @@ def _merge_headers(*, existing: list[str], canonical: list[str]) -> list[str]:
 def _sheet_range(sheet_tab: str, headers: tuple[str, ...], *, row: str = "") -> str:
     last_column = _column_name(len(headers))
     return f"{sheet_tab}!A{row}:{last_column}{row}"
+
+
+def _sheet_range_rows(sheet_tab: str, headers: tuple[str, ...], *, start_row: int, end_row: int) -> str:
+    last_column = _column_name(len(headers))
+    return f"{sheet_tab}!A{start_row}:{last_column}{end_row}"
 
 
 def _column_name(index: int) -> str:

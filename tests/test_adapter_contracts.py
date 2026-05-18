@@ -337,22 +337,27 @@ class FakeValues:
     def __init__(self) -> None:
         self.append_body: dict[str, object] | None = None
         self.get_responses: list[dict[str, object]] = []
+        self.calls: list[tuple[str, dict[str, object]]] = []
 
     def append(self, **kwargs: object) -> "FakeValues":
+        self.calls.append(("append", kwargs))
         self.append_kwargs = kwargs
         self.append_body = kwargs["body"]  # type: ignore[index]
         return self
 
     def get(self, **kwargs: object) -> "FakeValues":
+        self.calls.append(("get", kwargs))
         self.get_kwargs = kwargs
         return self
 
     def update(self, **kwargs: object) -> "FakeValues":
+        self.calls.append(("update", kwargs))
         self.update_kwargs = kwargs
         self.update_body = kwargs["body"]  # type: ignore[index]
         return self
 
     def clear(self, **kwargs: object) -> "FakeValues":
+        self.calls.append(("clear", kwargs))
         self.clear_kwargs = kwargs
         self.clear_body = kwargs["body"]  # type: ignore[index]
         return self
@@ -943,7 +948,10 @@ def test_google_sheet_review_queue_compacts_candidate_detail_by_entity_or_compan
     )
 
     assert count == 1
-    assert service.values_obj.clear_kwargs["range"] == "Candidate Detail!A:O"
+    assert service.values_obj.calls[-2][0] == "update"
+    assert service.values_obj.calls[-1][0] == "clear"
+    assert service.values_obj.update_kwargs["range"] == "Candidate Detail!A1:O2"
+    assert service.values_obj.clear_kwargs["range"] == "Candidate Detail!A3:O4"
     rewritten = service.values_obj.update_body["values"]  # type: ignore[index]
     assert len(rewritten) == 2
     assert rewritten[1][0] == "ent_good"
