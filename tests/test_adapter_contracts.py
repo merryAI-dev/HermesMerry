@@ -1,3 +1,5 @@
+import logging
+
 import pytest
 
 from merry_runtime.adapters.bigquery import BigQueryStructuredStore, build_query_job_config
@@ -196,10 +198,11 @@ def test_bigquery_upsert_preserves_merge_error_when_staging_cleanup_fails() -> N
     assert len(client.deleted_tables) == 1
 
 
-def test_bigquery_upsert_does_not_fail_successful_merge_when_staging_cleanup_fails() -> None:
+def test_bigquery_upsert_does_not_fail_successful_merge_when_staging_cleanup_fails(caplog: pytest.LogCaptureFixture) -> None:
     client = FakeFailingCleanupBigQueryClient()
     store = BigQueryStructuredStore(client=client, project_id="p", dataset_id="d")
 
+    caplog.set_level(logging.WARNING, logger="merry_runtime.adapters.bigquery")
     count = store.upsert_rows(
         table="mother_entities",
         rows=[{"entity_id": "ent_1", "name": "Merry AI"}],
@@ -210,6 +213,9 @@ def test_bigquery_upsert_does_not_fail_successful_merge_when_staging_cleanup_fai
     assert len(client.loaded_rows) == 1
     assert "MERGE `p.d.mother_entities`" in client.queries[-1][0]
     assert len(client.deleted_tables) == 1
+    assert "failed to delete BigQuery staging table" in caplog.text
+    assert client.deleted_tables[0] in caplog.text
+    assert "cleanup failed" in caplog.text
 
 
 def test_bigquery_structured_store_query_rows_returns_dicts() -> None:

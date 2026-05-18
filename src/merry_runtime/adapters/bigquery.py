@@ -2,12 +2,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import importlib
+import logging
 from types import SimpleNamespace
 from typing import Any
 import uuid
 
 from merry_runtime.adapters.bigquery_merge import build_merge_sql
 from merry_runtime.schema import BIGQUERY_TABLES
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -42,8 +46,8 @@ class BigQueryStructuredStore:
         finally:
             try:
                 self.client.delete_table(staging_table_id, not_found_ok=True)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("failed to delete BigQuery staging table %s: %s", staging_table_id, exc)
         return len(rows)
 
     def query_rows(self, *, sql: str, parameters: dict[str, object]) -> list[dict[str, object]]:
