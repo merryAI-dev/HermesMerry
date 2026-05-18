@@ -70,6 +70,39 @@ def test_jobs_cli_accepts_sources_json(monkeypatch, tmp_path, capsys) -> None:
     assert output["raw_source_count"] == 1
 
 
+def test_jobs_cli_accepts_sources_file_for_crawl_sources(monkeypatch, tmp_path, capsys) -> None:
+    config = RuntimeConfig(
+        project_id="",
+        dataset_id="",
+        raw_bucket="",
+        object_store_backend="local",
+        raw_root=tmp_path / "raw",
+        wiki_root=tmp_path / "wiki",
+    )
+    runtime = RuntimeAdapters(
+        object_store=FakeObjectStore(bucket="raw-bucket"),
+        structured_store=FakeStructuredStore(),
+        review_queue=FakeReviewQueue(),
+        wiki_store=SQLiteWikiStore(root=tmp_path / "wiki"),
+    )
+    sources_file = tmp_path / "crawl-targets.json"
+    sources_file.write_text(json.dumps([{"url": "https://thevc.kr/", "source_kind": "thevc_investment_ma"}]), encoding="utf-8")
+
+    monkeypatch.setattr("merry_runtime.jobs.RuntimeConfig.from_env", lambda: config)
+    monkeypatch.setattr("merry_runtime.jobs.build_runtime", lambda config: runtime)
+    monkeypatch.setattr(
+        "merry_runtime.jobs.run_job",
+        lambda job_name, **kwargs: {"job_name": job_name, "target_count": 1, "crawled_source_count": 5},
+    )
+
+    exit_code = main(["run", "crawl-sources", "--sources-file", str(sources_file)])
+
+    output = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert output["job_name"] == "crawl-sources"
+    assert output["crawled_source_count"] == 5
+
+
 def test_jobs_cli_accepts_sources_file_for_ingest_ac_profiles(monkeypatch, tmp_path, capsys) -> None:
     config = RuntimeConfig(
         project_id="project-1",

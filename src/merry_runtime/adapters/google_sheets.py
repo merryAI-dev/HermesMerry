@@ -143,6 +143,19 @@ OPERATOR_CONSOLE_HEADERS: dict[str, tuple[str, ...]] = {
         "error_message",
         "next_action",
     ),
+    "Crawl Sources": (
+        "url",
+        "source_kind",
+        "channel",
+        "company",
+        "region",
+        "industry",
+        "tags",
+        "confidence",
+        "status",
+        "last_crawled_at",
+        "error_message",
+    ),
 }
 
 

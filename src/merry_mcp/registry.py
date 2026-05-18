@@ -16,8 +16,8 @@ class MCPToolContract:
 _TOOLS = {
     "ingest_raw_source": MCPToolContract(
         name="ingest_raw_source",
-        description="Store a raw source payload in GCS and register metadata in BigQuery.",
-        side_effect_scope="gcs_bigquery",
+        description="Store a raw source payload and register metadata in the Mother DB.",
+        side_effect_scope="raw_store_structured_store",
         input_schema={
             "type": "object",
             "required": ["source_type", "channel", "uri", "raw_text"],
@@ -31,10 +31,24 @@ _TOOLS = {
             },
         },
     ),
+    "crawl_public_sources": MCPToolContract(
+        name="crawl_public_sources",
+        description="Crawl explicitly configured public source targets and ingest discovered startup signals.",
+        side_effect_scope="public_web_sqlite_wiki",
+        input_schema={
+            "type": "object",
+            "required": ["targets"],
+            "additionalProperties": False,
+            "properties": {
+                "targets": {"type": "array", "items": {"type": "object"}, "maxItems": 20},
+                "reason": {"type": "string", "maxLength": 1000},
+            },
+        },
+    ),
     "upsert_entity_signal": MCPToolContract(
         name="upsert_entity_signal",
         description="Create or merge a Mother DB entity and attach evidence-backed signals.",
-        side_effect_scope="bigquery",
+        side_effect_scope="structured_store",
         input_schema={
             "type": "object",
             "required": ["entity", "signals"],
@@ -47,8 +61,8 @@ _TOOLS = {
     ),
     "enqueue_candidate_card": MCPToolContract(
         name="enqueue_candidate_card",
-        description="Write an AC candidate card to BigQuery and the review Sheet queue.",
-        side_effect_scope="bigquery_sheets",
+        description="Write an AC candidate card to the Mother DB and the review Sheet queue.",
+        side_effect_scope="structured_store_sheets",
         input_schema={
             "type": "object",
             "required": ["ac_id", "entity_id", "summary", "recommended_action"],
@@ -64,7 +78,7 @@ _TOOLS = {
     "record_review_feedback": MCPToolContract(
         name="record_review_feedback",
         description="Persist human Sheet review decisions and update card status.",
-        side_effect_scope="bigquery",
+        side_effect_scope="structured_store",
         input_schema={
             "type": "object",
             "required": ["card_id", "reviewer", "decision"],

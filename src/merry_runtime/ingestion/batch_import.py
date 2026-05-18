@@ -24,6 +24,7 @@ REQUIRED_COLUMNS: tuple[str, ...] = (
 )
 ALLOWED_CHANNELS: set[str] = {
     "hankyung_ceo_interview",
+    "thevc_investment_ma",
     "info_mail",
     "external_referral",
     "internal_screening_memo",

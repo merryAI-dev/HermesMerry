@@ -4,6 +4,7 @@ import pytest
 
 from merry_runtime.adapters.fakes import FakeNotifier, FakeObjectStore, FakeReviewQueue, FakeStructuredStore
 from merry_runtime.job_runner import JobRunError, RuntimeAdapters, run_job
+from merry_runtime.pipelines.crawl_sources import CrawlResult
 from merry_runtime.runtime_config import RuntimeConfig
 from merry_runtime.wiki_store import SQLiteWikiStore
 
@@ -54,6 +55,53 @@ def test_run_ingest_sources_uses_sources_json_and_updates_wiki(tmp_path) -> None
     assert result["job_name"] == "ingest-sources"
     assert result["raw_source_count"] == 1
     assert (tmp_path / "wiki" / "entities" / "carefarm-carbon.md").exists()
+
+
+def test_run_crawl_sources_uses_sources_json_and_updates_wiki(monkeypatch, tmp_path) -> None:
+    runtime = _runtime(tmp_path)
+    sources_json = json.dumps([{"url": "https://thevc.kr/", "source_kind": "thevc_investment_ma"}])
+
+    monkeypatch.setattr(
+        "merry_runtime.job_runner.crawl_sources",
+        lambda **kwargs: CrawlResult(
+            run_id="run_crawl_test",
+            target_count=1,
+            crawled_source_count=5,
+            ingested_raw_source_count=5,
+            ingested_entity_count=5,
+            ingested_signal_count=5,
+        ),
+    )
+
+    result = run_job("crawl-sources", runtime=runtime, config=_config(tmp_path), sources_json=sources_json)
+
+    assert result["job_name"] == "crawl-sources"
+    assert result["crawled_source_count"] == 5
+
+
+def test_run_crawl_sources_reads_targets_from_sheet_when_json_missing(monkeypatch, tmp_path) -> None:
+    runtime = _runtime(tmp_path)
+    runtime.review_queue.seed_reviews("Crawl Sources", [{"url": "https://thevc.kr/", "source_kind": "thevc_investment_ma"}])
+    seen_targets = []
+
+    def fake_crawl_sources(**kwargs):
+        seen_targets.extend(kwargs["targets"])
+        return CrawlResult(
+            run_id="run_crawl_sheet",
+            target_count=1,
+            crawled_source_count=1,
+            ingested_raw_source_count=1,
+            ingested_entity_count=1,
+            ingested_signal_count=1,
+        )
+
+    monkeypatch.setattr("merry_runtime.job_runner.crawl_sources", fake_crawl_sources)
+
+    result = run_job("crawl-sources", runtime=runtime, config=_config(tmp_path))
+
+    assert result["job_name"] == "crawl-sources"
+    assert result["target_count"] == 1
+    assert seen_targets == [{"url": "https://thevc.kr/", "source_kind": "thevc_investment_ma"}]
 
 
 def test_run_ingest_ac_profiles_uses_sources_json_and_updates_wiki(tmp_path) -> None:

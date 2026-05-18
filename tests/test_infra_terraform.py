@@ -73,7 +73,7 @@ def test_terraform_defines_scheduled_calibrate_scores_job_after_review_sync() ->
     assert "calibrate-scores" in main_tf
     assert '"run", "calibrate-scores"' in main_tf
     assert 'schedule = "50 * * * *"' in main_tf
-    assert 'resource.labels.job_name=~"ingest-sources|ingest-ac-profiles|resolve-entities|score-candidates|sync-review-sheet|calibrate-scores|weekly-summary"' in main_tf
+    assert 'resource.labels.job_name=~"crawl-sources|ingest-sources|ingest-ac-profiles|resolve-entities|score-candidates|sync-review-sheet|calibrate-scores|weekly-summary"' in main_tf
 
 
 def test_terraform_scheduler_invoker_only_grants_scheduled_jobs() -> None:

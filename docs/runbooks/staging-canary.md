@@ -256,8 +256,8 @@ CSV must contain exactly these columns:
 company,brand,representative,homepage,region,industry,channel,evidence,confidence,tags,source_uri
 ```
 
-Allowed `channel` values are `hankyung_ceo_interview`, `info_mail`,
-`external_referral`, and `internal_screening_memo`. Keep the original export
+Allowed `channel` values are `hankyung_ceo_interview`, `thevc_investment_ma`,
+`info_mail`, `external_referral`, and `internal_screening_memo`. Keep the original export
 location in `source_uri`; it is written through to `raw_sources.url` and linked
 to each imported signal through the raw source row.
 

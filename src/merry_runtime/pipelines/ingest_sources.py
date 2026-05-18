@@ -7,7 +7,14 @@ from datetime import UTC, datetime
 from typing import Any
 
 from merry_runtime.adapters.interfaces import ObjectStore, StructuredStore
-from merry_runtime.ingestion.parsers import ParsedSource, parse_article, parse_email, parse_internal_memo, parse_referral_row
+from merry_runtime.ingestion.parsers import (
+    ParsedSource,
+    parse_article,
+    parse_email,
+    parse_internal_memo,
+    parse_referral_row,
+    parse_thevc_investment_card,
+)
 from merry_runtime.ontology import build_startup_graph
 from merry_runtime.wiki_store import SQLiteWikiStore
 
@@ -109,6 +116,8 @@ def _parse_source(source: dict[str, Any]) -> ParsedSource:
         return parse_article(payload)
     if channel == "internal_screening_memo" and isinstance(payload, str):
         return parse_internal_memo(payload)
+    if channel == "thevc_investment_ma" and isinstance(payload, str):
+        return parse_thevc_investment_card(payload)
     raise ValueError(f"Unsupported source channel or payload type: {channel}")
 
 

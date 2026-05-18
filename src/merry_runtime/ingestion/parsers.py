@@ -54,6 +54,18 @@ def parse_internal_memo(text: str) -> ParsedSource:
     )
 
 
+def parse_thevc_investment_card(text: str) -> ParsedSource:
+    fields = _parse_key_value_text(text)
+    return _parsed_from_fields(
+        fields=fields,
+        raw_text=text,
+        source_type="web_listing",
+        channel="thevc_investment_ma",
+        uri=_source_uri(fields, "url"),
+        title=fields.get("title", ""),
+    )
+
+
 def parse_referral_row(row: dict[str, Any]) -> ParsedSource:
     fields = {str(key).casefold(): str(value) for key, value in row.items() if value is not None}
     raw_text = json.dumps(row, ensure_ascii=False, sort_keys=True)
@@ -143,6 +155,8 @@ def _parse_confidence(value: str) -> float:
 def _source_uri(fields: dict[str, str], fallback_key: str, *, default: str = "") -> str:
     if fields.get("source_uri"):
         return fields["source_uri"]
+    if fields.get("source uri"):
+        return fields["source uri"]
     if fields.get("url"):
         return fields["url"]
     return fields.get(fallback_key, default)

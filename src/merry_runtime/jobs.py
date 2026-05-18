@@ -38,6 +38,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         "job_name",
         choices=[
             "ingest-sources",
+            "crawl-sources",
             "ingest-ac-profiles",
             "resolve-entities",
             "score-candidates",

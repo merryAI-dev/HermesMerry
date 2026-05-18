@@ -38,8 +38,9 @@ Cloud Run is optional and belongs to `docs/runbooks/staging-canary.md`.
 - `SLACK_BOT_TOKEN`
 - `GOOGLE_APPLICATION_CREDENTIALS_JSON`
 - `WIKI_ROOT=/workspace/hermes/wiki`
-- `AGENT_LOOP_JOBS=ingest-sources,resolve-entities,score-candidates,sync-review-sheet,calibrate-scores,backup-export`
-- `AGENT_LOOP_INTERVAL_SECONDS=1800`
+- `CRAWL_SHEET_TAB=Crawl Sources`
+- `AGENT_LOOP_JOBS=crawl-sources,ingest-sources,resolve-entities,score-candidates,sync-review-sheet,calibrate-scores,backup-export`
+- `AGENT_LOOP_INTERVAL_SECONDS=3600`
 - `AGENT_LOOP_MAX_CYCLES=0` for the always-on SQLite loop
 
 ## Stop Conditions
@@ -127,7 +128,9 @@ MOTHER_DB_PATH: /workspace/hermes/mother.db
 OBJECT_STORE_BACKEND: local
 RAW_ROOT: /workspace/hermes/raw
 BACKUP_ROOT: /workspace/hermes/backups
-AGENT_LOOP_JOBS: ingest-sources,resolve-entities,score-candidates,sync-review-sheet,calibrate-scores,backup-export
+CRAWL_SHEET_TAB: Crawl Sources
+AGENT_LOOP_JOBS: crawl-sources,ingest-sources,resolve-entities,score-candidates,sync-review-sheet,calibrate-scores,backup-export
+AGENT_LOOP_INTERVAL_SECONDS: 3600
 AGENT_LOOP_MAX_CYCLES: 0
 ```
 
@@ -145,7 +148,8 @@ Image: docker.io/boram1220/hermes-merry:staging-cb0ddd0
 ```
 
 The SQLite canary does not require BigQuery billing. Add the Google service
-account secret back only when the template also enables Gmail or Sheets jobs.
+account secret back when the template enables Gmail, Sheets, or Sheet-driven
+crawl jobs.
 
 The one-cycle template overrides the container command to run the loop once and
 then sleep:
@@ -187,6 +191,7 @@ find /workspace/hermes/wiki -maxdepth 2 -type f | sort | head
 Verify Sheet console tabs:
 
 ```text
+Crawl Sources
 Review Queue
 Candidate Detail
 Evidence
@@ -195,6 +200,24 @@ AC Settings
 Exploration Queue
 Run Log
 ```
+
+Seed the `Crawl Sources` tab with at least:
+
+```text
+url: https://thevc.kr/
+source_kind: thevc_investment_ma
+status: pending
+```
+
+The THE VC crawler is limited to public HTML paths. Do not configure `/api`
+targets. `https://thevc.kr/robots.txt` currently allows `/` and disallows
+`/api`; treat that as the runtime boundary.
+
+Crawler backend behavior:
+
+- Uses `crawl4ai` first when it is installed in the runtime image.
+- Falls back to a bounded stdlib HTML fetch for server-rendered pages.
+- Keeps target count bounded through the `crawl_public_sources` MCP contract.
 
 BigQuery is optional. Use it only as a warehouse/export mirror after billing and
 IAM are explicitly enabled:

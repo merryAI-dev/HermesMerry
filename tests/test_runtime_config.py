@@ -76,6 +76,27 @@ def test_runtime_config_accepts_local_object_store_for_ingest(monkeypatch, tmp_p
     assert config.raw_root == tmp_path / "raw"
 
 
+def test_runtime_config_accepts_crawl_sources_with_inline_targets(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("OBJECT_STORE_BACKEND", "local")
+    monkeypatch.setenv("RAW_ROOT", str(tmp_path / "raw"))
+
+    config = RuntimeConfig.from_env()
+
+    config.validate_for_job("crawl-sources", has_inline_sources=True)
+
+
+def test_runtime_config_requires_review_sheet_for_crawl_sources_without_inline_targets(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("OBJECT_STORE_BACKEND", "local")
+    monkeypatch.setenv("RAW_ROOT", str(tmp_path / "raw"))
+
+    config = RuntimeConfig.from_env()
+
+    with pytest.raises(RuntimeConfigError) as error:
+        config.validate_for_job("crawl-sources", has_inline_sources=False)
+
+    assert "REVIEW_SHEET_ID" in str(error.value)
+
+
 def test_runtime_config_reads_sqlite_structured_store_paths(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("STRUCTURED_STORE_BACKEND", "sqlite")
     monkeypatch.setenv("MOTHER_DB_PATH", str(tmp_path / "mother.db"))

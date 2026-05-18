@@ -56,6 +56,7 @@ def test_parse_candidate_batch_csv_preserves_known_channel_and_source_uri() -> N
 
     assert ALLOWED_CHANNELS == {
         "hankyung_ceo_interview",
+        "thevc_investment_ma",
         "info_mail",
         "external_referral",
         "internal_screening_memo",

@@ -174,3 +174,10 @@ Commit message: `docs: make sqlite sheet runtime primary`
 - Spec coverage: tasks cover SQLite store, runtime switch, Sheet console, backup/export, and docs.
 - Placeholder scan: no TBD/TODO/fill-in sections.
 - Type consistency: `STRUCTURED_STORE_BACKEND`, `MOTHER_DB_PATH`, and `BACKUP_ROOT` are used consistently across config, factory, docs, and tests.
+
+## Deferred Backlog
+
+These are intentionally deferred while the crawl loop is opened first:
+
+- Rewire `score-candidates` writes from AC-specific tabs to the canonical `Review Queue` tab.
+- Wire Sheet decisions back into SQLite as the durable feedback source for calibration.

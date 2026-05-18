@@ -11,6 +11,7 @@ from merry_runtime.ontology import (
 
 def test_discovery_channel_meanings_preserve_source_semantics() -> None:
     assert CHANNEL_MEANINGS["hankyung_ceo_interview"].meaning == "public_cold_lead"
+    assert CHANNEL_MEANINGS["thevc_investment_ma"].meaning == "public_investment_ma_signal"
     assert CHANNEL_MEANINGS["info_mail"].meaning == "inbound_intent"
     assert CHANNEL_MEANINGS["external_referral"].meaning == "referral_signal"
     assert CHANNEL_MEANINGS["internal_screening_memo"].meaning == "semi_qualified_signal"
@@ -92,4 +93,3 @@ def test_wiki_and_embedding_are_projections_not_source_of_truth() -> None:
             "text": "Judge referral\nTargets income stabilization for older farming households.",
         }
     ]
-

@@ -55,6 +55,22 @@ def test_mcp_server_calls_registered_handler() -> None:
     assert seen_payloads == [{"card_id": "card_1", "reviewer": "boram", "decision": "advance"}]
 
 
+def test_mcp_server_allows_crawl_public_sources_handler() -> None:
+    seen_payloads = []
+    server = MerryMCPServer(handlers={"crawl_public_sources": lambda payload: seen_payloads.append(payload) or {"crawled_source_count": 5}})
+
+    result = server.call_tool(
+        "crawl_public_sources",
+        {
+            "targets": [{"url": "https://thevc.kr/", "source_kind": "thevc_investment_ma", "max_cards": 5}],
+            "reason": "hourly discovery loop",
+        },
+    )
+
+    assert result == {"crawled_source_count": 5}
+    assert seen_payloads[0]["targets"][0]["url"] == "https://thevc.kr/"
+
+
 def test_mcp_server_redacts_pii_before_slack_summary_handler() -> None:
     seen_payloads = []
     server = MerryMCPServer(handlers={"send_slack_summary": lambda payload: seen_payloads.append(payload) or {"ok": True}}, slack_channel="C123")

@@ -10,6 +10,7 @@ from typing import Any
 from merry_runtime.adapters.interfaces import Notifier, ObjectStore, ReviewQueue, StructuredStore
 from merry_runtime.pipelines.backup_export import backup_export
 from merry_runtime.pipelines.calibrate_scores import calibrate_scores
+from merry_runtime.pipelines.crawl_sources import crawl_sources
 from merry_runtime.pipelines.ingest_ac_profiles import ingest_ac_profiles
 from merry_runtime.pipelines.ingest_sources import ingest_sources
 from merry_runtime.pipelines.resolve_entities import resolve_entities
@@ -48,6 +49,18 @@ def run_job(
             raise JobRunError("ingest-sources requires --sources-json or a configured Gmail source with messages")
         result = ingest_sources(
             sources=sources,
+            object_store=runtime.object_store,
+            structured_store=runtime.structured_store,
+            wiki_store=runtime.wiki_store,
+        )
+        return {"job_name": job_name, **asdict(result)}
+
+    if job_name == "crawl-sources":
+        targets = _sources_from_json(sources_json) if sources_json else _crawl_targets_from_sheet(runtime, config)
+        if not targets:
+            raise JobRunError("crawl-sources requires --sources-json, --sources-file, or Crawl Sources sheet rows")
+        result = crawl_sources(
+            targets=targets,
             object_store=runtime.object_store,
             structured_store=runtime.structured_store,
             wiki_store=runtime.wiki_store,
@@ -118,6 +131,11 @@ def _sources_from_gmail(runtime: RuntimeAdapters) -> list[dict[str, Any]]:
         return []
     messages = runtime.gmail_source.fetch_labeled_messages()
     return [{"channel": "info_mail", "payload": _gmail_message_to_text(message)} for message in messages]
+
+
+def _crawl_targets_from_sheet(runtime: RuntimeAdapters, config: RuntimeConfig) -> list[dict[str, Any]]:
+    rows = runtime.review_queue.read_pending_reviews(sheet_tab=config.crawl_sheet_tab)
+    return [dict(row) for row in rows if str(row.get("url") or "").strip()]
 
 
 def _gmail_message_to_text(message: dict[str, Any]) -> str:

@@ -49,6 +49,12 @@ CHANNEL_MEANINGS = {
         trust_tier="observed",
         description="Publicly observed cold lead from media/interview coverage.",
     ),
+    "thevc_investment_ma": DiscoveryChannelMeaning(
+        channel="thevc_investment_ma",
+        meaning="public_investment_ma_signal",
+        trust_tier="observed",
+        description="Publicly observed investment or M&A card from THE VC.",
+    ),
     "info_mail": DiscoveryChannelMeaning(
         channel="info_mail",
         meaning="inbound_intent",

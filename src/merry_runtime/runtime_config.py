@@ -21,6 +21,7 @@ class RuntimeConfig:
     review_sheet_id: str = ""
     slack_channel: str = ""
     gmail_label_id: str = ""
+    crawl_sheet_tab: str = "Crawl Sources"
     default_ac_id: str = ""
     wiki_root: Path = Path("/tmp/hermes-merry-wiki")
     object_store_backend: str = "gcs"
@@ -30,13 +31,14 @@ class RuntimeConfig:
     backup_root: Path = Path("/workspace/hermes/backups")
     bigquery_write_mode: str = "merge"
     agent_loop_jobs: tuple[str, ...] = (
+        "crawl-sources",
         "ingest-sources",
         "resolve-entities",
         "score-candidates",
         "sync-review-sheet",
         "calibrate-scores",
     )
-    agent_loop_interval_seconds: int = 1800
+    agent_loop_interval_seconds: int = 3600
     agent_loop_max_cycles: int = 0
 
     @classmethod
@@ -48,6 +50,7 @@ class RuntimeConfig:
             review_sheet_id=os.getenv("REVIEW_SHEET_ID", ""),
             slack_channel=os.getenv("SLACK_CHANNEL", ""),
             gmail_label_id=os.getenv("GMAIL_LABEL_ID", ""),
+            crawl_sheet_tab=os.getenv("CRAWL_SHEET_TAB", "Crawl Sources"),
             default_ac_id=os.getenv("AC_ID", ""),
             wiki_root=Path(os.getenv("WIKI_ROOT", "/tmp/hermes-merry-wiki")),
             object_store_backend=os.getenv("OBJECT_STORE_BACKEND", "gcs"),
@@ -57,7 +60,7 @@ class RuntimeConfig:
             backup_root=Path(os.getenv("BACKUP_ROOT", "/workspace/hermes/backups")),
             bigquery_write_mode=_parse_bigquery_write_mode(os.getenv("BIGQUERY_WRITE_MODE", "merge")),
             agent_loop_jobs=_parse_jobs(os.getenv("AGENT_LOOP_JOBS", "")),
-            agent_loop_interval_seconds=_parse_int(os.getenv("AGENT_LOOP_INTERVAL_SECONDS", ""), default=1800),
+            agent_loop_interval_seconds=_parse_int(os.getenv("AGENT_LOOP_INTERVAL_SECONDS", ""), default=3600),
             agent_loop_max_cycles=_parse_int(os.getenv("AGENT_LOOP_MAX_CYCLES", ""), default=0),
         )
 
@@ -73,6 +76,14 @@ class RuntimeConfig:
                 required.append("RAW_BUCKET")
             if not has_inline_sources:
                 required.append("GMAIL_LABEL_ID")
+        elif job_name == "crawl-sources":
+            if self.object_store_backend == "local":
+                required.append("RAW_ROOT")
+            else:
+                required.append("GCP_PROJECT_ID")
+                required.append("RAW_BUCKET")
+            if not has_inline_sources:
+                required.append("REVIEW_SHEET_ID")
         elif job_name == "ingest-ac-profiles":
             pass
         elif job_name in {"score-candidates", "sync-review-sheet"}:
@@ -132,6 +143,7 @@ class RuntimeConfig:
             "REVIEW_SHEET_ID": self.review_sheet_id,
             "SLACK_CHANNEL": self.slack_channel,
             "GMAIL_LABEL_ID": self.gmail_label_id,
+            "CRAWL_SHEET_TAB": self.crawl_sheet_tab,
             "AC_ID": self.default_ac_id,
             "RAW_ROOT": str(self.raw_root),
         }[name]
@@ -140,6 +152,7 @@ class RuntimeConfig:
 def _parse_jobs(value: str) -> tuple[str, ...]:
     if not value.strip():
         return (
+            "crawl-sources",
             "ingest-sources",
             "resolve-entities",
             "score-candidates",

@@ -1,7 +1,13 @@
 import json
 from pathlib import Path
 
-from merry_runtime.ingestion.parsers import parse_article, parse_email, parse_internal_memo, parse_referral_row
+from merry_runtime.ingestion.parsers import (
+    parse_article,
+    parse_email,
+    parse_internal_memo,
+    parse_referral_row,
+    parse_thevc_investment_card,
+)
 
 
 FIXTURES = Path("tests/fixtures")
@@ -40,3 +46,28 @@ def test_internal_memo_parser_extracts_impact_signal() -> None:
     assert parsed.raw_source.channel == "internal_screening_memo"
     assert parsed.entity.name == "Local Care Grid"
     assert parsed.signals[0].signal_type == "impact"
+
+
+def test_thevc_investment_parser_preserves_public_investment_signal() -> None:
+    parsed = parse_thevc_investment_card(
+        "\n".join(
+            [
+                "Title: THE VC Investment/M&A - 에이아이오 낸드컨트롤러",
+                "URL: https://thevc.kr/",
+                "Source URI: https://thevc.kr/aio",
+                "Company: 에이아이오",
+                "Industry: 반도체/디스플레이",
+                "Published: 2026-05-15",
+                "Signal: investment",
+                "Confidence: 0.65",
+                "Tags: thevc_investment_ma, public_cold_lead, investment, fresh",
+                "Evidence: THE VC 투자/M&A 공개 카드",
+            ]
+        )
+    )
+
+    assert parsed.raw_source.channel == "thevc_investment_ma"
+    assert parsed.raw_source.source_type == "web_listing"
+    assert parsed.raw_source.uri == "https://thevc.kr/aio"
+    assert parsed.entity.name == "에이아이오"
+    assert parsed.signals[0].signal_type == "investment"

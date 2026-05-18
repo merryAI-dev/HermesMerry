@@ -81,6 +81,16 @@ def test_runtime_config_defaults_runpod_wiki_root(monkeypatch) -> None:
     assert str(config.wiki_root) == "/workspace/hermes/wiki"
 
 
+def test_runtime_config_defaults_to_hourly_crawl_first_loop(monkeypatch) -> None:
+    monkeypatch.delenv("AGENT_LOOP_JOBS", raising=False)
+    monkeypatch.delenv("AGENT_LOOP_INTERVAL_SECONDS", raising=False)
+
+    config = RuntimeConfig.from_env()
+
+    assert config.agent_loop_jobs[0] == "crawl-sources"
+    assert config.agent_loop_interval_seconds == 3600
+
+
 def test_jobs_cli_loop_runs_one_cycle(monkeypatch, tmp_path, capsys) -> None:
     config = RuntimeConfig(
         project_id="project-1",

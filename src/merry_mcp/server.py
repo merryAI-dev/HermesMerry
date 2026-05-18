@@ -68,6 +68,9 @@ class MerryMCPServer:
             raise MCPPayloadError(f"{name}.{field} must be object")
         if field_type == "array" and not isinstance(value, list):
             raise MCPPayloadError(f"{name}.{field} must be array")
+        max_items = field_schema.get("maxItems")
+        if max_items is not None and isinstance(value, list) and len(value) > int(max_items):
+            raise MCPPayloadError(f"{name}.{field} has too many items: {len(value)} > {max_items}")
         allowed_values = field_schema.get("enum")
         if allowed_values and value not in allowed_values:
             raise MCPPayloadError(f"{name}.{field} value is not allowed: {value}")

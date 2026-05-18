@@ -677,6 +677,19 @@ def test_google_sheet_review_queue_supports_operator_console_tabs() -> None:
             "error_message",
             "next_action",
         ),
+        "Crawl Sources": (
+            "url",
+            "source_kind",
+            "channel",
+            "company",
+            "region",
+            "industry",
+            "tags",
+            "confidence",
+            "status",
+            "last_crawled_at",
+            "error_message",
+        ),
     }
 
     for tab, headers in expected_headers.items():

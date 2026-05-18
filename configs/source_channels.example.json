@@ -6,6 +6,12 @@
     "pii_expected": false
   },
   {
+    "channel": "thevc_investment_ma",
+    "source_type": "web_listing",
+    "ingestion_mode": "scheduled_crawl",
+    "pii_expected": false
+  },
+  {
     "channel": "info_mail",
     "source_type": "email",
     "ingestion_mode": "gmail_label",

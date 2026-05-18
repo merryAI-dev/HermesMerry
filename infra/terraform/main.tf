@@ -146,6 +146,10 @@ locals {
   }
 
   scheduled_jobs = {
+    crawl-sources = {
+      args     = ["-m", "merry_runtime.jobs", "run", "crawl-sources"]
+      schedule = "*/30 * * * *"
+    }
     ingest-sources = {
       args     = ["-m", "merry_runtime.jobs", "run", "ingest-sources"]
       schedule = "0 * * * *"
@@ -435,7 +439,7 @@ resource "google_logging_metric" "cloud_run_job_errors" {
   description = "Cloud Run job error logs emitted by Hermes Merry frontless jobs."
   filter      = <<-EOT
     resource.type="cloud_run_job"
-    resource.labels.job_name=~"ingest-sources|ingest-ac-profiles|resolve-entities|score-candidates|sync-review-sheet|calibrate-scores|weekly-summary"
+    resource.labels.job_name=~"crawl-sources|ingest-sources|ingest-ac-profiles|resolve-entities|score-candidates|sync-review-sheet|calibrate-scores|weekly-summary"
     severity>=ERROR
   EOT
 

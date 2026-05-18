@@ -12,6 +12,11 @@ Production profile:
 
 The only production tool surface is `merry_mcp.registry.TOOL_REGISTRY`. These contracts expose domain operations for the SQLite-backed Mother DB, local raw storage, Google Sheets, optional BigQuery export, and Slack. They do not expose arbitrary shell, filesystem, browser, or code execution capabilities.
 
+Public web crawling is exposed only through `crawl_public_sources`. It accepts
+bounded, explicit target URLs, rejects `/api` paths in the runtime crawler, and
+stores discovered facts as source-channel evidence rather than letting the
+agent browse freely.
+
 Human review remains mandatory. The system may recommend `advance`, `watchlist`, `request_more_info`, or `archive`, but the final AC decision is stored through the review Sheet feedback loop.
 
 Runpod staging keeps durable runtime state under `/workspace/hermes`: SQLite
