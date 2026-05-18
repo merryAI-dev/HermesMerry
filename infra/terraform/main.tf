@@ -217,6 +217,8 @@ resource "google_storage_bucket" "raw_docs" {
 }
 
 resource "google_artifact_registry_repository" "runtime" {
+  count = var.execution_backend == "cloud_run" && var.create_artifact_registry ? 1 : 0
+
   location      = var.region
   repository_id = "hermes-merry"
   description   = "Hermes Merry AC discovery runtime images"
@@ -229,6 +231,8 @@ resource "google_service_account" "agent" {
 }
 
 resource "google_service_account" "scheduler" {
+  count = var.execution_backend == "cloud_run" ? 1 : 0
+
   account_id   = var.scheduler_service_account_id
   display_name = "Hermes Merry scheduler invoker"
 }
@@ -259,6 +263,8 @@ resource "google_storage_bucket_iam_member" "raw_docs_object_creator" {
 }
 
 resource "google_secret_manager_secret" "llm_api_key" {
+  count = var.execution_backend == "cloud_run" ? 1 : 0
+
   secret_id = var.llm_api_key_secret_id
 
   replication {
@@ -267,12 +273,16 @@ resource "google_secret_manager_secret" "llm_api_key" {
 }
 
 resource "google_secret_manager_secret_iam_member" "llm_secret_accessor" {
-  secret_id = google_secret_manager_secret.llm_api_key.secret_id
+  count = var.execution_backend == "cloud_run" ? 1 : 0
+
+  secret_id = google_secret_manager_secret.llm_api_key[0].secret_id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.agent.email}"
 }
 
 resource "google_secret_manager_secret" "slack_bot_token" {
+  count = var.execution_backend == "cloud_run" ? 1 : 0
+
   secret_id = var.slack_bot_token_secret_id
 
   replication {
@@ -281,13 +291,15 @@ resource "google_secret_manager_secret" "slack_bot_token" {
 }
 
 resource "google_secret_manager_secret_iam_member" "slack_secret_accessor" {
-  secret_id = google_secret_manager_secret.slack_bot_token.secret_id
+  count = var.execution_backend == "cloud_run" ? 1 : 0
+
+  secret_id = google_secret_manager_secret.slack_bot_token[0].secret_id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.agent.email}"
 }
 
 resource "google_cloud_run_v2_job" "agent_jobs" {
-  for_each = local.jobs
+  for_each = var.execution_backend == "cloud_run" ? local.jobs : {}
 
   name     = each.key
   location = var.region
@@ -345,7 +357,7 @@ resource "google_cloud_run_v2_job" "agent_jobs" {
           name = "LLM_API_KEY"
           value_source {
             secret_key_ref {
-              secret  = google_secret_manager_secret.llm_api_key.secret_id
+              secret  = google_secret_manager_secret.llm_api_key[0].secret_id
               version = "latest"
             }
           }
@@ -355,7 +367,7 @@ resource "google_cloud_run_v2_job" "agent_jobs" {
           name = "SLACK_BOT_TOKEN"
           value_source {
             secret_key_ref {
-              secret  = google_secret_manager_secret.slack_bot_token.secret_id
+              secret  = google_secret_manager_secret.slack_bot_token[0].secret_id
               version = "latest"
             }
           }
@@ -366,17 +378,17 @@ resource "google_cloud_run_v2_job" "agent_jobs" {
 }
 
 resource "google_cloud_run_v2_job_iam_member" "scheduler_invoker" {
-  for_each = local.scheduled_jobs
+  for_each = var.execution_backend == "cloud_run" ? local.scheduled_jobs : {}
 
   project  = var.project_id
   location = var.region
   name     = google_cloud_run_v2_job.agent_jobs[each.key].name
   role     = "roles/run.invoker"
-  member   = "serviceAccount:${google_service_account.scheduler.email}"
+  member   = "serviceAccount:${google_service_account.scheduler[0].email}"
 }
 
 resource "google_cloud_scheduler_job" "agent_schedules" {
-  for_each = local.scheduled_jobs
+  for_each = var.execution_backend == "cloud_run" ? local.scheduled_jobs : {}
 
   name      = "${each.key}-schedule"
   region    = var.region
@@ -388,14 +400,14 @@ resource "google_cloud_scheduler_job" "agent_schedules" {
     uri         = "https://run.googleapis.com/v2/projects/${var.project_id}/locations/${var.region}/jobs/${google_cloud_run_v2_job.agent_jobs[each.key].name}:run"
 
     oauth_token {
-      service_account_email = google_service_account.scheduler.email
+      service_account_email = google_service_account.scheduler[0].email
       scope                 = "https://www.googleapis.com/auth/cloud-platform"
     }
   }
 }
 
 resource "google_monitoring_notification_channel" "ops_email" {
-  count = var.enable_ops_alerts ? 1 : 0
+  count = var.execution_backend == "cloud_run" && var.enable_ops_alerts ? 1 : 0
 
   display_name = "Hermes Merry Ops Email"
   type         = "email"
@@ -406,7 +418,7 @@ resource "google_monitoring_notification_channel" "ops_email" {
 }
 
 resource "google_logging_metric" "cloud_run_job_errors" {
-  count = var.enable_ops_alerts ? 1 : 0
+  count = var.execution_backend == "cloud_run" && var.enable_ops_alerts ? 1 : 0
 
   name        = "frontless-job-errors"
   description = "Cloud Run job error logs emitted by Hermes Merry frontless jobs."
@@ -424,7 +436,7 @@ resource "google_logging_metric" "cloud_run_job_errors" {
 }
 
 resource "google_monitoring_alert_policy" "frontless_job_failures" {
-  count = var.enable_ops_alerts ? 1 : 0
+  count = var.execution_backend == "cloud_run" && var.enable_ops_alerts ? 1 : 0
 
   display_name = "Hermes Merry frontless job failures"
   combiner     = "OR"

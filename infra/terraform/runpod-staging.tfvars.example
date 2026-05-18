@@ -1,0 +1,15 @@
+execution_backend            = "runpod"
+create_artifact_registry     = false
+project_id                   = "hermes-staging-example"
+region                       = "asia-northeast3"
+dataset_id                   = "merry_ac_discovery_staging"
+raw_bucket_name              = "hermes-merry-raw-staging-example"
+service_account_id           = "hermes-merry-agent-staging"
+scheduler_service_account_id = "hermes-merry-scheduler-unused"
+review_sheet_id              = "staging-google-sheet-id"
+ac_id                        = "ac_climate"
+gmail_label_id               = "Label_staging"
+slack_channel                = "CSTAGING"
+wiki_root                    = "/workspace/hermes/wiki"
+enable_ops_alerts            = false
+ops_alert_email              = "ops-staging@example.com"

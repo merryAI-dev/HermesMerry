@@ -9,6 +9,17 @@ variable "region" {
   default     = "asia-northeast3"
 }
 
+variable "execution_backend" {
+  description = "Execution backend. Use runpod for the primary staging Pod runtime or cloud_run for GCP-native jobs."
+  type        = string
+  default     = "cloud_run"
+
+  validation {
+    condition     = contains(["cloud_run", "runpod"], var.execution_backend)
+    error_message = "execution_backend must be cloud_run or runpod."
+  }
+}
+
 variable "dataset_id" {
   description = "BigQuery dataset for Hermes x Merry."
   type        = string
@@ -23,6 +34,13 @@ variable "raw_bucket_name" {
 variable "image_uri" {
   description = "Container image URI for Cloud Run jobs."
   type        = string
+  default     = ""
+}
+
+variable "create_artifact_registry" {
+  description = "Whether to create the Artifact Registry repository used by the optional Cloud Run backend."
+  type        = bool
+  default     = true
 }
 
 variable "service_account_id" {

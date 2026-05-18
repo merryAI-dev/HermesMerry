@@ -12,4 +12,5 @@ build/
 *.tfstate
 *.tfstate.*
 terraform.tfvars
+*.tfvars
 .env
