@@ -41,7 +41,16 @@ Completed:
 - Hardened Terraform runtime wiring with `AC_ID`, `GMAIL_LABEL_ID`, `WIKI_ROOT`, Slack token Secret Manager wiring, Scheduler/runtime service account separation, job invoker IAM, and dataset-scoped BigQuery data editor IAM.
 - Added `infra/terraform/staging.tfvars.example`.
 - Added `Makefile` and GitHub Actions CI workflow.
-- Verified `python3 -m pytest` with 82 passing tests.
+- Replaced BigQuery delete-then-insert writes with target-atomic staging-table `MERGE`.
+- Implemented non-destructive probabilistic entity-resolution events and review queue output.
+- Pinned Python supply chain and Docker base image by digest/hash-locked requirements.
+- Hardened raw GCS writes with create-only object semantics and objectCreator IAM.
+- Added frontless job observability, failed-run telemetry, weekly Slack summary counts, and Terraform ops alert shell.
+- Added staging canary runbook and staging evidence template with clean-env local canary guidance.
+- Implemented AC hypothesis report ingestion into `ac_profiles`, SQLite/Obsidian AC pages, and impact thesis pages.
+- Implemented review-feedback calibration loop with AC-specific transparent coefficients, corpus hashes, stale-coefficient disablement, and scheduled `calibrate-scores`.
+- Implemented curated CSV candidate batch import with strict columns, PII-redacted evidence, preserved discovery channel/source URI, duplicate homepage conflict quality gate, 100-row fixture, and 1,000-row local scale test.
+- Verified `python3 -m pytest` with 152 passing tests.
 - Verified `tofu fmt -check`, `tofu init -backend=false`, and `tofu validate`.
 
 Not completed:
@@ -51,14 +60,10 @@ Not completed:
 - Cloud Run image has not been built or pushed to Artifact Registry.
 - GCP project variables, secret versions, API enablement, and staging ADC/service account impersonation are not configured.
 - No staging `terraform.tfvars` or production state backend is configured.
-- AC hypothesis report ingestion is not implemented.
-- Score calibration from human review feedback is not implemented beyond manual priors and stored decisions.
-- Monitoring, alerting, and production-grade weekly report generation are not implemented.
-- 1,000-candidate Mother DB acquisition process is not implemented.
-- BigQuery production upsert still uses delete-then-insert and must be replaced with a target-atomic `MERGE` path before production data is trusted.
-- `resolve-entities` Cloud Run job still records a resolver run but does not persist probabilistic merge/ambiguous-review outcomes.
-- Docker/Python dependency reproducibility is not locked by hashes or image digest yet.
-- GCS bucket permissions still need a production least-privilege pass once overwrite/read requirements are finalized.
+- Real staging canary execution is still blocked until `infra/terraform/staging.tfvars`, staging secrets, Docker, and confirmed staging project are available.
+- Curated batch import is available as a Python pipeline/runbook flow; it is not yet exposed as a Cloud Run job or CLI command.
+- A 50-candidate real-data pilot still needs human review before broader acquisition.
+- Production BigQuery row/column-level security, PII masking policy, and raw retention policy still need real GCP enforcement.
 
 ## CTO Decisions
 
@@ -546,6 +551,7 @@ Expected: creates dataset, bucket, service account, secrets, jobs, schedules, an
 - [x] Local privacy dry run: email and phone values are redacted before Slack and LLM summary payloads.
 - [x] Local operations dry run: pipeline executions write `agent_runs` rows.
 - [x] Local scale dry run: 1,000 synthetic candidates score with fake adapters.
+- [x] Local acquisition dry run: 1,000 synthetic curated CSV candidates import with fake adapters and quality gate.
 - [ ] Staging Cloud Run scale dry run: 1,000 synthetic candidates score under the Cloud Run timeout configured for staging.
 
 ## Release Gates
