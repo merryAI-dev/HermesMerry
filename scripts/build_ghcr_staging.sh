@@ -4,7 +4,8 @@ set -euo pipefail
 : "${GHCR_OWNER:?Set GHCR_OWNER to the GitHub user or org that owns the package.}"
 
 IMAGE_TAG="${IMAGE_TAG:-staging}"
-IMAGE_URI="ghcr.io/${GHCR_OWNER}/hermes-merry:${IMAGE_TAG}"
+GHCR_OWNER_NORMALIZED="$(printf '%s' "$GHCR_OWNER" | tr '[:upper:]' '[:lower:]')"
+IMAGE_URI="ghcr.io/${GHCR_OWNER_NORMALIZED}/hermes-merry:${IMAGE_TAG}"
 
 docker buildx inspect >/dev/null
 

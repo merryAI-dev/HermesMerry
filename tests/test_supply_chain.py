@@ -121,5 +121,6 @@ def test_ghcr_build_script_pushes_linux_amd64_staging_image() -> None:
 
     assert "docker buildx build" in script
     assert "--platform linux/amd64" in script
-    assert "ghcr.io/${GHCR_OWNER}/hermes-merry:${IMAGE_TAG}" in script
+    assert 'tr \'[:upper:]\' \'[:lower:]\'' in script
+    assert "ghcr.io/${GHCR_OWNER_NORMALIZED}/hermes-merry:${IMAGE_TAG}" in script
     assert "--push" in script
