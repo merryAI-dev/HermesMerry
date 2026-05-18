@@ -86,5 +86,6 @@ def test_ac_scoring_coefficients_schema_covers_priority_model_fields() -> None:
         "risk",
         "sample_count",
         "model_version",
+        "corpus_hash",
         "updated_at",
     }.issubset(fields)

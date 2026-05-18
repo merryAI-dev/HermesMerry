@@ -66,6 +66,7 @@ def test_terraform_defines_scheduled_calibrate_scores_job_after_review_sync() ->
     main_tf = (REPO_ROOT / "infra" / "terraform" / "main.tf").read_text()
 
     assert "ac_scoring_coefficients" in main_tf
+    assert "corpus_hash" in main_tf
     assert "calibrate-scores" in main_tf
     assert '"run", "calibrate-scores"' in main_tf
     assert 'schedule = "50 * * * *"' in main_tf

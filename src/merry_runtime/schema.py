@@ -122,6 +122,7 @@ BIGQUERY_TABLES: Final[dict[str, list[dict[str, str]]]] = {
         _field("risk", "FLOAT", "REQUIRED"),
         _field("sample_count", "INTEGER", "REQUIRED"),
         _field("model_version", "STRING", "REQUIRED"),
+        _field("corpus_hash", "STRING", "REQUIRED"),
         _field("updated_at", "TIMESTAMP", "REQUIRED"),
     ],
     "agent_runs": [

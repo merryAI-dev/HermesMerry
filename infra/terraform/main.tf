@@ -130,6 +130,7 @@ locals {
       { name = "risk", type = "FLOAT", mode = "REQUIRED" },
       { name = "sample_count", type = "INTEGER", mode = "REQUIRED" },
       { name = "model_version", type = "STRING", mode = "REQUIRED" },
+      { name = "corpus_hash", type = "STRING", mode = "REQUIRED" },
       { name = "updated_at", type = "TIMESTAMP", mode = "REQUIRED" }
     ]
     agent_runs = [

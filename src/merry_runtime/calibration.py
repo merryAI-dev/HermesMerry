@@ -22,6 +22,9 @@ class ReviewCalibrationExample:
     fund_fit: float
     recruitment_fit: float
     impact_fit: float
+    review_id: str = ""
+    card_id: str = ""
+    entity_id: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,6 +90,10 @@ def _intercept_delta(examples: list[ReviewCalibrationExample], config: Calibrati
 
 def _decision_weight(decision: str) -> float | None:
     return _DECISION_WEIGHTS.get(decision.casefold())
+
+
+def is_usable_decision(decision: str) -> bool:
+    return _decision_weight(decision) is not None
 
 
 def _bounded(value: float, config: CalibrationConfig) -> float:
