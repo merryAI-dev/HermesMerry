@@ -15,7 +15,7 @@ It builds a frontless MVP around:
 - Probabilistic entity resolution and logit/probit priority scoring
 - Hermes production safety profile
 - Whitelisted MCP tool contracts
-- BigQuery, GCS, Cloud Run Jobs, Cloud Scheduler Terraform skeleton
+- BigQuery/GCS minimum data layer with optional Cloud Run Jobs and Cloud Scheduler
 
 ## Local Checks
 
@@ -27,9 +27,26 @@ make verify
 
 OpenTofu is the primary IaC runner for this repo. Terraform is installed for compatibility checks, but do not alternate Terraform and OpenTofu against the same `.terraform.lock.hcl` in one working tree; each tool records provider sources differently.
 
-Use `infra/terraform/staging.tfvars.example` as the staging variable template. Slack and LLM tokens are referenced through Secret Manager; create secret versions before running the scheduled jobs.
+Use `infra/terraform/runpod-staging.tfvars.example` as the primary staging variable template. `infra/terraform/staging.tfvars.example` remains available for the optional Cloud Run backend.
 
-## Cloud Run Jobs
+## Runpod-first staging
+
+The default staging runtime is a Runpod Pod that pulls a private GHCR image:
+
+```bash
+ghcr.io/$GHCR_OWNER/hermes-merry:staging
+```
+
+Runpod runs the long-lived agent loop:
+
+```bash
+python3 -m merry_runtime.jobs loop
+```
+
+GCP is still used for the minimum data and integration layer: BigQuery, GCS,
+Gmail API, Sheets API, and one least-privilege runtime service account. Cloud Run is optional and remains available only through the `cloud_run` Terraform backend mode.
+
+## Runtime Jobs
 
 The container entrypoint is `python3 -m merry_runtime.jobs`. Runtime adapters are built from env/ADC:
 
@@ -42,12 +59,15 @@ AC_ID=ac_climate
 GMAIL_LABEL_ID=Label_123
 SLACK_CHANNEL=C123
 SLACK_BOT_TOKEN=xoxb-...
-WIKI_ROOT=/tmp/hermes-merry-wiki
+WIKI_ROOT=/workspace/hermes/wiki
+AGENT_LOOP_JOBS=ingest-sources,resolve-entities,score-candidates,sync-review-sheet,calibrate-scores
+AGENT_LOOP_INTERVAL_SECONDS=1800
 ```
 
 Supported job commands:
 
 ```bash
+python3 -m merry_runtime.jobs loop
 python3 -m merry_runtime.jobs run ingest-sources --sources-file sources.json
 python3 -m merry_runtime.jobs run ingest-sources
 python3 -m merry_runtime.jobs run score-candidates --ac-id ac_climate
@@ -68,7 +88,7 @@ src/merry_runtime/
   pii.py                 PII detection/redaction before LLM payloads
   hermes_profile.py      Production Hermes safety validation
   schema.py              BigQuery table schema source of truth
-  jobs.py                Cloud Run job CLI entrypoint
+  jobs.py                Runtime job CLI entrypoint
   runtime_config.py      Env-backed runtime configuration
   runtime_factory.py     ADC/client-backed production adapter factory
   job_runner.py          Job routing for ingest, score, review sync, summary
@@ -91,7 +111,7 @@ configs/
   scoring_weights.json
 
 infra/terraform/
-  BigQuery, GCS, Secret Manager, Cloud Run Jobs, Scheduler, IAM
+  BigQuery, GCS, optional Secret Manager, optional Cloud Run Jobs, optional Scheduler, IAM
 ```
 
 ## Safety Boundary
@@ -104,6 +124,6 @@ See `docs/SAFETY.md` for the explicit guardrail checklist.
 
 1. Bind real GCP and Google Workspace clients from environment/ADC in `merry_runtime.jobs`.
 2. Wire pipeline outputs into `SQLiteWikiStore` so each ingest updates the Obsidian wiki projection.
-3. Build and push the Cloud Run image, then apply `infra/terraform` in a staging GCP project.
-4. Load the first AC profile and run a 50-candidate dry run before scaling toward the 1,000-candidate Mother DB target.
-5. Add score calibration from human review decisions.
+3. Build and push the GHCR image, then apply the Runpod minimal GCP layer in a staging GCP project.
+4. Start a one-cycle Runpod canary before switching to the always-on loop.
+5. Load the first AC profile and run a 50-candidate real-data pilot before scaling toward the 1,000-candidate Mother DB target.

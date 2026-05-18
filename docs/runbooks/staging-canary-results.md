@@ -4,6 +4,14 @@ Timestamp: 2026-05-18 12:40:00 KST (+0900)
 
 Status: NOT executed
 
+## Backend Decision Update
+
+Staging execution moved from Cloud Run-first to Runpod-first. No Cloud Run
+apply or job execution is required for the primary staging canary. The remaining
+staging blocker is a real `infra/terraform/runpod-staging.tfvars`, GHCR auth,
+Runpod Pod secret setup, and one isolated staging Sheet/Gmail label/Slack
+channel.
+
 The real staging canary was not executed. Preflight is blocked because
 `infra/terraform/staging.tfvars` is missing and staging isolation is unverified.
 The active gcloud project is `yapnotes-app-2`, which is not confirmed as the

@@ -1,5 +1,10 @@
 # Hermes Staging Canary Runbook
 
+## Optional Cloud Run backend
+
+This runbook is retained for the optional `cloud_run` execution backend. The
+default staging path is now `docs/runbooks/runpod-staging.md`.
+
 Use this runbook only for an isolated staging canary. The canary uses synthetic
 data and must not touch production Google Cloud, Google Workspace, or Slack
 resources.
