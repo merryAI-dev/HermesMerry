@@ -6,6 +6,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SETUPTOOLS_VERSION = "80.9.0"
 PIP_AUDIT_VERSION = "2.10.0"
+PYTEST_VERSION = "9.0.2"
 
 
 def _lock_has_hash_locked_requirement(lock_path: Path, package: str, version: str) -> bool:
@@ -45,6 +46,20 @@ def test_build_backend_is_exact_pinned_and_hash_locked_for_non_isolated_build() 
 def test_ci_runs_pip_audit_against_locked_requirements() -> None:
     ci = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text()
 
+    assert 'pip install -e ".[dev]"' not in ci
+    assert "pip install -e '.[dev]'" not in ci
+    assert re.search(
+        r"(?m)^\s*run:\s*python\s+-m\s+pip\s+install\s+--require-hashes\s+-r\s+requirements\.lock\s*$",
+        ci,
+    )
+    assert re.search(
+        r"(?m)^\s*run:\s*python\s+-m\s+pip\s+install\s+--require-hashes\s+-r\s+requirements-dev\.lock\s*$",
+        ci,
+    )
+    assert re.search(
+        r"(?m)^\s*run:\s*python\s+-m\s+pip\s+install\s+--no-deps\s+--no-build-isolation\s+-e\s+\.\s*$",
+        ci,
+    )
     assert re.search(
         r"(?m)^\s*run:\s*python3\s+-m\s+pip\s+install\s+--require-hashes\s+-r\s+requirements-audit\.lock\s*$",
         ci,
@@ -68,4 +83,18 @@ def test_audit_tooling_is_hash_locked() -> None:
         REPO_ROOT / "requirements-audit.lock",
         "pip-audit",
         PIP_AUDIT_VERSION,
+    )
+
+
+def test_dev_test_tooling_is_hash_locked() -> None:
+    pyproject = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text())
+
+    assert pyproject["project"]["optional-dependencies"]["dev"] == [f"pytest=={PYTEST_VERSION}"]
+    assert (REPO_ROOT / "requirements-dev.in").read_text().splitlines() == [
+        f"pytest=={PYTEST_VERSION}"
+    ]
+    assert _lock_has_hash_locked_requirement(
+        REPO_ROOT / "requirements-dev.lock",
+        "pytest",
+        PYTEST_VERSION,
     )

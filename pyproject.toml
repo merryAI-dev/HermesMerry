@@ -16,7 +16,7 @@ build-backend = "setuptools.build_meta"
 
 [project.optional-dependencies]
 dev = [
-  "pytest>=8.0",
+  "pytest==9.0.2",
 ]
 
 [tool.pytest.ini_options]
