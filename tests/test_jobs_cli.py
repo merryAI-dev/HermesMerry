@@ -139,6 +139,38 @@ def test_jobs_cli_runs_calibrate_scores(monkeypatch, tmp_path, capsys) -> None:
     assert output["sample_count"] == 0
 
 
+def test_jobs_cli_runs_backup_export(monkeypatch, tmp_path, capsys) -> None:
+    config = RuntimeConfig(
+        project_id="",
+        dataset_id="",
+        raw_bucket="",
+        wiki_root=tmp_path / "wiki",
+        backup_root=tmp_path / "backups",
+        mother_db_path=tmp_path / "mother.db",
+        structured_store_backend="sqlite",
+    )
+    runtime = RuntimeAdapters(
+        object_store=FakeObjectStore(bucket="raw-bucket"),
+        structured_store=FakeStructuredStore(),
+        review_queue=FakeReviewQueue(),
+        wiki_store=SQLiteWikiStore(root=tmp_path / "wiki"),
+    )
+
+    monkeypatch.setattr("merry_runtime.jobs.RuntimeConfig.from_env", lambda: config)
+    monkeypatch.setattr("merry_runtime.jobs.build_runtime", lambda config: runtime)
+    monkeypatch.setattr(
+        "merry_runtime.jobs.run_job",
+        lambda job_name, **kwargs: {"job_name": job_name, "manifest_path": "backup/manifest.json"},
+    )
+
+    exit_code = main(["run", "backup-export"])
+
+    output = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert output["job_name"] == "backup-export"
+    assert output["manifest_path"] == "backup/manifest.json"
+
+
 def test_jobs_cli_persists_unexpected_job_failure_after_runtime_creation(monkeypatch, tmp_path, capsys) -> None:
     config = RuntimeConfig(
         project_id="project-1",

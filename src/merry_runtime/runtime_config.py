@@ -81,6 +81,8 @@ class RuntimeConfig:
             required.append("AC_ID")
         elif job_name == "weekly-summary":
             required.append("SLACK_CHANNEL")
+        elif job_name == "backup-export":
+            required.extend(["MOTHER_DB_PATH", "BACKUP_ROOT"])
         elif job_name == "resolve-entities":
             pass
         else:
@@ -126,6 +128,7 @@ class RuntimeConfig:
             "BIGQUERY_DATASET": self.dataset_id,
             "RAW_BUCKET": self.raw_bucket,
             "MOTHER_DB_PATH": str(self.mother_db_path),
+            "BACKUP_ROOT": str(self.backup_root),
             "REVIEW_SHEET_ID": self.review_sheet_id,
             "SLACK_CHANNEL": self.slack_channel,
             "GMAIL_LABEL_ID": self.gmail_label_id,

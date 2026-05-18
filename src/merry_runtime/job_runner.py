@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from merry_runtime.adapters.interfaces import Notifier, ObjectStore, ReviewQueue, StructuredStore
+from merry_runtime.pipelines.backup_export import backup_export
 from merry_runtime.pipelines.calibrate_scores import calibrate_scores
 from merry_runtime.pipelines.ingest_ac_profiles import ingest_ac_profiles
 from merry_runtime.pipelines.ingest_sources import ingest_sources
@@ -90,6 +91,14 @@ def run_job(
 
     if job_name == "resolve-entities":
         return _run_resolve_entities(runtime=runtime)
+
+    if job_name == "backup-export":
+        result = backup_export(
+            structured_store=runtime.structured_store,
+            backup_root=config.backup_root,
+            wiki_root=config.wiki_root,
+        )
+        return {"job_name": job_name, **asdict(result)}
 
     raise JobRunError(f"Unknown job: {job_name}")
 
