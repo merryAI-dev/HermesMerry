@@ -680,7 +680,7 @@ def test_google_sheet_review_queue_upserts_existing_row_by_key() -> None:
                 "recommended_action": "score_candidates",
                 "status": "crawled",
                 "wiki_path": "wiki/entities/Merry AI.md",
-                "contact_email": "",
+                "contact_email": "founder@merry.ai",
             }
         ],
         key_fields=("entity_id",),
@@ -690,7 +690,162 @@ def test_google_sheet_review_queue_upserts_existing_row_by_key() -> None:
     assert service.values_obj.append_body is None
     assert service.values_obj.update_kwargs["range"] == "Candidate Detail!A2:O2"
     assert service.values_obj.update_body["values"][0][3] == "New Founder"  # type: ignore[index]
-    assert service.values_obj.update_body["values"][0][-1] == ""  # type: ignore[index]
+    assert service.values_obj.update_body["values"][0][-1] == "founder@merry.ai"  # type: ignore[index]
+
+
+def test_google_sheet_review_queue_upsert_dedupes_new_rows_with_same_key_in_batch() -> None:
+    service = FakeSheetsService()
+    service.values_obj.get_responses.extend(
+        [
+            {"values": []},
+            {"values": [list(OPERATOR_CONSOLE_HEADERS["Candidate Detail"])]},
+        ]
+    )
+    queue = GoogleSheetReviewQueue(service=service, spreadsheet_id="sheet_1")
+
+    queue.upsert_cards(
+        sheet_tab="Candidate Detail",
+        rows=[
+            {
+                "entity_id": "ent_1",
+                "company": "Merry AI",
+                "representative": "Old Founder",
+                "status": "crawled",
+            },
+            {
+                "entity_id": "ent_1",
+                "company": "Merry AI",
+                "representative": "New Founder",
+                "status": "crawled",
+            },
+        ],
+        key_fields=("entity_id",),
+    )
+
+    assert service.values_obj.append_body is not None
+    values = service.values_obj.append_body["values"]  # type: ignore[index]
+    assert len(values) == 1
+    assert values[0][3] == "New Founder"
+
+
+def test_google_sheet_review_queue_upsert_preserves_sheet_owned_and_custom_cells() -> None:
+    service = FakeSheetsService()
+    service.sheet_titles.add("Candidate Detail")
+    headers = [*OPERATOR_CONSOLE_HEADERS["Candidate Detail"], "operator_note"]
+    existing_row = [
+        "ent_1",
+        "Merry AI",
+        "merryai",
+        "Old Founder",
+        "https://merry.ai",
+        "Seoul",
+        "AI",
+        "old summary",
+        "91.0",
+        "0.92",
+        "priority",
+        "advance",
+        "qualified",
+        "wiki/entities/Merry AI.md",
+        "hello@merry.ai",
+        "call Tuesday",
+    ]
+    service.values_obj.get_responses.extend(
+        [
+            {"values": [headers]},
+            {"values": [headers, existing_row]},
+        ]
+    )
+    queue = GoogleSheetReviewQueue(service=service, spreadsheet_id="sheet_1")
+
+    queue.upsert_cards(
+        sheet_tab="Candidate Detail",
+        rows=[
+            {
+                "entity_id": "ent_1",
+                "company": "Merry AI",
+                "normalized_name": "merryai",
+                "representative": "New Founder",
+                "homepage": "",
+                "region": "Seoul",
+                "industry": "AI",
+                "summary": "new summary",
+                "latest_score": "",
+                "priority_probability": "",
+                "queue_type": "new_source",
+                "recommended_action": "score_candidates",
+                "status": "crawled",
+                "wiki_path": "wiki/entities/Merry AI.md",
+                "contact_email": "",
+            }
+        ],
+        key_fields=("entity_id",),
+    )
+
+    updated = service.values_obj.update_body["values"][0]  # type: ignore[index]
+    assert updated[3] == "New Founder"
+    assert updated[4] == "https://merry.ai"
+    assert updated[8] == "91.0"
+    assert updated[9] == "0.92"
+    assert updated[12] == "qualified"
+    assert updated[14] == "hello@merry.ai"
+    assert updated[15] == "call Tuesday"
+
+
+def test_google_sheet_review_queue_upsert_clears_known_bad_crawl_cells() -> None:
+    service = FakeSheetsService()
+    service.sheet_titles.add("Candidate Detail")
+    headers = list(OPERATOR_CONSOLE_HEADERS["Candidate Detail"])
+    existing_row = [
+        "ent_1",
+        "Merry AI",
+        "merryai",
+        "Old Founder",
+        "https://주식회사",
+        "Seoul",
+        "AI",
+        "old summary",
+        "",
+        "",
+        "new_source",
+        "score_candidates",
+        "crawled",
+        "wiki/entities/Merry AI.md",
+        "master@thevc.kr",
+    ]
+    service.values_obj.get_responses.extend(
+        [
+            {"values": [headers]},
+            {"values": [headers, existing_row]},
+        ]
+    )
+    queue = GoogleSheetReviewQueue(service=service, spreadsheet_id="sheet_1")
+
+    queue.upsert_cards(
+        sheet_tab="Candidate Detail",
+        rows=[
+            {
+                "entity_id": "ent_1",
+                "company": "Merry AI",
+                "normalized_name": "merryai",
+                "representative": "New Founder",
+                "homepage": "",
+                "region": "Seoul",
+                "industry": "AI",
+                "summary": "new summary",
+                "queue_type": "new_source",
+                "recommended_action": "score_candidates",
+                "status": "crawled",
+                "wiki_path": "wiki/entities/Merry AI.md",
+                "contact_email": "",
+            }
+        ],
+        key_fields=("entity_id",),
+    )
+
+    updated = service.values_obj.update_body["values"][0]  # type: ignore[index]
+    assert updated[4] == ""
+    assert updated[14] == ""
 
 
 def test_google_sheet_review_queue_supports_operator_console_tabs() -> None:

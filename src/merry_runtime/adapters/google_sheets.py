@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import urlparse
 
 
 REVIEW_QUEUE_HEADERS: tuple[str, ...] = (
@@ -161,6 +162,20 @@ OPERATOR_CONSOLE_HEADERS: dict[str, tuple[str, ...]] = {
         "error_message",
     ),
 }
+SHEET_OWNED_UPDATE_FIELDS: dict[str, set[str]] = {
+    "Candidate Detail": {"latest_score", "priority_probability", "status"},
+}
+KNOWN_BAD_EMAIL_DOMAINS = {"thevc.kr", "www.thevc.kr"}
+KNOWN_BAD_HOMEPAGE_DOMAINS = {
+    "thevc.kr",
+    "linkedin.com",
+    "facebook.com",
+    "instagram.com",
+    "twitter.com",
+    "x.com",
+    "youtube.com",
+    "youtu.be",
+}
 
 
 @dataclass(slots=True)
@@ -170,6 +185,9 @@ class GoogleSheetReviewQueue:
 
     def publish_cards(self, *, sheet_tab: str, rows: list[dict[str, object]]) -> int:
         headers = self._ensure_headers(sheet_tab=sheet_tab)
+        return self._append_rows(sheet_tab=sheet_tab, headers=headers, rows=rows)
+
+    def _append_rows(self, *, sheet_tab: str, headers: tuple[str, ...], rows: list[dict[str, object]]) -> int:
         values = [_row_values(row, headers) for row in rows]
         self.service.spreadsheets().values().append(
             spreadsheetId=self.spreadsheet_id,
@@ -183,6 +201,7 @@ class GoogleSheetReviewQueue:
     def upsert_cards(self, *, sheet_tab: str, rows: list[dict[str, object]], key_fields: tuple[str, ...]) -> int:
         if not rows:
             return 0
+        deduped_rows = _dedupe_rows_by_key(rows=rows, key_fields=key_fields)
         headers = self._ensure_headers(sheet_tab=sheet_tab)
         existing_response = self.service.spreadsheets().values().get(
             spreadsheetId=self.spreadsheet_id,
@@ -192,22 +211,24 @@ class GoogleSheetReviewQueue:
         existing_index = _existing_row_index(existing_values=existing_values, headers=headers, key_fields=key_fields)
 
         append_rows: list[dict[str, object]] = []
-        for row in rows:
+        for row in deduped_rows:
             key = _row_key(row, key_fields=key_fields)
-            row_number = existing_index.get(key) if key else None
+            existing = existing_index.get(key) if key else None
+            row_number = existing[0] if existing else None
             if row_number is None:
                 append_rows.append(row)
                 continue
+            merged_row = _merge_existing_row(sheet_tab=sheet_tab, headers=headers, existing=existing[1], incoming=row)
             self.service.spreadsheets().values().update(
                 spreadsheetId=self.spreadsheet_id,
                 range=_sheet_range(sheet_tab, headers, row=str(row_number)),
                 valueInputOption="RAW",
-                body={"values": [_row_values(row, headers)]},
+                body={"values": [_row_values(merged_row, headers)]},
             ).execute()
 
         if append_rows:
-            self.publish_cards(sheet_tab=sheet_tab, rows=append_rows)
-        return len(rows)
+            self._append_rows(sheet_tab=sheet_tab, headers=headers, rows=append_rows)
+        return len(deduped_rows)
 
     def read_pending_reviews(self, *, sheet_tab: str) -> list[dict[str, str]]:
         self._ensure_sheet_tab(sheet_tab=sheet_tab)
@@ -298,16 +319,67 @@ def _existing_row_index(
     existing_values: list[list[object]],
     headers: tuple[str, ...],
     key_fields: tuple[str, ...],
-) -> dict[tuple[str, str], int]:
+) -> dict[tuple[str, str], tuple[int, dict[str, object]]]:
     if not existing_values:
         return {}
-    row_index: dict[tuple[str, str], int] = {}
+    row_index: dict[tuple[str, str], tuple[int, dict[str, object]]] = {}
     for sheet_row_number, values in enumerate(existing_values[1:], start=2):
         row = dict(zip(headers, values, strict=False))
         key = _row_key(row, key_fields=key_fields)
         if key and key not in row_index:
-            row_index[key] = sheet_row_number
+            row_index[key] = (sheet_row_number, row)
     return row_index
+
+
+def _dedupe_rows_by_key(
+    *,
+    rows: list[dict[str, object]],
+    key_fields: tuple[str, ...],
+) -> list[dict[str, object]]:
+    order: list[tuple[str, str]] = []
+    merged_rows: dict[tuple[str, str], dict[str, object]] = {}
+    keyless_rows: list[dict[str, object]] = []
+    for row in rows:
+        key = _row_key(row, key_fields=key_fields)
+        if key is None:
+            keyless_rows.append(dict(row))
+            continue
+        if key not in merged_rows:
+            order.append(key)
+            merged_rows[key] = dict(row)
+            continue
+        merged_rows[key] = _merge_generated_rows(existing=merged_rows[key], incoming=row)
+    return [merged_rows[key] for key in order] + keyless_rows
+
+
+def _merge_generated_rows(*, existing: dict[str, object], incoming: dict[str, object]) -> dict[str, object]:
+    merged = dict(existing)
+    for field, value in incoming.items():
+        if _is_blank(value) and not _should_clear_known_bad_value(field=field, existing=merged.get(field, "")):
+            continue
+        merged[field] = value
+    return merged
+
+
+def _merge_existing_row(
+    *,
+    sheet_tab: str,
+    headers: tuple[str, ...],
+    existing: dict[str, object],
+    incoming: dict[str, object],
+) -> dict[str, object]:
+    merged = {header: existing.get(header, "") for header in headers}
+    protected_fields = SHEET_OWNED_UPDATE_FIELDS.get(sheet_tab, set())
+    for field, value in incoming.items():
+        if field not in merged:
+            continue
+        existing_value = merged.get(field, "")
+        if field in protected_fields and not _is_blank(existing_value):
+            continue
+        if _is_blank(value) and not _should_clear_known_bad_value(field=field, existing=existing_value):
+            continue
+        merged[field] = value
+    return merged
 
 
 def _row_key(row: dict[str, object], *, key_fields: tuple[str, ...]) -> tuple[str, str] | None:
@@ -316,6 +388,34 @@ def _row_key(row: dict[str, object], *, key_fields: tuple[str, ...]) -> tuple[st
         if value:
             return (field, value.casefold())
     return None
+
+
+def _is_blank(value: object) -> bool:
+    if value is None:
+        return True
+    return isinstance(value, str) and not value.strip()
+
+
+def _should_clear_known_bad_value(*, field: str, existing: object) -> bool:
+    existing_value = str(existing or "").strip()
+    if not existing_value:
+        return False
+    if field == "contact_email":
+        domain = existing_value.rsplit("@", 1)[-1].casefold()
+        return domain in KNOWN_BAD_EMAIL_DOMAINS
+    if field == "homepage":
+        return not _looks_like_valid_homepage(existing_value)
+    return False
+
+
+def _looks_like_valid_homepage(value: str) -> bool:
+    parsed = urlparse(value)
+    hostname = (parsed.netloc or parsed.path.split("/", 1)[0]).casefold()
+    if hostname.startswith("www."):
+        hostname = hostname[4:]
+    if "." not in hostname:
+        return False
+    return not any(hostname == domain or hostname.endswith(f".{domain}") for domain in KNOWN_BAD_HOMEPAGE_DOMAINS)
 
 
 def _safe_cell_value(value: object) -> object:
