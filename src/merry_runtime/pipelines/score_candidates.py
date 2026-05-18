@@ -8,6 +8,7 @@ from typing import Any
 
 from merry_runtime.adapters.interfaces import ReviewQueue, StructuredStore
 from merry_runtime.models import ACProfile, MotherEntity, Signal
+from merry_runtime.probabilistic_scoring import PriorityScoringModel
 from merry_runtime.scoring import score_candidate
 
 
@@ -35,6 +36,12 @@ def score_candidates(
         structured_store.query_rows(sql="select * from ac_profiles where ac_id=@ac_id", parameters={"ac_id": ac_id}),
         ac_id,
     )
+    priority_model = _priority_model_from_rows(
+        structured_store.query_rows(
+            sql="select * from ac_scoring_coefficients where ac_id=@ac_id",
+            parameters={"ac_id": ac_id},
+        )
+    )
     existing_cards = {
         str(row["card_id"]): row
         for row in structured_store.query_rows(sql="select * from candidate_cards where ac_id=@ac_id", parameters={"ac_id": ac_id})
@@ -48,7 +55,7 @@ def score_candidates(
         if not entity_signals:
             continue
 
-        score = score_candidate(entity, entity_signals, profile)
+        score = score_candidate(entity, entity_signals, profile, priority_model=priority_model)
         score_row = asdict(score)
         score_row["scored_at"] = started_at
         score_rows.append(score_row)
@@ -152,6 +159,12 @@ def _profile_from_rows(rows: list[dict[str, Any]], ac_id: str) -> ACProfile:
         industry_preferences=tuple(row.get("industry_preferences") or ()),
         tech_preferences=tuple(row.get("tech_preferences") or ()),
     )
+
+
+def _priority_model_from_rows(rows: list[dict[str, Any]]) -> PriorityScoringModel:
+    if not rows:
+        return PriorityScoringModel.default()
+    return PriorityScoringModel.from_coefficient_row(rows[0])
 
 
 def _signals_by_entity(signals: list[Signal]) -> dict[str, list[Signal]]:

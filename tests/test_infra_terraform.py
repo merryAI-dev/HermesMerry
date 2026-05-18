@@ -62,6 +62,16 @@ def test_terraform_defines_manual_ingest_ac_profiles_job_without_default_schedul
     assert 'for_each = local.scheduled_jobs' in main_tf
 
 
+def test_terraform_defines_scheduled_calibrate_scores_job_after_review_sync() -> None:
+    main_tf = (REPO_ROOT / "infra" / "terraform" / "main.tf").read_text()
+
+    assert "ac_scoring_coefficients" in main_tf
+    assert "calibrate-scores" in main_tf
+    assert '"run", "calibrate-scores"' in main_tf
+    assert 'schedule = "50 * * * *"' in main_tf
+    assert 'resource.labels.job_name=~"ingest-sources|ingest-ac-profiles|resolve-entities|score-candidates|sync-review-sheet|calibrate-scores|weekly-summary"' in main_tf
+
+
 def test_terraform_scheduler_invoker_only_grants_scheduled_jobs() -> None:
     main_tf = (REPO_ROOT / "infra" / "terraform" / "main.tf").read_text()
 

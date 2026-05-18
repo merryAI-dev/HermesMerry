@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from merry_runtime.adapters.interfaces import Notifier, ObjectStore, ReviewQueue, StructuredStore
+from merry_runtime.pipelines.calibrate_scores import calibrate_scores
 from merry_runtime.pipelines.ingest_ac_profiles import ingest_ac_profiles
 from merry_runtime.pipelines.ingest_sources import ingest_sources
 from merry_runtime.pipelines.resolve_entities import resolve_entities
@@ -75,6 +76,13 @@ def run_job(
         if not selected_ac_id:
             raise JobRunError("sync-review-sheet requires ac_id or AC_ID")
         result = sync_review_sheet(structured_store=runtime.structured_store, review_queue=runtime.review_queue, ac_id=selected_ac_id)
+        return {"job_name": job_name, **asdict(result)}
+
+    if job_name == "calibrate-scores":
+        selected_ac_id = ac_id or config.default_ac_id
+        if not selected_ac_id:
+            raise JobRunError("calibrate-scores requires ac_id or AC_ID")
+        result = calibrate_scores(structured_store=runtime.structured_store, ac_id=selected_ac_id)
         return {"job_name": job_name, **asdict(result)}
 
     if job_name == "weekly-summary":

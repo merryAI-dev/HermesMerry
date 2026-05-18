@@ -46,3 +46,13 @@ def test_runtime_config_accepts_ingest_ac_profiles_without_raw_bucket_or_schedul
     config = RuntimeConfig.from_env()
 
     config.validate_for_job("ingest-ac-profiles", has_inline_sources=True)
+
+
+def test_runtime_config_accepts_calibrate_scores_without_review_sheet(monkeypatch) -> None:
+    monkeypatch.setenv("GCP_PROJECT_ID", "project-1")
+    monkeypatch.setenv("BIGQUERY_DATASET", "merry")
+    monkeypatch.setenv("AC_ID", "ac_climate")
+
+    config = RuntimeConfig.from_env()
+
+    config.validate_for_job("calibrate-scores")

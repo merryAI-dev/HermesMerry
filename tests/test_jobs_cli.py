@@ -112,6 +112,33 @@ def test_jobs_cli_accepts_sources_file_for_ingest_ac_profiles(monkeypatch, tmp_p
     assert output["profile_count"] == 1
 
 
+def test_jobs_cli_runs_calibrate_scores(monkeypatch, tmp_path, capsys) -> None:
+    config = RuntimeConfig(
+        project_id="project-1",
+        dataset_id="merry",
+        raw_bucket="raw-bucket",
+        review_sheet_id="sheet-1",
+        default_ac_id="ac_climate",
+        wiki_root=tmp_path,
+    )
+    runtime = RuntimeAdapters(
+        object_store=FakeObjectStore(bucket="raw-bucket"),
+        structured_store=FakeStructuredStore(),
+        review_queue=FakeReviewQueue(),
+        wiki_store=SQLiteWikiStore(root=tmp_path),
+    )
+
+    monkeypatch.setattr("merry_runtime.jobs.RuntimeConfig.from_env", lambda: config)
+    monkeypatch.setattr("merry_runtime.jobs.build_runtime", lambda config: runtime)
+
+    exit_code = main(["run", "calibrate-scores", "--ac-id", "ac_climate"])
+
+    output = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert output["job_name"] == "calibrate-scores"
+    assert output["sample_count"] == 0
+
+
 def test_jobs_cli_persists_unexpected_job_failure_after_runtime_creation(monkeypatch, tmp_path, capsys) -> None:
     config = RuntimeConfig(
         project_id="project-1",

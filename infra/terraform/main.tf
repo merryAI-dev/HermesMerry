@@ -117,6 +117,21 @@ locals {
       { name = "memo", type = "STRING", mode = "NULLABLE" },
       { name = "reviewed_at", type = "TIMESTAMP", mode = "REQUIRED" }
     ]
+    ac_scoring_coefficients = [
+      { name = "ac_id", type = "STRING", mode = "REQUIRED" },
+      { name = "beta0", type = "FLOAT", mode = "REQUIRED" },
+      { name = "fund_fit", type = "FLOAT", mode = "REQUIRED" },
+      { name = "recruitment_fit", type = "FLOAT", mode = "REQUIRED" },
+      { name = "impact_fit", type = "FLOAT", mode = "REQUIRED" },
+      { name = "channel_trust", type = "FLOAT", mode = "REQUIRED" },
+      { name = "multi_channel_signal", type = "FLOAT", mode = "REQUIRED" },
+      { name = "prior_decision", type = "FLOAT", mode = "REQUIRED" },
+      { name = "freshness", type = "FLOAT", mode = "REQUIRED" },
+      { name = "risk", type = "FLOAT", mode = "REQUIRED" },
+      { name = "sample_count", type = "INTEGER", mode = "REQUIRED" },
+      { name = "model_version", type = "STRING", mode = "REQUIRED" },
+      { name = "updated_at", type = "TIMESTAMP", mode = "REQUIRED" }
+    ]
     agent_runs = [
       { name = "run_id", type = "STRING", mode = "REQUIRED" },
       { name = "job_name", type = "STRING", mode = "REQUIRED" },
@@ -145,6 +160,10 @@ locals {
     sync-review-sheet = {
       args     = ["-m", "merry_runtime.jobs", "run", "sync-review-sheet"]
       schedule = "45 * * * *"
+    }
+    calibrate-scores = {
+      args     = ["-m", "merry_runtime.jobs", "run", "calibrate-scores"]
+      schedule = "50 * * * *"
     }
     weekly-summary = {
       args     = ["-m", "merry_runtime.jobs", "run", "weekly-summary"]
@@ -392,7 +411,7 @@ resource "google_logging_metric" "cloud_run_job_errors" {
   description = "Cloud Run job error logs emitted by Hermes Merry frontless jobs."
   filter      = <<-EOT
     resource.type="cloud_run_job"
-    resource.labels.job_name=~"ingest-sources|ingest-ac-profiles|resolve-entities|score-candidates|sync-review-sheet|weekly-summary"
+    resource.labels.job_name=~"ingest-sources|ingest-ac-profiles|resolve-entities|score-candidates|sync-review-sheet|calibrate-scores|weekly-summary"
     severity>=ERROR
   EOT
 

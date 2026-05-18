@@ -91,6 +91,33 @@ def test_run_score_candidates_routes_to_sheet_queue(tmp_path) -> None:
     assert runtime.review_queue.published["ac_climate"][0]["queue_type"] == "priority"
 
 
+def test_run_calibrate_scores_persists_ac_coefficients(tmp_path) -> None:
+    store = FakeStructuredStore.seed_climate_candidate()
+    score_runtime = _runtime(tmp_path, store=store)
+    run_job("score-candidates", runtime=score_runtime, config=_config(tmp_path), ac_id="ac_climate")
+    store.upsert_rows(
+        table="reviews",
+        rows=[
+            {
+                "review_id": "review_1",
+                "card_id": store.tables["candidate_cards"][0]["card_id"],
+                "reviewer": "boram",
+                "decision": "advance",
+                "memo": "",
+                "reviewed_at": "2026-05-18T00:00:00+00:00",
+            }
+        ],
+        key_fields=("review_id",),
+    )
+    runtime = _runtime(tmp_path, store=store)
+
+    result = run_job("calibrate-scores", runtime=runtime, config=_config(tmp_path), ac_id="ac_climate")
+
+    assert result["job_name"] == "calibrate-scores"
+    assert result["sample_count"] == 1
+    assert store.tables["ac_scoring_coefficients"][0]["ac_id"] == "ac_climate"
+
+
 def test_run_sync_review_sheet_persists_reviews(tmp_path) -> None:
     store = FakeStructuredStore.seed_candidate_card()
     runtime = _runtime(tmp_path, store=store)

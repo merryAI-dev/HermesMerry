@@ -39,6 +39,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             "resolve-entities",
             "score-candidates",
             "sync-review-sheet",
+            "calibrate-scores",
             "weekly-summary",
         ],
     )

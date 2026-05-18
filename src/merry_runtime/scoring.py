@@ -12,7 +12,13 @@ _GROWTH_SIGNAL_TYPES = {"traction", "growth", "revenue", "investment", "partners
 _IMPACT_SIGNAL_TYPES = {"impact", "social_impact", "esg", "climate"}
 
 
-def score_candidate(entity: MotherEntity, signals: list[Signal], profile: ACProfile) -> ACScore:
+def score_candidate(
+    entity: MotherEntity,
+    signals: list[Signal],
+    profile: ACProfile,
+    *,
+    priority_model: PriorityScoringModel | None = None,
+) -> ACScore:
     signal_tags = _signal_tags(signals)
     evidence_tokens = _evidence_tokens(signals)
     average_confidence = _average_confidence(signals)
@@ -23,7 +29,7 @@ def score_candidate(entity: MotherEntity, signals: list[Signal], profile: ACProf
     hypothesis_fit_score = _hypothesis_score(entity, profile, signal_tags | evidence_tokens)
     impact_fit_score = _tag_or_token_score(_lower_set(profile.impact_priority), signal_tags | evidence_tokens, max_score=20)
     uncertainty = _uncertainty(signals, average_confidence)
-    priority = PriorityScoringModel.default().score(
+    priority = (priority_model or PriorityScoringModel.default()).score(
         PriorityFeatures(
             fund_fit=fund_fit_score / 15,
             recruitment_fit=recruiting_fit_score / 15,

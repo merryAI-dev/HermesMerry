@@ -11,6 +11,7 @@ def test_bigquery_schema_contains_required_mother_tables() -> None:
         "ac_scores",
         "candidate_cards",
         "reviews",
+        "ac_scoring_coefficients",
         "agent_runs",
     }.issubset(BIGQUERY_TABLES.keys())
 
@@ -66,4 +67,24 @@ def test_ac_score_schema_preserves_score_components_and_rationale() -> None:
         "uncertainty",
         "model_version",
         "rationale",
+    }.issubset(fields)
+
+
+def test_ac_scoring_coefficients_schema_covers_priority_model_fields() -> None:
+    fields = table_field_names("ac_scoring_coefficients")
+
+    assert {
+        "ac_id",
+        "beta0",
+        "fund_fit",
+        "recruitment_fit",
+        "impact_fit",
+        "channel_trust",
+        "multi_channel_signal",
+        "prior_decision",
+        "freshness",
+        "risk",
+        "sample_count",
+        "model_version",
+        "updated_at",
     }.issubset(fields)

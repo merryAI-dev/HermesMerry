@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from typing import Any
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,6 +55,23 @@ class PriorityScoringModel:
             prior_decision=0.7,
             freshness=0.5,
             risk=1.1,
+        )
+
+    @classmethod
+    def from_coefficient_row(cls, row: dict[str, Any]) -> PriorityScoringModel:
+        default = cls.default()
+        return cls(
+            beta0=float(row.get("beta0", default.beta0)),
+            fund_fit=float(row.get("fund_fit", default.fund_fit)),
+            recruitment_fit=float(row.get("recruitment_fit", default.recruitment_fit)),
+            impact_fit=float(row.get("impact_fit", default.impact_fit)),
+            channel_trust=float(row.get("channel_trust", default.channel_trust)),
+            multi_channel_signal=float(row.get("multi_channel_signal", default.multi_channel_signal)),
+            prior_decision=float(row.get("prior_decision", default.prior_decision)),
+            freshness=float(row.get("freshness", default.freshness)),
+            risk=float(row.get("risk", default.risk)),
+            link=default.link,
+            model_version=str(row.get("model_version", default.model_version)),
         )
 
     def score(self, features: PriorityFeatures) -> PriorityScore:

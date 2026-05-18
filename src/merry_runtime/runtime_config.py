@@ -43,6 +43,8 @@ class RuntimeConfig:
             pass
         elif job_name in {"score-candidates", "sync-review-sheet"}:
             required.extend(["REVIEW_SHEET_ID", "AC_ID"])
+        elif job_name == "calibrate-scores":
+            required.append("AC_ID")
         elif job_name == "weekly-summary":
             required.append("SLACK_CHANNEL")
         elif job_name == "resolve-entities":
