@@ -1,4 +1,4 @@
-from merry_runtime.adapters.fakes import FakeObjectStore, FakeStructuredStore
+from merry_runtime.adapters.fakes import FakeObjectStore, FakeReviewQueue, FakeStructuredStore
 from merry_runtime.pipelines.crawl_sources import crawl_sources
 from merry_runtime.wiki_store import SQLiteWikiStore
 
@@ -6,12 +6,14 @@ from merry_runtime.wiki_store import SQLiteWikiStore
 def test_crawl_sources_fetches_thevc_visible_investment_cards_into_mother_db(tmp_path) -> None:
     object_store = FakeObjectStore(bucket="raw-bucket")
     structured_store = FakeStructuredStore()
+    review_queue = FakeReviewQueue()
     wiki_store = SQLiteWikiStore(root=tmp_path)
 
     result = crawl_sources(
         targets=[{"url": "https://thevc.kr/", "source_kind": "thevc_investment_ma"}],
         object_store=object_store,
         structured_store=structured_store,
+        review_queue=review_queue,
         wiki_store=wiki_store,
         fetch_url=lambda url: """
             <tr>
@@ -32,5 +34,7 @@ def test_crawl_sources_fetches_thevc_visible_investment_cards_into_mother_db(tmp
     assert structured_store.tables["mother_entities"][0]["name"] == "에이아이오"
     assert structured_store.tables["signals"][0]["signal_type"] == "investment"
     assert structured_store.tables["raw_sources"][0]["channel"] == "thevc_investment_ma"
+    assert review_queue.published["Evidence"][0]["channel"] == "thevc_investment_ma"
+    assert review_queue.published["Candidate Detail"][0]["company"] == "에이아이오"
     assert any(row["job_name"] == "crawl-sources" for row in structured_store.tables["agent_runs"])
     assert (tmp_path / "wiki" / "entities").exists()

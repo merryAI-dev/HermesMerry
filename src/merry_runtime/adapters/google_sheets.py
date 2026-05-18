@@ -178,6 +178,7 @@ class GoogleSheetReviewQueue:
         return len(values)
 
     def read_pending_reviews(self, *, sheet_tab: str) -> list[dict[str, str]]:
+        self._ensure_sheet_tab(sheet_tab=sheet_tab)
         headers = _headers_for_tab(sheet_tab)
         response = self.service.spreadsheets().values().get(
             spreadsheetId=self.spreadsheet_id,
@@ -190,6 +191,7 @@ class GoogleSheetReviewQueue:
         return [dict(zip(headers, [str(value) for value in row], strict=False)) for row in values[1:]]
 
     def _ensure_headers(self, *, sheet_tab: str) -> None:
+        self._ensure_sheet_tab(sheet_tab=sheet_tab)
         headers = _headers_for_tab(sheet_tab)
         response = self.service.spreadsheets().values().get(
             spreadsheetId=self.spreadsheet_id,
@@ -204,6 +206,23 @@ class GoogleSheetReviewQueue:
             range=_sheet_range(sheet_tab, headers, row="1"),
             valueInputOption="USER_ENTERED",
             body={"values": [list(headers)]},
+        ).execute()
+
+    def _ensure_sheet_tab(self, *, sheet_tab: str) -> None:
+        response = self.service.spreadsheets().get(
+            spreadsheetId=self.spreadsheet_id,
+            fields="sheets.properties.title",
+        ).execute()
+        existing_titles = {
+            str(sheet.get("properties", {}).get("title", ""))
+            for sheet in response.get("sheets", [])
+            if isinstance(sheet, dict)
+        }
+        if sheet_tab in existing_titles:
+            return
+        self.service.spreadsheets().batchUpdate(
+            spreadsheetId=self.spreadsheet_id,
+            body={"requests": [{"addSheet": {"properties": {"title": sheet_tab}}}]},
         ).execute()
 
 

@@ -63,6 +63,7 @@ def run_job(
             targets=targets,
             object_store=runtime.object_store,
             structured_store=runtime.structured_store,
+            review_queue=runtime.review_queue if config.review_sheet_id else None,
             wiki_store=runtime.wiki_store,
         )
         return {"job_name": job_name, **asdict(result)}

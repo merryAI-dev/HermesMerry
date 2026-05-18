@@ -396,12 +396,32 @@ class FakeValues:
 class FakeSheetsService:
     def __init__(self) -> None:
         self.values_obj = FakeValues()
+        self.sheet_titles: set[str] = set()
 
     def spreadsheets(self) -> "FakeSheetsService":
         return self
 
     def values(self) -> FakeValues:
         return self.values_obj
+
+    def get(self, **kwargs: object) -> "FakeSheetsService":
+        self.get_kwargs = kwargs
+        self._pending_execute = "get"
+        return self
+
+    def batchUpdate(self, **kwargs: object) -> "FakeSheetsService":
+        self.batch_update_kwargs = kwargs
+        self.batch_update_body = kwargs["body"]  # type: ignore[index]
+        self._pending_execute = "batchUpdate"
+        return self
+
+    def execute(self) -> dict[str, object]:
+        if getattr(self, "_pending_execute", "") == "batchUpdate":
+            for request in self.batch_update_body["requests"]:  # type: ignore[index]
+                title = request["addSheet"]["properties"]["title"]
+                self.sheet_titles.add(title)
+            return {"replies": [{}]}
+        return {"sheets": [{"properties": {"title": title}} for title in sorted(self.sheet_titles)]}
 
 
 def test_google_sheet_review_queue_publishes_rows_and_reads_reviews() -> None:
@@ -470,6 +490,18 @@ def test_google_sheet_review_queue_publishes_rows_and_reads_reviews() -> None:
             "reviewer": "boram",
         }
     ]
+
+
+def test_google_sheet_review_queue_creates_missing_tab_before_headers() -> None:
+    service = FakeSheetsService()
+    service.values_obj.get_responses.append({"values": []})
+    queue = GoogleSheetReviewQueue(service=service, spreadsheet_id="sheet_1")
+
+    queue.publish_cards(sheet_tab="Evidence", rows=[{"source_id": "src_1"}])
+
+    assert service.batch_update_body == {"requests": [{"addSheet": {"properties": {"title": "Evidence"}}}]}
+    assert "Evidence" in service.sheet_titles
+    assert service.values_obj.update_kwargs["range"] == "Evidence!A1:M1"
 
 
 def test_google_sheet_review_queue_uses_raw_values_and_escapes_formula_cells() -> None:
