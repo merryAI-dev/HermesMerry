@@ -392,8 +392,12 @@ def _safe_fetch(fetch_url: Callable[[str], str], url: str) -> str:
 
 
 def _extract_public_email(text: str) -> str:
-    match = _EMAIL_RE.search(text)
-    return match.group(1) if match else ""
+    for match in _EMAIL_RE.finditer(text):
+        email = match.group(1)
+        if email.rsplit("@", 1)[-1].casefold() in {"thevc.kr", "www.thevc.kr"}:
+            continue
+        return email
+    return ""
 
 
 def _match_first(text: str, patterns: tuple[str, ...]) -> str:

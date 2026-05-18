@@ -147,3 +147,9 @@ def test_extract_thevc_company_detail_does_not_treat_company_type_as_homepage() 
 
     assert detail.homepage == ""
     assert detail.representative == "장영휘"
+
+
+def test_extract_thevc_company_detail_ignores_thevc_platform_email() -> None:
+    detail = extract_thevc_company_detail('<a href="mailto:master@thevc.kr">THE VC</a>')
+
+    assert detail.contact_email == ""
