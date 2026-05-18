@@ -14,7 +14,7 @@ COPY pyproject.toml README.md ./
 COPY src ./src
 COPY configs ./configs
 
-RUN pip install --no-cache-dir --no-deps .
+RUN pip install --no-cache-dir --no-deps --no-build-isolation .
 
 USER hermes
 

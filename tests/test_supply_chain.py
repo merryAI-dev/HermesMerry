@@ -1,8 +1,25 @@
 import re
+import tomllib
 from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+SETUPTOOLS_VERSION = "80.9.0"
+PIP_AUDIT_VERSION = "2.10.0"
+
+
+def _lock_has_hash_locked_requirement(lock_path: Path, package: str, version: str) -> bool:
+    lines = lock_path.read_text().splitlines()
+    requirement_prefix = f"{package}=={version}"
+    for index, line in enumerate(lines):
+        if not line.startswith(requirement_prefix):
+            continue
+        for following_line in lines[index + 1 :]:
+            if following_line and not following_line.startswith((" ", "#")):
+                return False
+            if "--hash=sha256:" in following_line:
+                return True
+    return False
 
 
 def test_dockerfile_uses_digest_pinned_base_and_hash_locked_install() -> None:
@@ -11,17 +28,44 @@ def test_dockerfile_uses_digest_pinned_base_and_hash_locked_install() -> None:
 
     assert re.fullmatch(r"FROM python:3\.12-slim@sha256:[0-9a-f]{64}", first_line)
     assert "RUN pip install --no-cache-dir --require-hashes -r requirements.lock" in dockerfile
-    assert "RUN pip install --no-cache-dir --no-deps ." in dockerfile
+    assert "RUN pip install --no-cache-dir --no-deps --no-build-isolation ." in dockerfile
+
+
+def test_build_backend_is_exact_pinned_and_hash_locked_for_non_isolated_build() -> None:
+    pyproject = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text())
+
+    assert pyproject["build-system"]["requires"] == [f"setuptools=={SETUPTOOLS_VERSION}"]
+    assert _lock_has_hash_locked_requirement(
+        REPO_ROOT / "requirements.lock",
+        "setuptools",
+        SETUPTOOLS_VERSION,
+    )
 
 
 def test_ci_runs_pip_audit_against_locked_requirements() -> None:
     ci = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text()
 
     assert re.search(
+        r"(?m)^\s*run:\s*python3\s+-m\s+pip\s+install\s+--require-hashes\s+-r\s+requirements-audit\.lock\s*$",
+        ci,
+    )
+    assert re.search(
         r"(?m)^\s*run:\s*(?:python3\s+-m\s+pip_audit|pip-audit)\s+-r\s+requirements\.lock\s*$",
         ci,
     )
+    assert not re.search(r"(?m)^\s*run:\s*python3\s+-m\s+pip\s+install\s+pip-audit\s*$", ci)
     assert "continue-on-error: true" not in ci
     assert "|| true" not in ci
     assert "--ignore-vuln" not in ci
     assert "--skip-vuln" not in ci
+
+
+def test_audit_tooling_is_hash_locked() -> None:
+    assert (REPO_ROOT / "requirements-audit.in").read_text().splitlines() == [
+        f"pip-audit=={PIP_AUDIT_VERSION}"
+    ]
+    assert _lock_has_hash_locked_requirement(
+        REPO_ROOT / "requirements-audit.lock",
+        "pip-audit",
+        PIP_AUDIT_VERSION,
+    )
