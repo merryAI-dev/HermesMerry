@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+import re
+
+
+_BIGQUERY_FIELD_IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
 
 def build_merge_sql(
     *,
@@ -15,6 +20,10 @@ def build_merge_sql(
     missing_keys = set(key_fields) - set(field_names)
     if missing_keys:
         raise ValueError(f"key_fields must exist in field_names: {sorted(missing_keys)}")
+    for field in field_names:
+        _validate_field_identifier(field)
+    for field in key_fields:
+        _validate_field_identifier(field)
 
     on_clause = " AND ".join(f"T.{field} = S.{field}" for field in key_fields)
     update_fields = tuple(field for field in field_names if field not in key_fields)
@@ -31,3 +40,8 @@ ON {on_clause}
 WHEN MATCHED THEN UPDATE SET {update_clause}
 WHEN NOT MATCHED THEN INSERT ({insert_columns}) VALUES ({insert_values})
 """.strip()
+
+
+def _validate_field_identifier(field: str) -> None:
+    if not _BIGQUERY_FIELD_IDENTIFIER.fullmatch(field):
+        raise ValueError(f"invalid BigQuery field identifier: {field}")

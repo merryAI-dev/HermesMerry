@@ -1,3 +1,5 @@
+import pytest
+
 from merry_runtime.adapters.bigquery import BigQueryStructuredStore, build_query_job_config
 from merry_runtime.adapters.gcs import GCSObjectStore
 from merry_runtime.adapters.gmail import GmailLabelSource
@@ -43,10 +45,13 @@ def test_gcs_object_store_uploads_text_and_returns_gs_uri() -> None:
 
 
 class FakeQueryJob:
-    def __init__(self, rows: list[dict[str, object]] | None = None) -> None:
+    def __init__(self, rows: list[dict[str, object]] | None = None, error: Exception | None = None) -> None:
         self.rows = rows or []
+        self.error = error
 
     def result(self) -> list[dict[str, object]]:
+        if self.error:
+            raise self.error
         return self.rows
 
 
@@ -75,6 +80,27 @@ class FakeBigQueryClient:
 
     def delete_table(self, table_id: str, *, not_found_ok: bool = False) -> None:
         self.deleted_tables.append(table_id)
+
+
+class FakeFailingCleanupBigQueryClient(FakeBigQueryClient):
+    def __init__(self, *, load_error: Exception | None = None, merge_error: Exception | None = None) -> None:
+        super().__init__()
+        self.load_error = load_error
+        self.merge_error = merge_error
+
+    def query(self, sql: str, job_config: object | None = None) -> FakeQueryJob:
+        super().query(sql, job_config=job_config)
+        return FakeQueryJob(error=self.merge_error)
+
+    def load_table_from_json(
+        self, rows: list[dict[str, object]], table_id: str, job_config: object | None = None
+    ) -> FakeQueryJob:
+        super().load_table_from_json(rows, table_id, job_config=job_config)
+        return FakeQueryJob(error=self.load_error)
+
+    def delete_table(self, table_id: str, *, not_found_ok: bool = False) -> None:
+        super().delete_table(table_id, not_found_ok=not_found_ok)
+        raise RuntimeError("cleanup failed")
 
 
 def test_bigquery_structured_store_returns_zero_for_empty_upsert_without_client_calls() -> None:
@@ -115,6 +141,75 @@ def test_bigquery_upsert_loads_staging_table_and_merges_without_target_delete() 
     assert "`entity_id`, `entity_type`, `name`, `normalized_name`, `region`" in client.queries[-1][0]
     assert "DELETE FROM `p.d.mother_entities`" not in " ".join(sql for sql, _metadata in client.queries)
     assert client.deleted_tables[0].startswith("p.d._staging_mother_entities_")
+
+
+def test_bigquery_upsert_rejects_duplicate_batch_keys_before_bigquery_calls() -> None:
+    client = FakeBigQueryClient()
+    store = BigQueryStructuredStore(client=client, project_id="p", dataset_id="d")
+
+    with pytest.raises(ValueError, match="duplicate key_fields value"):
+        store.upsert_rows(
+            table="mother_entities",
+            rows=[
+                {"entity_id": "ent_1", "name": "Merry AI"},
+                {"entity_id": "ent_1", "name": "Merry AI Duplicate"},
+            ],
+            key_fields=("entity_id",),
+        )
+
+    assert client.loaded_rows == []
+    assert client.queries == []
+    assert client.deleted_tables == []
+
+
+def test_bigquery_upsert_preserves_load_error_when_staging_cleanup_fails() -> None:
+    load_error = RuntimeError("load failed")
+    client = FakeFailingCleanupBigQueryClient(load_error=load_error)
+    store = BigQueryStructuredStore(client=client, project_id="p", dataset_id="d")
+
+    with pytest.raises(RuntimeError, match="load failed"):
+        store.upsert_rows(
+            table="mother_entities",
+            rows=[{"entity_id": "ent_1", "name": "Merry AI"}],
+            key_fields=("entity_id",),
+        )
+
+    assert len(client.loaded_rows) == 1
+    assert client.queries == []
+    assert len(client.deleted_tables) == 1
+
+
+def test_bigquery_upsert_preserves_merge_error_when_staging_cleanup_fails() -> None:
+    merge_error = RuntimeError("merge failed")
+    client = FakeFailingCleanupBigQueryClient(merge_error=merge_error)
+    store = BigQueryStructuredStore(client=client, project_id="p", dataset_id="d")
+
+    with pytest.raises(RuntimeError, match="merge failed"):
+        store.upsert_rows(
+            table="mother_entities",
+            rows=[{"entity_id": "ent_1", "name": "Merry AI"}],
+            key_fields=("entity_id",),
+        )
+
+    assert len(client.loaded_rows) == 1
+    assert "MERGE `p.d.mother_entities`" in client.queries[-1][0]
+    assert len(client.deleted_tables) == 1
+
+
+def test_bigquery_upsert_does_not_fail_successful_merge_when_staging_cleanup_fails() -> None:
+    client = FakeFailingCleanupBigQueryClient()
+    store = BigQueryStructuredStore(client=client, project_id="p", dataset_id="d")
+
+    count = store.upsert_rows(
+        table="mother_entities",
+        rows=[{"entity_id": "ent_1", "name": "Merry AI"}],
+        key_fields=("entity_id",),
+    )
+
+    assert count == 1
+    assert len(client.loaded_rows) == 1
+    assert "MERGE `p.d.mother_entities`" in client.queries[-1][0]
+    assert len(client.deleted_tables) == 1
 
 
 def test_bigquery_structured_store_query_rows_returns_dicts() -> None:

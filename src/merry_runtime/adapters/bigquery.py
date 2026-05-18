@@ -19,6 +19,7 @@ class BigQueryStructuredStore:
     def upsert_rows(self, *, table: str, rows: list[dict[str, object]], key_fields: tuple[str, ...]) -> int:
         if not rows:
             return 0
+        _validate_unique_batch_keys(rows, key_fields)
         table_id = self._table_id(table)
         staging_table_id = self._table_id(f"_staging_{table}_{uuid.uuid4().hex}")
         field_names = _field_names(table, rows)
@@ -39,7 +40,10 @@ class BigQueryStructuredStore:
                 job_config=build_query_job_config({}, default_dataset=f"{self.project_id}.{self.dataset_id}"),
             ).result()
         finally:
-            self.client.delete_table(staging_table_id, not_found_ok=True)
+            try:
+                self.client.delete_table(staging_table_id, not_found_ok=True)
+            except Exception:
+                pass
         return len(rows)
 
     def query_rows(self, *, sql: str, parameters: dict[str, object]) -> list[dict[str, object]]:
@@ -102,6 +106,18 @@ def _field_names(table: str, rows: list[dict[str, object]]) -> tuple[str, ...]:
             if name not in names:
                 names.append(name)
     return tuple(names)
+
+
+def _validate_unique_batch_keys(rows: list[dict[str, object]], key_fields: tuple[str, ...]) -> None:
+    if not key_fields:
+        raise ValueError("key_fields must not be empty")
+
+    seen: set[tuple[object, ...]] = set()
+    for row in rows:
+        key = tuple(row[field] for field in key_fields)
+        if key in seen:
+            raise ValueError(f"duplicate key_fields value in upsert batch: {key}")
+        seen.add(key)
 
 
 def _bigquery_type(value: object) -> str:
