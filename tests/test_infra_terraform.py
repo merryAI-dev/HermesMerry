@@ -62,6 +62,15 @@ def test_terraform_defines_manual_ingest_ac_profiles_job_without_default_schedul
     assert 'for_each = local.scheduled_jobs' in main_tf
 
 
+def test_terraform_scheduler_invoker_only_grants_scheduled_jobs() -> None:
+    main_tf = (REPO_ROOT / "infra" / "terraform" / "main.tf").read_text()
+
+    scheduler_invoker_block = main_tf.split('resource "google_cloud_run_v2_job_iam_member" "scheduler_invoker" {', 1)[1].split("\n}", 1)[0]
+    assert "for_each = local.scheduled_jobs" in scheduler_invoker_block
+    assert "for_each = google_cloud_run_v2_job.agent_jobs" not in scheduler_invoker_block
+    assert 'name     = google_cloud_run_v2_job.agent_jobs[each.key].name' in scheduler_invoker_block
+
+
 def test_dockerfile_runs_runtime_as_non_root_user() -> None:
     dockerfile = (REPO_ROOT / "Dockerfile").read_text()
 

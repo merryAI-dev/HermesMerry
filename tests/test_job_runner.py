@@ -77,7 +77,7 @@ def test_run_ingest_ac_profiles_uses_sources_json_and_updates_wiki(tmp_path) -> 
     assert result["job_name"] == "ingest-ac-profiles"
     assert result["profile_count"] == 1
     assert runtime.structured_store.tables["ac_profiles"][0]["ac_id"] == "ac_climate_local"
-    assert (tmp_path / "wiki" / "ac" / "climate-local-impact-ac.md").exists()
+    assert (tmp_path / "wiki" / "ac" / "ac-climate-local.md").exists()
 
 
 def test_run_score_candidates_routes_to_sheet_queue(tmp_path) -> None:

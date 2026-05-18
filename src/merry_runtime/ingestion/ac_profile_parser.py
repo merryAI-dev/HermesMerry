@@ -81,6 +81,8 @@ def _extract_fields(text: str) -> dict[str, list[str]]:
                 if value:
                     fields[key].append(value)
                 continue
+            current_key = ""
+            continue
 
         bullet_match = _BULLET_PATTERN.match(line)
         if bullet_match and current_key:

@@ -346,11 +346,11 @@ resource "google_cloud_run_v2_job" "agent_jobs" {
 }
 
 resource "google_cloud_run_v2_job_iam_member" "scheduler_invoker" {
-  for_each = google_cloud_run_v2_job.agent_jobs
+  for_each = local.scheduled_jobs
 
   project  = var.project_id
   location = var.region
-  name     = each.value.name
+  name     = google_cloud_run_v2_job.agent_jobs[each.key].name
   role     = "roles/run.invoker"
   member   = "serviceAccount:${google_service_account.scheduler.email}"
 }

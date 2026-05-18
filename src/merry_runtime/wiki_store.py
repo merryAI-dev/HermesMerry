@@ -17,6 +17,16 @@ class WikiWriteResult:
     source_count: int
 
 
+@dataclass(frozen=True, slots=True)
+class WikiSource:
+    source_id: str
+    channel: str
+    title: str
+    uri: str = ""
+    raw_path: str = ""
+    checksum: str = ""
+
+
 @dataclass(slots=True)
 class SQLiteWikiStore:
     root: Path
@@ -153,9 +163,10 @@ class SQLiteWikiStore:
         *,
         operation: str,
         source_title: str,
+        source: WikiSource | None = None,
     ) -> WikiWriteResult:
         self.initialize()
-        page_path = f"ac/{_slugify(profile.ac_name)}.md"
+        page_path = f"ac/{_slugify(profile.ac_id)}.md"
         thesis_values = _dedupe([*profile.impact_priority, *profile.hypothesis_tags])
         thesis_pages = [(value, f"concepts/impact_thesis/{_slugify(value)}.md") for value in thesis_values]
 
@@ -173,11 +184,22 @@ class SQLiteWikiStore:
             )
 
         now = _now()
-        links = [(page_path, thesis_path, EdgeKind.MATCHES_THESIS.value, None, 1.0) for _thesis, thesis_path in thesis_pages]
+        links = [(page_path, thesis_path, EdgeKind.MATCHES_THESIS.value, source.source_id if source else None, 1.0) for _thesis, thesis_path in thesis_pages]
         pages = [(page_path, profile.ac_name, NodeKind.AC.value, profile.fund_purpose)]
         pages.extend((thesis_path, thesis, NodeKind.IMPACT_THESIS.value, "Impact thesis") for thesis, thesis_path in thesis_pages)
 
         with sqlite3.connect(self.db_path) as connection:
+            stale_thesis_paths = {
+                row[0]
+                for row in connection.execute(
+                    "select to_path from links where from_path = ? and relation = ?",
+                    (page_path, EdgeKind.MATCHES_THESIS.value),
+                ).fetchall()
+            } - {thesis_path for _thesis, thesis_path in thesis_pages}
+            connection.execute(
+                "delete from links where from_path = ? and relation = ?",
+                (page_path, EdgeKind.MATCHES_THESIS.value),
+            )
             connection.executemany(
                 """
                 insert into pages(path, title, kind, summary, updated_at)
@@ -200,10 +222,29 @@ class SQLiteWikiStore:
                 """,
                 links,
             )
+            if source:
+                connection.execute(
+                    """
+                    insert into sources(source_id, channel, title, uri, raw_path, checksum, ingested_at)
+                    values(?, ?, ?, ?, ?, ?, ?)
+                    on conflict(source_id) do update set
+                        channel=excluded.channel,
+                        title=excluded.title,
+                        uri=excluded.uri,
+                        raw_path=excluded.raw_path,
+                        checksum=excluded.checksum
+                    """,
+                    (source.source_id, source.channel, source.title, source.uri, source.raw_path, source.checksum, now),
+                )
+            orphaned_thesis_paths = _orphaned_impact_thesis_paths(connection, stale_thesis_paths)
+            if orphaned_thesis_paths:
+                connection.executemany("delete from pages where path = ?", [(path,) for path in orphaned_thesis_paths])
 
+        for path in orphaned_thesis_paths:
+            (self.wiki_dir / path).unlink(missing_ok=True)
         self._rewrite_index()
         self._append_log(operation=operation, title=source_title, page_path=page_path, timestamp=now)
-        return WikiWriteResult(page_path=page_path, link_count=len(links), source_count=0)
+        return WikiWriteResult(page_path=page_path, link_count=len(links), source_count=1 if source else 0)
 
     def _rewrite_index(self) -> None:
         with sqlite3.connect(self.db_path) as connection:
@@ -324,6 +365,24 @@ def _sources(graph: StartupKnowledgeGraph) -> list[tuple[str, str, str, str, str
                 )
             )
     return rows
+
+
+def _orphaned_impact_thesis_paths(connection: sqlite3.Connection, candidate_paths: set[str]) -> set[str]:
+    orphaned: set[str] = set()
+    for path in candidate_paths:
+        inbound_count = connection.execute(
+            """
+            select count(*)
+            from links
+            join pages on pages.path = links.from_path
+            where links.to_path = ?
+              and pages.kind in (?, ?)
+            """,
+            (path, NodeKind.AC.value, NodeKind.STARTUP.value),
+        ).fetchone()[0]
+        if inbound_count == 0:
+            orphaned.add(path)
+    return orphaned
 
 
 def _node_page_path(node) -> str:

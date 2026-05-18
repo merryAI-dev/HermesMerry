@@ -61,3 +61,24 @@ def test_parse_ac_hypothesis_report_normalizes_tags_for_scoring_without_losing_r
 
     assert profile.hypothesis_tags == ("digital health", "digital-health", "health equity")
     assert profile.impact_priority == ("Patient Access", "health equity")
+
+
+def test_parse_ac_hypothesis_report_does_not_leak_unknown_section_bullets_into_previous_field() -> None:
+    report = """
+    AC ID: ac_notes
+    AC Name: Notes Leakage AC
+    Fund Purpose: climate resilience
+    Hypothesis Tags: climate
+    Impact Priorities:
+    - carbon
+    Notes:
+    - private partner concern should stay out of scoring fields
+    - another note
+    Region Preferences:
+    - Jeonbuk
+    """
+
+    profile = parse_ac_hypothesis_report(report)
+
+    assert profile.impact_priority == ("carbon",)
+    assert profile.region_preferences == ("Jeonbuk",)
