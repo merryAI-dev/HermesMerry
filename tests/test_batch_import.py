@@ -66,6 +66,16 @@ def test_parse_candidate_batch_csv_preserves_known_channel_and_source_uri() -> N
     assert batch.quality_report.passed is True
 
 
+def test_parse_candidate_batch_csv_normalizes_semicolon_tags_for_existing_ingest_parsers() -> None:
+    csv_text = _csv(
+        "Merry AI,Merry,Kim,https://merry.ai,Seoul,AI,external_referral,Referral,0.8,ai; impact,drive://exports/batch.csv#row=2"
+    )
+
+    batch = parse_candidate_batch_csv(csv_text)
+
+    assert batch.sources[0]["payload"]["tags"] == "ai, impact"
+
+
 def test_parse_candidate_batch_csv_reports_duplicate_homepage_conflict_rate() -> None:
     rows = [
         f"ConflictCo,Conflict,{index},https://conflict-{index % 2}.example,Seoul,AI,external_referral,Evidence,0.7,ai,drive://row-{index}"

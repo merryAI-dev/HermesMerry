@@ -114,7 +114,7 @@ def _source_from_row(row: dict[str, str]) -> dict[str, Any]:
                 "reason": evidence,
                 "evidence": evidence,
                 "confidence": row["confidence"],
-                "tags": row["tags"],
+                "tags": _normalize_tags(row["tags"]),
                 "source_uri": row["source_uri"],
                 "url": row["source_uri"],
             },
@@ -137,7 +137,7 @@ def _text_payload(*, row: dict[str, str], evidence: str) -> str:
             f"Industry: {row['industry']}",
             "Signal: curated_batch",
             f"Confidence: {row['confidence']}",
-            f"Tags: {row['tags']}",
+            f"Tags: {_normalize_tags(row['tags'])}",
             f"Evidence: {evidence}",
             f"URL: {row['source_uri']}",
             f"Source_URI: {row['source_uri']}",
@@ -184,3 +184,7 @@ def _build_quality_report(*, rows: list[dict[str, str]], row_numbers: list[int])
 
 def _normalize_homepage(homepage: str) -> str:
     return homepage.strip().casefold().rstrip("/")
+
+
+def _normalize_tags(value: str) -> str:
+    return ", ".join(tag.strip() for tag in value.replace(";", ",").split(",") if tag.strip())

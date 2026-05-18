@@ -86,6 +86,7 @@ def test_import_candidate_batch_ingests_1000_synthetic_candidates_without_networ
     assert len(structured_store.tables["signals"]) == 1000
     assert all(row["channel"] in {"hankyung_ceo_interview", "info_mail", "external_referral", "internal_screening_memo"} for row in structured_store.tables["raw_sources"])
     assert all(str(row["url"]).startswith("drive://candidate-batch.csv#row=") for row in structured_store.tables["raw_sources"])
+    assert all(";" not in tag for row in structured_store.tables["signals"] for tag in row["tags"])
 
 
 def test_import_candidate_batch_rejects_conflicts_before_any_write(tmp_path) -> None:
