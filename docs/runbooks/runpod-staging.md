@@ -131,6 +131,19 @@ must be a Runpod secret, not a committed file. For the private image, configure
 Runpod Container Registry Auth with the Docker Hub user `boram1220` and a Docker
 Hub access token.
 
+The prepared one-cycle template is:
+
+```text
+Template: hermes-merry-staging-one-cycle
+Template ID: 7s0amucf96
+GCP secret reference: {{ RUNPOD_SECRET_hermes_gcp_sa_staging_json }}
+```
+
+If the Runpod REST API key cannot access GraphQL `secretCreate`, create the
+`hermes_gcp_sa_staging_json` secret in the Runpod console before launching the
+template. Do not paste the service account JSON into plain Pod environment
+variables for the always-on runtime.
+
 ## One-cycle Canary
 
 Set `AGENT_LOOP_MAX_CYCLES=1` for the first Runpod run. Start the Pod and wait

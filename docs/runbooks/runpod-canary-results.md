@@ -60,15 +60,34 @@
 - Terraform output: `agent_service_account_email = hermes-merry-agent-staging@yapnotes-app-2.iam.gserviceaccount.com`
 - Terraform output: `cloud_run_jobs = []`
 - Terraform output: `artifact_registry_repository = ""`
+- GCP ADC identity: `ai@mysc.co.kr`; active `gcloud` user
+  `mwbyun1220@mysc.co.kr` has narrower project permissions, so runtime checks
+  must use ADC rather than the active gcloud account
+- GCP API enablement: `gmail.googleapis.com`, `sheets.googleapis.com`,
+  `drive.googleapis.com`, and `iamcredentials.googleapis.com` were enabled
+  through Service Usage on 2026-05-18
+- GCP billing status: `billingEnabled=false`; BigQuery read/query jobs work,
+  but DML/MERGE fails with the free-tier billing restriction
+- BigQuery ADC row counts after the Runpod canary:
+  `raw_sources=3`, `mother_entities=3`, `signals=3`, `agent_runs=5`
+- Runpod REST API auth: valid for Pods, Templates, and Container Registry Auths
+- Runpod GraphQL API auth: returned HTTP 403 for `myself` and `secretCreate`,
+  so Runpod secrets still require console setup or a GraphQL-enabled API key
+- Runpod template: `hermes-merry-staging-one-cycle`, id `7s0amucf96`, image
+  `docker.io/boram1220/hermes-merry:staging-096cbea`, registry auth
+  `cmpayp7w3004nlb076xogtx3r`, `BIGQUERY_WRITE_MODE=append`, and
+  `AGENT_LOOP_MAX_CYCLES=1`
 
 ## Result
 
 - Canary status: local Docker canary passed and existing remote Runpod Pod
   canary passed
 - Failed job count: 0 for the focused Runpod canary path
-- Human review required: configure durable GCP credentials for the Runpod Pod,
-  then replace the SSH bootstrap with the private Docker Hub image and configure
-  isolated Sheet/Slack targets
+- Human review required: create Runpod secret
+  `hermes_gcp_sa_staging_json` from the generated service account JSON, then
+  launch the `hermes-merry-staging-one-cycle` template. Enable GCP billing
+  before switching the template to `BIGQUERY_WRITE_MODE=merge` and an
+  unbounded loop.
 
 ## Rollback command
 
