@@ -32,6 +32,10 @@ def resolve_entities(
 
     entity_rows = structured_store.query_rows(sql="select * from mother_entities", parameters={})
     alias_rows = structured_store.query_rows(sql="select * from entity_aliases", parameters={})
+    existing_event_rows = structured_store.query_rows(sql="select * from entity_resolution_events", parameters={})
+    existing_pending_event_ids = {
+        str(row["event_id"]) for row in existing_event_rows if str(row.get("status", "")) == "pending_review"
+    }
     aliases_by_entity = _aliases_by_entity(alias_rows)
     observations = sorted(
         (_observation_from_row(row, aliases_by_entity.get(str(row["entity_id"]), ())) for row in entity_rows),
@@ -40,28 +44,31 @@ def resolve_entities(
 
     existing: list[EntityObservation] = []
     event_rows: list[dict[str, object]] = []
+    sheet_rows: list[dict[str, object]] = []
     for candidate in observations:
         resolution = resolver.resolve(candidate, existing)
         if resolution.action in {"merge", "needs_review"}:
             action = "merge_candidate" if resolution.action == "merge" else "needs_review"
-            event_rows.append(
-                {
-                    "event_id": _event_id(run_id, candidate.entity_id, resolution.entity_id, action),
-                    "candidate_entity_id": candidate.entity_id,
-                    "matched_entity_id": resolution.entity_id,
-                    "action": action,
-                    "probability": resolution.probability,
-                    "features_json": json.dumps(resolution.features, ensure_ascii=False, sort_keys=True),
-                    "rationale": resolution.rationale,
-                    "status": "pending_review",
-                    "created_at": started_at,
-                }
-            )
+            event_id = _event_id(candidate.entity_id, resolution.entity_id, action)
+            event_row = {
+                "event_id": event_id,
+                "candidate_entity_id": candidate.entity_id,
+                "matched_entity_id": resolution.entity_id,
+                "action": action,
+                "probability": resolution.probability,
+                "features_json": json.dumps(resolution.features, ensure_ascii=False, sort_keys=True),
+                "rationale": resolution.rationale,
+                "status": "pending_review",
+                "created_at": started_at,
+            }
+            event_rows.append(event_row)
+            if event_id not in existing_pending_event_ids:
+                sheet_rows.append(event_row)
         existing.append(candidate)
 
     structured_store.upsert_rows(table="entity_resolution_events", rows=event_rows, key_fields=("event_id",))
-    if event_rows:
-        review_queue.publish_cards(sheet_tab="entity_resolution", rows=event_rows)
+    if sheet_rows:
+        review_queue.publish_cards(sheet_tab="entity_resolution", rows=sheet_rows)
 
     merge_candidate_count = sum(1 for row in event_rows if row["action"] == "merge_candidate")
     needs_review_count = sum(1 for row in event_rows if row["action"] == "needs_review")
@@ -120,8 +127,8 @@ def _observation_sort_key(observation: EntityObservation) -> tuple[str, str]:
     return (observation.observed_at, observation.entity_id)
 
 
-def _event_id(run_id: str, candidate_entity_id: str, matched_entity_id: str, action: str) -> str:
-    return f"er_{_short_digest(run_id, candidate_entity_id, matched_entity_id, action)}"
+def _event_id(candidate_entity_id: str, matched_entity_id: str, action: str) -> str:
+    return f"er_{_short_digest(candidate_entity_id, matched_entity_id, action)}"
 
 
 def _short_digest(*parts: str) -> str:

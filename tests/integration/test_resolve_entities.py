@@ -49,6 +49,48 @@ def test_resolve_entities_persists_high_probability_merge_candidate_without_dele
     assert store.tables["agent_runs"][0]["output_count"] == 1
 
 
+def test_resolve_entities_rerun_does_not_duplicate_pending_events_or_sheet_rows() -> None:
+    store = FakeStructuredStore()
+    store.upsert_rows(
+        table="mother_entities",
+        rows=[
+            {
+                "entity_id": "ent_existing",
+                "entity_type": "startup",
+                "name": "CareFarm Carbon",
+                "normalized_name": "carefarmcarbon",
+                "region": "Jeonbuk",
+                "industry": "AgriTech",
+                "homepage": "https://carefarm.example",
+                "first_seen_at": "2026-05-01T00:00:00+00:00",
+                "last_seen_at": "2026-05-01T00:00:00+00:00",
+            },
+            {
+                "entity_id": "ent_candidate",
+                "entity_type": "startup",
+                "name": "CareFarm",
+                "normalized_name": "carefarm",
+                "region": "Jeonbuk",
+                "industry": "AgriTech",
+                "homepage": "https://carefarm.example",
+                "first_seen_at": "2026-05-18T00:00:00+00:00",
+                "last_seen_at": "2026-05-18T00:00:00+00:00",
+            },
+        ],
+        key_fields=("entity_id",),
+    )
+    queue = FakeReviewQueue()
+
+    first = resolve_entities(structured_store=store, review_queue=queue)
+    second = resolve_entities(structured_store=store, review_queue=queue)
+
+    assert first.event_count == 1
+    assert second.event_count == 1
+    assert len(store.tables["entity_resolution_events"]) == 1
+    assert len(queue.published["entity_resolution"]) == 1
+    assert [row["entity_id"] for row in store.tables["mother_entities"]] == ["ent_existing", "ent_candidate"]
+
+
 def test_resolve_entities_compares_candidates_only_against_earlier_sorted_observations() -> None:
     store = FakeStructuredStore()
     store.upsert_rows(

