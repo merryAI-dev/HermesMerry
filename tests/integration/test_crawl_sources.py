@@ -1,4 +1,4 @@
-from merry_runtime.adapters.fakes import FakeObjectStore, FakeReviewQueue, FakeStructuredStore
+from merry_runtime.adapters.fakes import FakeNotifier, FakeObjectStore, FakeReviewQueue, FakeStructuredStore
 from merry_runtime.pipelines.crawl_sources import crawl_sources
 from merry_runtime.wiki_store import SQLiteWikiStore
 
@@ -115,3 +115,48 @@ def test_crawl_sources_does_not_republish_existing_sheet_projection_rows(tmp_pat
 
     assert len(review_queue.published["Evidence"]) == 1
     assert len(review_queue.published["Candidate Detail"]) == 1
+
+
+def test_crawl_sources_sends_slack_for_new_platum_portfolio_news_only(tmp_path) -> None:
+    object_store = FakeObjectStore(bucket="raw-bucket")
+    structured_store = FakeStructuredStore()
+    review_queue = FakeReviewQueue()
+    notifier = FakeNotifier()
+    html = """
+        <div class="gb-grid-column gb-query-loop-item">
+          <a class="gb-container-link" href="https://platum.kr/archives/286764"></a>
+          <h3 class="gb-headline">비저너리, 카이스트청년창업투자지주로부터 시드 투자 유치</h3>
+          <p class="gb-headline excerpt">공간 지능 데이터 소프트웨어 스타트업 비저너리가 총 8억 원 규모의 시드 투자를 유치했다.</p>
+          <time class="entry-date published" datetime="2026-05-13T12:39:15+09:00">2026.05.13</time>
+        </div>
+    """
+
+    for run_id in ("run_first", "run_second"):
+        result = crawl_sources(
+            targets=[
+                {
+                    "url": "https://platum.kr/archives/category/investment",
+                    "source_kind": "platum_investment_news",
+                    "portfolio_companies": ["(주)비저너리"],
+                }
+            ],
+            object_store=object_store,
+            structured_store=structured_store,
+            review_queue=review_queue,
+            notifier=notifier,
+            slack_channel="C123",
+            fetch_url=lambda url: html,
+            run_id=run_id,
+        )
+
+    assert result.crawled_source_count == 0
+    assert result.notified_count == 0
+    assert len(structured_store.tables["raw_sources"]) == 1
+    assert structured_store.tables["raw_sources"][0]["channel"] == "platum_investment_news"
+    assert structured_store.tables["mother_entities"][0]["name"] == "비저너리"
+    assert structured_store.tables["signals"][0]["signal_type"] == "portfolio_news"
+    assert len(review_queue.published["Evidence"]) == 1
+    assert len(notifier.messages) == 1
+    assert notifier.messages[0]["channel"] == "C123"
+    assert "비저너리" in notifier.messages[0]["text"]
+    assert "https://platum.kr/archives/286764" in notifier.messages[0]["text"]

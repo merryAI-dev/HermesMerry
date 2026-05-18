@@ -66,6 +66,18 @@ def parse_thevc_investment_card(text: str) -> ParsedSource:
     )
 
 
+def parse_platum_portfolio_news(text: str) -> ParsedSource:
+    fields = _parse_key_value_text(text)
+    return _parsed_from_fields(
+        fields=fields,
+        raw_text=text,
+        source_type="web_article",
+        channel="platum_investment_news",
+        uri=_source_uri(fields, "url"),
+        title=fields.get("title", ""),
+    )
+
+
 def parse_referral_row(row: dict[str, Any]) -> ParsedSource:
     fields = {str(key).casefold(): str(value) for key, value in row.items() if value is not None}
     raw_text = json.dumps(row, ensure_ascii=False, sort_keys=True)

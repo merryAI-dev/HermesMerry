@@ -12,6 +12,7 @@ from merry_runtime.ingestion.parsers import (
     parse_article,
     parse_email,
     parse_internal_memo,
+    parse_platum_portfolio_news,
     parse_referral_row,
     parse_thevc_investment_card,
 )
@@ -118,6 +119,8 @@ def _parse_source(source: dict[str, Any]) -> ParsedSource:
         return parse_internal_memo(payload)
     if channel == "thevc_investment_ma" and isinstance(payload, str):
         return parse_thevc_investment_card(payload)
+    if channel == "platum_investment_news" and isinstance(payload, str):
+        return parse_platum_portfolio_news(payload)
     raise ValueError(f"Unsupported source channel or payload type: {channel}")
 
 
