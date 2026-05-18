@@ -54,6 +54,8 @@ class FakeBigQueryClient:
     def __init__(self) -> None:
         self.queries: list[tuple[str, dict[str, object]]] = []
         self.inserted: list[tuple[str, list[dict[str, object]]]] = []
+        self.loaded_rows: list[tuple[str, list[dict[str, object]], object | None]] = []
+        self.deleted_tables: list[str] = []
 
     def query(self, sql: str, job_config: object | None = None) -> FakeQueryJob:
         metadata = dict(getattr(job_config, "parameters", {}))
@@ -65,16 +67,54 @@ class FakeBigQueryClient:
         self.inserted.append((table_id, rows))
         return []
 
+    def load_table_from_json(
+        self, rows: list[dict[str, object]], table_id: str, job_config: object | None = None
+    ) -> FakeQueryJob:
+        self.loaded_rows.append((table_id, rows, job_config))
+        return FakeQueryJob()
 
-def test_bigquery_structured_store_deletes_keys_then_inserts_rows() -> None:
+    def delete_table(self, table_id: str, *, not_found_ok: bool = False) -> None:
+        self.deleted_tables.append(table_id)
+
+
+def test_bigquery_structured_store_returns_zero_for_empty_upsert_without_client_calls() -> None:
     client = FakeBigQueryClient()
     store = BigQueryStructuredStore(client=client, project_id="p", dataset_id="d")
 
-    count = store.upsert_rows(table="mother_entities", rows=[{"entity_id": "ent_1", "name": "Merry AI"}], key_fields=("entity_id",))
+    count = store.upsert_rows(table="mother_entities", rows=[], key_fields=("entity_id",))
+
+    assert count == 0
+    assert client.queries == []
+    assert client.inserted == []
+    assert client.loaded_rows == []
+    assert client.deleted_tables == []
+
+
+def test_bigquery_upsert_loads_staging_table_and_merges_without_target_delete() -> None:
+    client = FakeBigQueryClient()
+    store = BigQueryStructuredStore(client=client, project_id="p", dataset_id="d")
+
+    count = store.upsert_rows(
+        table="mother_entities",
+        rows=[
+            {
+                "entity_id": "ent_1",
+                "entity_type": "startup",
+                "name": "Merry AI",
+                "normalized_name": "merryai",
+                "first_seen_at": "2026-05-18T00:00:00+00:00",
+                "last_seen_at": "2026-05-18T00:00:00+00:00",
+            }
+        ],
+        key_fields=("entity_id",),
+    )
 
     assert count == 1
-    assert "DELETE FROM `p.d.mother_entities`" in client.queries[0][0]
-    assert client.inserted == [("p.d.mother_entities", [{"entity_id": "ent_1", "name": "Merry AI"}])]
+    assert client.loaded_rows[0][0].startswith("p.d._staging_mother_entities_")
+    assert "MERGE `p.d.mother_entities`" in client.queries[-1][0]
+    assert "`entity_id`, `entity_type`, `name`, `normalized_name`, `region`" in client.queries[-1][0]
+    assert "DELETE FROM `p.d.mother_entities`" not in " ".join(sql for sql, _metadata in client.queries)
+    assert client.deleted_tables[0].startswith("p.d._staging_mother_entities_")
 
 
 def test_bigquery_structured_store_query_rows_returns_dicts() -> None:
