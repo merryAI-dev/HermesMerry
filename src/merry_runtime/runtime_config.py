@@ -22,6 +22,7 @@ class RuntimeConfig:
     slack_channel: str = ""
     gmail_label_id: str = ""
     crawl_sheet_tab: str = "Crawl Sources"
+    crawl_targets_json: str = ""
     default_ac_id: str = ""
     wiki_root: Path = Path("/tmp/hermes-merry-wiki")
     object_store_backend: str = "gcs"
@@ -51,6 +52,7 @@ class RuntimeConfig:
             slack_channel=os.getenv("SLACK_CHANNEL", ""),
             gmail_label_id=os.getenv("GMAIL_LABEL_ID", ""),
             crawl_sheet_tab=os.getenv("CRAWL_SHEET_TAB", "Crawl Sources"),
+            crawl_targets_json=os.getenv("CRAWL_TARGETS_JSON", ""),
             default_ac_id=os.getenv("AC_ID", ""),
             wiki_root=Path(os.getenv("WIKI_ROOT", "/tmp/hermes-merry-wiki")),
             object_store_backend=os.getenv("OBJECT_STORE_BACKEND", "gcs"),
@@ -82,7 +84,7 @@ class RuntimeConfig:
             else:
                 required.append("GCP_PROJECT_ID")
                 required.append("RAW_BUCKET")
-            if not has_inline_sources:
+            if not has_inline_sources and not self.crawl_targets_json.strip():
                 required.append("REVIEW_SHEET_ID")
         elif job_name == "ingest-ac-profiles":
             pass

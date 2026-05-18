@@ -70,7 +70,8 @@ SLACK_CHANNEL=C123
 SLACK_BOT_TOKEN=xoxb-...
 WIKI_ROOT=/workspace/hermes/wiki
 CRAWL_SHEET_TAB=Crawl Sources
-AGENT_LOOP_JOBS=crawl-sources,ingest-sources,resolve-entities,score-candidates,sync-review-sheet,calibrate-scores,backup-export
+CRAWL_TARGETS_JSON=[{"url":"https://thevc.kr/","source_kind":"thevc_investment_ma","max_cards":20}]
+AGENT_LOOP_JOBS=crawl-sources,resolve-entities,backup-export
 AGENT_LOOP_INTERVAL_SECONDS=3600
 AGENT_LOOP_MAX_CYCLES=0
 ```

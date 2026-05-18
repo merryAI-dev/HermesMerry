@@ -39,7 +39,8 @@ Cloud Run is optional and belongs to `docs/runbooks/staging-canary.md`.
 - `GOOGLE_APPLICATION_CREDENTIALS_JSON`
 - `WIKI_ROOT=/workspace/hermes/wiki`
 - `CRAWL_SHEET_TAB=Crawl Sources`
-- `AGENT_LOOP_JOBS=crawl-sources,ingest-sources,resolve-entities,score-candidates,sync-review-sheet,calibrate-scores,backup-export`
+- `CRAWL_TARGETS_JSON=[{"url":"https://thevc.kr/","source_kind":"thevc_investment_ma","max_cards":20}]`
+- `AGENT_LOOP_JOBS=crawl-sources,resolve-entities,backup-export`
 - `AGENT_LOOP_INTERVAL_SECONDS=3600`
 - `AGENT_LOOP_MAX_CYCLES=0` for the always-on SQLite loop that repeats every 1 hour
 
@@ -129,7 +130,8 @@ OBJECT_STORE_BACKEND: local
 RAW_ROOT: /workspace/hermes/raw
 BACKUP_ROOT: /workspace/hermes/backups
 CRAWL_SHEET_TAB: Crawl Sources
-AGENT_LOOP_JOBS: crawl-sources,ingest-sources,resolve-entities,score-candidates,sync-review-sheet,calibrate-scores,backup-export
+CRAWL_TARGETS_JSON: [{"url":"https://thevc.kr/","source_kind":"thevc_investment_ma","max_cards":20}]
+AGENT_LOOP_JOBS: crawl-sources,resolve-entities,backup-export
 AGENT_LOOP_INTERVAL_SECONDS: 3600
 AGENT_LOOP_MAX_CYCLES: 0
 ```

@@ -104,6 +104,37 @@ def test_run_crawl_sources_reads_targets_from_sheet_when_json_missing(monkeypatc
     assert seen_targets == [{"url": "https://thevc.kr/", "source_kind": "thevc_investment_ma"}]
 
 
+def test_run_crawl_sources_falls_back_to_configured_targets_when_sheet_is_empty(monkeypatch, tmp_path) -> None:
+    runtime = _runtime(tmp_path)
+    seen_targets = []
+
+    def fake_crawl_sources(**kwargs):
+        seen_targets.extend(kwargs["targets"])
+        return CrawlResult(
+            run_id="run_crawl_env",
+            target_count=1,
+            crawled_source_count=1,
+            ingested_raw_source_count=1,
+            ingested_entity_count=1,
+            ingested_signal_count=1,
+        )
+
+    monkeypatch.setattr("merry_runtime.job_runner.crawl_sources", fake_crawl_sources)
+    config = RuntimeConfig(
+        project_id="project-1",
+        dataset_id="merry",
+        raw_bucket="raw-bucket",
+        review_sheet_id="sheet-1",
+        crawl_targets_json='[{"url":"https://thevc.kr/","source_kind":"thevc_investment_ma"}]',
+        wiki_root=tmp_path,
+    )
+
+    result = run_job("crawl-sources", runtime=runtime, config=config)
+
+    assert result["job_name"] == "crawl-sources"
+    assert seen_targets == [{"url": "https://thevc.kr/", "source_kind": "thevc_investment_ma"}]
+
+
 def test_run_ingest_ac_profiles_uses_sources_json_and_updates_wiki(tmp_path) -> None:
     runtime = _runtime(tmp_path)
     sources_json = json.dumps(

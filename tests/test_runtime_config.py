@@ -97,6 +97,17 @@ def test_runtime_config_requires_review_sheet_for_crawl_sources_without_inline_t
     assert "REVIEW_SHEET_ID" in str(error.value)
 
 
+def test_runtime_config_accepts_crawl_sources_with_configured_targets(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("OBJECT_STORE_BACKEND", "local")
+    monkeypatch.setenv("RAW_ROOT", str(tmp_path / "raw"))
+    monkeypatch.setenv("CRAWL_TARGETS_JSON", '[{"url":"https://thevc.kr/","source_kind":"thevc_investment_ma"}]')
+
+    config = RuntimeConfig.from_env()
+
+    config.validate_for_job("crawl-sources", has_inline_sources=False)
+    assert config.crawl_targets_json.startswith("[")
+
+
 def test_runtime_config_reads_sqlite_structured_store_paths(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("STRUCTURED_STORE_BACKEND", "sqlite")
     monkeypatch.setenv("MOTHER_DB_PATH", str(tmp_path / "mother.db"))

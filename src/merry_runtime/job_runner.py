@@ -135,8 +135,15 @@ def _sources_from_gmail(runtime: RuntimeAdapters) -> list[dict[str, Any]]:
 
 
 def _crawl_targets_from_sheet(runtime: RuntimeAdapters, config: RuntimeConfig) -> list[dict[str, Any]]:
-    rows = runtime.review_queue.read_pending_reviews(sheet_tab=config.crawl_sheet_tab)
-    return [dict(row) for row in rows if str(row.get("url") or "").strip()]
+    rows: list[dict[str, Any]] = []
+    if config.review_sheet_id:
+        rows = [dict(row) for row in runtime.review_queue.read_pending_reviews(sheet_tab=config.crawl_sheet_tab)]
+    active_rows = [row for row in rows if str(row.get("url") or "").strip()]
+    if active_rows:
+        return active_rows
+    if config.crawl_targets_json.strip():
+        return _sources_from_json(config.crawl_targets_json)
+    return []
 
 
 def _gmail_message_to_text(message: dict[str, Any]) -> str:
