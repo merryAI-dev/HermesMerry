@@ -172,3 +172,24 @@ def test_extract_thevc_company_detail_ignores_social_links_before_homepage() -> 
     )
 
     assert detail.homepage == "https://the-aio.com/"
+
+
+def test_extract_thevc_company_detail_prefers_json_ld_url_over_social_same_as() -> None:
+    detail = extract_thevc_company_detail(
+        """
+        <script type="application/ld+json">
+        {
+          "@type": "Organization",
+          "url": "https://the-aio.com/",
+          "sameAs": [
+            "https://www.linkedin.com/company/the-aio",
+            "https://facebook.com/theaio"
+          ],
+          "email": ["master@thevc.kr", "hello@the-aio.com"]
+        }
+        </script>
+        """
+    )
+
+    assert detail.homepage == "https://the-aio.com/"
+    assert detail.contact_email == "hello@the-aio.com"

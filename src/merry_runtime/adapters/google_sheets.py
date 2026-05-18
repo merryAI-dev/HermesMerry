@@ -208,6 +208,27 @@ class GoogleSheetReviewQueue:
             range=_sheet_range(sheet_tab, headers),
         ).execute()
         existing_values = existing_response.get("values", [])
+        if len(key_fields) > 1:
+            compacted_rows = _compact_sheet_rows(
+                sheet_tab=sheet_tab,
+                headers=headers,
+                existing_values=existing_values,
+                incoming_rows=deduped_rows,
+                key_fields=key_fields,
+            )
+            self.service.spreadsheets().values().clear(
+                spreadsheetId=self.spreadsheet_id,
+                range=_sheet_range(sheet_tab, headers),
+                body={},
+            ).execute()
+            self.service.spreadsheets().values().update(
+                spreadsheetId=self.spreadsheet_id,
+                range=_sheet_range(sheet_tab, headers, row="1"),
+                valueInputOption="RAW",
+                body={"values": [list(headers), *[_row_values(row, headers) for row in compacted_rows]]},
+            ).execute()
+            return len(deduped_rows)
+
         existing_index = _existing_row_index(existing_values=existing_values, headers=headers, key_fields=key_fields)
 
         append_rows: list[dict[str, object]] = []
@@ -352,6 +373,106 @@ def _dedupe_rows_by_key(
     return [merged_rows[key] for key in order] + keyless_rows
 
 
+def _compact_sheet_rows(
+    *,
+    sheet_tab: str,
+    headers: tuple[str, ...],
+    existing_values: list[list[object]],
+    incoming_rows: list[dict[str, object]],
+    key_fields: tuple[str, ...],
+) -> list[dict[str, object]]:
+    compacted: list[dict[str, object]] = []
+    key_to_index: dict[tuple[str, str], int] = {}
+
+    for values in existing_values[1:]:
+        row = _clean_known_bad_cells(dict(zip(headers, values, strict=False)))
+        key = _first_existing_key(row=row, key_fields=key_fields, key_to_index=key_to_index)
+        if key is None:
+            _register_compacted_row(compacted=compacted, key_to_index=key_to_index, row=row, key_fields=key_fields)
+            continue
+        index = key_to_index[key]
+        compacted[index] = _merge_sheet_duplicate(headers=headers, existing=compacted[index], incoming=row)
+        _register_row_keys(key_to_index=key_to_index, row=compacted[index], key_fields=key_fields, index=index)
+
+    for incoming in incoming_rows:
+        key = _first_existing_key(row=incoming, key_fields=key_fields, key_to_index=key_to_index)
+        if key is None:
+            row = {header: incoming.get(header, "") for header in headers}
+            _register_compacted_row(compacted=compacted, key_to_index=key_to_index, row=row, key_fields=key_fields)
+            continue
+        index = key_to_index[key]
+        compacted[index] = _merge_existing_row(
+            sheet_tab=sheet_tab,
+            headers=headers,
+            existing=compacted[index],
+            incoming=incoming,
+        )
+        _register_row_keys(key_to_index=key_to_index, row=compacted[index], key_fields=key_fields, index=index)
+
+    return compacted
+
+
+def _register_compacted_row(
+    *,
+    compacted: list[dict[str, object]],
+    key_to_index: dict[tuple[str, str], int],
+    row: dict[str, object],
+    key_fields: tuple[str, ...],
+) -> None:
+    index = len(compacted)
+    compacted.append(row)
+    _register_row_keys(key_to_index=key_to_index, row=row, key_fields=key_fields, index=index)
+
+
+def _register_row_keys(
+    *,
+    key_to_index: dict[tuple[str, str], int],
+    row: dict[str, object],
+    key_fields: tuple[str, ...],
+    index: int,
+) -> None:
+    for key in _row_keys(row, key_fields=key_fields):
+        key_to_index[key] = index
+
+
+def _first_existing_key(
+    *,
+    row: dict[str, object],
+    key_fields: tuple[str, ...],
+    key_to_index: dict[tuple[str, str], int],
+) -> tuple[str, str] | None:
+    for key in _row_keys(row, key_fields=key_fields):
+        if key in key_to_index:
+            return key
+    return None
+
+
+def _merge_sheet_duplicate(
+    *,
+    headers: tuple[str, ...],
+    existing: dict[str, object],
+    incoming: dict[str, object],
+) -> dict[str, object]:
+    merged = {header: existing.get(header, "") for header in headers}
+    for field in headers:
+        value = incoming.get(field, "")
+        if _should_clear_known_bad_value(field=field, existing=merged.get(field, "")):
+            merged[field] = ""
+        if _is_blank(merged.get(field, "")) and not _is_blank(value):
+            if _should_clear_known_bad_value(field=field, existing=value):
+                continue
+            merged[field] = value
+    return merged
+
+
+def _clean_known_bad_cells(row: dict[str, object]) -> dict[str, object]:
+    cleaned = dict(row)
+    for field, value in row.items():
+        if _should_clear_known_bad_value(field=field, existing=value):
+            cleaned[field] = ""
+    return cleaned
+
+
 def _merge_generated_rows(*, existing: dict[str, object], incoming: dict[str, object]) -> dict[str, object]:
     merged = dict(existing)
     for field, value in incoming.items():
@@ -383,11 +504,17 @@ def _merge_existing_row(
 
 
 def _row_key(row: dict[str, object], *, key_fields: tuple[str, ...]) -> tuple[str, str] | None:
+    keys = _row_keys(row, key_fields=key_fields)
+    return keys[0] if keys else None
+
+
+def _row_keys(row: dict[str, object], *, key_fields: tuple[str, ...]) -> list[tuple[str, str]]:
+    keys: list[tuple[str, str]] = []
     for field in key_fields:
         value = str(row.get(field) or "").strip()
         if value:
-            return (field, value.casefold())
-    return None
+            keys.append((field, value.casefold()))
+    return keys
 
 
 def _is_blank(value: object) -> bool:

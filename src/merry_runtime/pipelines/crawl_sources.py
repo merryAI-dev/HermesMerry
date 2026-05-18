@@ -121,7 +121,7 @@ def _publish_sheet_projection(*, review_queue: ReviewQueue, sources: list[dict[s
     review_queue.upsert_cards(
         sheet_tab="Candidate Detail",
         rows=[_candidate_detail_row(parsed) for parsed in parsed_sources],
-        key_fields=("entity_id",),
+        key_fields=("entity_id", "company"),
     )
 
 

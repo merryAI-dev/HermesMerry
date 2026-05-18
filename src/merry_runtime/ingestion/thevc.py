@@ -314,6 +314,11 @@ def _detail_from_json_node(node: dict[str, Any]) -> TheVCCompanyDetail:
 
 
 def _json_homepage(node: dict[str, Any]) -> str:
+    url_value = node.get("url")
+    for candidate in url_value if isinstance(url_value, list) else [url_value]:
+        homepage = _normalize_url(str(candidate or "").strip())
+        if homepage:
+            return homepage
     same_as = node.get("sameAs")
     candidates = same_as if isinstance(same_as, list) else [same_as]
     for candidate in candidates:

@@ -352,6 +352,11 @@ class FakeValues:
         self.update_body = kwargs["body"]  # type: ignore[index]
         return self
 
+    def clear(self, **kwargs: object) -> "FakeValues":
+        self.clear_kwargs = kwargs
+        self.clear_body = kwargs["body"]  # type: ignore[index]
+        return self
+
     def execute(self) -> dict[str, object]:
         if hasattr(self, "get_kwargs"):
             if self.get_responses:
@@ -846,6 +851,105 @@ def test_google_sheet_review_queue_upsert_clears_known_bad_crawl_cells() -> None
     updated = service.values_obj.update_body["values"][0]  # type: ignore[index]
     assert updated[4] == ""
     assert updated[14] == ""
+
+
+def test_google_sheet_review_queue_compacts_candidate_detail_by_entity_or_company() -> None:
+    service = FakeSheetsService()
+    service.sheet_titles.add("Candidate Detail")
+    headers = list(OPERATOR_CONSOLE_HEADERS["Candidate Detail"])
+    service.values_obj.get_responses.extend(
+        [
+            {"values": [headers]},
+            {
+                "values": [
+                    headers,
+                    [
+                        "ent_good",
+                        "Merry AI",
+                        "merryai",
+                        "Founder",
+                        "",
+                        "Seoul",
+                        "AI",
+                        "summary",
+                        "",
+                        "",
+                        "new_source",
+                        "score_candidates",
+                        "crawled",
+                        "wiki/entities/Merry AI.md",
+                        "",
+                    ],
+                    [
+                        "ent_bad",
+                        "Merry AI",
+                        "merryai",
+                        "Founder",
+                        "https://주식회사",
+                        "Seoul",
+                        "AI",
+                        "summary",
+                        "",
+                        "",
+                        "new_source",
+                        "score_candidates",
+                        "crawled",
+                        "wiki/entities/Merry AI.md",
+                        "master@thevc.kr",
+                    ],
+                    [
+                        "ent_good",
+                        "Merry AI",
+                        "merryai",
+                        "Founder",
+                        "",
+                        "Seoul",
+                        "AI",
+                        "summary",
+                        "",
+                        "",
+                        "new_source",
+                        "score_candidates",
+                        "crawled",
+                        "wiki/entities/Merry AI.md",
+                        "master@thevc.kr",
+                    ],
+                ]
+            },
+        ]
+    )
+    queue = GoogleSheetReviewQueue(service=service, spreadsheet_id="sheet_1")
+
+    count = queue.upsert_cards(
+        sheet_tab="Candidate Detail",
+        rows=[
+            {
+                "entity_id": "ent_good",
+                "company": "Merry AI",
+                "normalized_name": "merryai",
+                "representative": "Founder",
+                "homepage": "",
+                "region": "Seoul",
+                "industry": "AI",
+                "summary": "summary",
+                "queue_type": "new_source",
+                "recommended_action": "score_candidates",
+                "status": "crawled",
+                "wiki_path": "wiki/entities/Merry AI.md",
+                "contact_email": "",
+            }
+        ],
+        key_fields=("entity_id", "company"),
+    )
+
+    assert count == 1
+    assert service.values_obj.clear_kwargs["range"] == "Candidate Detail!A:O"
+    rewritten = service.values_obj.update_body["values"]  # type: ignore[index]
+    assert len(rewritten) == 2
+    assert rewritten[1][0] == "ent_good"
+    assert rewritten[1][1] == "Merry AI"
+    assert rewritten[1][4] == ""
+    assert rewritten[1][14] == ""
 
 
 def test_google_sheet_review_queue_supports_operator_console_tabs() -> None:
