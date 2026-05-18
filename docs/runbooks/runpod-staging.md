@@ -144,6 +144,18 @@ If the Runpod REST API key cannot access GraphQL `secretCreate`, create the
 template. Do not paste the service account JSON into plain Pod environment
 variables for the always-on runtime.
 
+The one-cycle template overrides the container command to run the loop once and
+then sleep:
+
+```text
+dockerEntrypoint: /bin/sh -lc
+dockerStartCmd: runpod-entrypoint python3 -m merry_runtime.jobs loop; status=$?; echo HERMES_CANARY_DONE status=$status; sleep infinity
+```
+
+This prevents Runpod from restarting a finite command repeatedly while the Pod
+desired status remains `RUNNING`. Delete the Pod after BigQuery evidence is
+captured.
+
 ## One-cycle Canary
 
 Set `AGENT_LOOP_MAX_CYCLES=1` for the first Runpod run. Start the Pod and wait

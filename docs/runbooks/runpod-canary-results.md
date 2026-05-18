@@ -77,17 +77,27 @@
   `docker.io/boram1220/hermes-merry:staging-096cbea`, registry auth
   `cmpayp7w3004nlb076xogtx3r`, `BIGQUERY_WRITE_MODE=append`, and
   `AGENT_LOOP_MAX_CYCLES=1`
+- Runpod secret: `hermes_gcp_sa_staging_json` was created in the Runpod console
+  on 2026-05-18
+- Runpod one-cycle template launch: Pod `fwwbdffmacf59k`, cost `$0.06/hr`,
+  image `docker.io/boram1220/hermes-merry:staging-096cbea`
+- Runpod canary BigQuery evidence after launch: new success rows included
+  `resolve-entities` and `calibrate-scores`
+- Runpod restart behavior: the finite one-cycle command was restarted by Runpod
+  while desired status stayed `RUNNING`, so the canary Pod produced duplicate
+  success rows before deletion
+- Runpod canary cleanup: Pod `fwwbdffmacf59k` was deleted successfully; follow-up
+  Pod list showed `CANARY_PRESENT 0`
+- Runpod template hardening: `hermes-merry-staging-one-cycle` now runs the loop
+  once, prints `HERMES_CANARY_DONE`, then sleeps to avoid repeated restarts
 
 ## Result
 
 - Canary status: local Docker canary passed and existing remote Runpod Pod
   canary passed
 - Failed job count: 0 for the focused Runpod canary path
-- Human review required: create Runpod secret
-  `hermes_gcp_sa_staging_json` from the generated service account JSON, then
-  launch the `hermes-merry-staging-one-cycle` template. Enable GCP billing
-  before switching the template to `BIGQUERY_WRITE_MODE=merge` and an
-  unbounded loop.
+- Human review required: enable GCP billing before switching the runtime to
+  `BIGQUERY_WRITE_MODE=merge` and an unbounded loop.
 
 ## Rollback command
 
