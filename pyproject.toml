@@ -3,7 +3,12 @@ name = "hermes-merry-ac-discovery"
 version = "0.1.0"
 description = "Hermes x Merry autonomous AC discovery runtime"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+  "google-api-python-client>=2.140.0",
+  "google-cloud-bigquery>=3.25.0",
+  "google-cloud-storage>=2.18.0",
+  "slack-sdk>=3.33.0",
+]
 
 [build-system]
 requires = ["setuptools>=68"]

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import importlib
 from types import SimpleNamespace
 from typing import Any
 
@@ -24,7 +25,7 @@ class BigQueryStructuredStore:
         return len(rows)
 
     def query_rows(self, *, sql: str, parameters: dict[str, object]) -> list[dict[str, object]]:
-        query_job = self.client.query(sql, job_config=_job_config(parameters))
+        query_job = self.client.query(sql, job_config=build_query_job_config(parameters))
         return [dict(row) for row in query_job.result()]
 
     def _table_id(self, table: str) -> str:
@@ -39,5 +40,29 @@ class BigQueryStructuredStore:
         return f"DELETE FROM `{table_id}` WHERE {' AND '.join(predicates)}", parameters
 
 
+def build_query_job_config(parameters: dict[str, object], *, bigquery_module: Any | None = None) -> object:
+    if bigquery_module is None:
+        try:
+            bigquery_module = importlib.import_module("google.cloud.bigquery")
+        except ImportError:
+            return SimpleNamespace(parameters=dict(parameters))
+
+    return bigquery_module.QueryJobConfig(
+        query_parameters=[
+            bigquery_module.ScalarQueryParameter(name, _bigquery_type(value), value) for name, value in parameters.items()
+        ]
+    )
+
+
 def _job_config(parameters: dict[str, object]) -> object:
-    return SimpleNamespace(parameters=dict(parameters))
+    return build_query_job_config(parameters)
+
+
+def _bigquery_type(value: object) -> str:
+    if isinstance(value, bool):
+        return "BOOL"
+    if isinstance(value, int):
+        return "INT64"
+    if isinstance(value, float):
+        return "FLOAT64"
+    return "STRING"

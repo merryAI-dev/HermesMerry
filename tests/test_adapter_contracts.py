@@ -1,4 +1,4 @@
-from merry_runtime.adapters.bigquery import BigQueryStructuredStore
+from merry_runtime.adapters.bigquery import BigQueryStructuredStore, build_query_job_config
 from merry_runtime.adapters.gcs import GCSObjectStore
 from merry_runtime.adapters.gmail import GmailLabelSource
 from merry_runtime.adapters.google_sheets import GoogleSheetReviewQueue
@@ -82,6 +82,32 @@ def test_bigquery_structured_store_query_rows_returns_dicts() -> None:
     rows = store.query_rows(sql="select * from mother_entities", parameters={"entity_id": "ent_1"})
 
     assert rows == [{"entity_id": "ent_1", "name": "Merry AI"}]
+
+
+class FakeScalarQueryParameter:
+    def __init__(self, name: str, parameter_type: str, value: object) -> None:
+        self.name = name
+        self.parameter_type = parameter_type
+        self.value = value
+
+
+class FakeQueryJobConfig:
+    def __init__(self, *, query_parameters: list[FakeScalarQueryParameter]) -> None:
+        self.query_parameters = query_parameters
+
+
+class FakeBigQueryModule:
+    ScalarQueryParameter = FakeScalarQueryParameter
+    QueryJobConfig = FakeQueryJobConfig
+
+
+def test_bigquery_job_config_uses_google_query_parameters_when_module_is_available() -> None:
+    config = build_query_job_config({"entity_id": "ent_1", "confidence": 0.9}, bigquery_module=FakeBigQueryModule)
+
+    assert [(param.name, param.parameter_type, param.value) for param in config.query_parameters] == [
+        ("entity_id", "STRING", "ent_1"),
+        ("confidence", "FLOAT64", 0.9),
+    ]
 
 
 class FakeValues:

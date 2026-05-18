@@ -30,13 +30,14 @@ Completed:
 - Implemented SQLite-backed LLM Wiki memory store with Obsidian markdown projection, `index.md`, `log.md`, page/link/source indexes, and ingest integration.
 - Implemented probabilistic entity resolution using name/alias, founder, domain, email domain, description, region, and observation context.
 - Implemented logit/probit priority scoring with utility, probability, uncertainty, model version, and exploration queue routing.
+- Implemented Cloud Run job entrypoint wiring through env-backed runtime config, production adapter factory, and job runner.
 - Added `Makefile` and GitHub Actions CI workflow.
-- Verified `python3 -m pytest` with 63 passing tests.
+- Verified `python3 -m pytest` with 74 passing tests.
 - Verified `tofu fmt -check`, `tofu init -backend=false`, and `tofu validate`.
 
 Not completed:
 
-- Production adapter wrappers exist, but `merry_runtime.jobs` does not yet bind real Google/Slack clients from environment or ADC.
+- Production adapter wrappers and `merry_runtime.jobs` now bind Google/Slack clients from environment and ADC; real GCP credentials and API enablement still need staging validation.
 - MCP dispatcher exists, but a full stdio/SSE MCP protocol runner is not wired yet.
 - Cloud Run image has not been built or pushed to Artifact Registry.
 - GCP project variables, secrets, service account permissions, and API enablement are not configured.
