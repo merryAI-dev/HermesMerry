@@ -226,9 +226,15 @@ esac
 ```
 
 Use one synthetic candidate as the optional local canary source.
+This command intentionally starts from a clean environment and does not inherit
+local Sheet, Gmail, or Slack variables. Authentication uses Application Default
+Credentials from the operator's gcloud configuration under `HOME`; no auth
+environment variable is required for the normal local canary.
 
 ```bash
-env -u SLACK_CHANNEL -u SLACK_BOT_TOKEN \
+env -i \
+  PATH="$PATH" \
+  HOME="$HOME" \
   GCP_PROJECT_ID="$GCP_PROJECT_ID" \
   BIGQUERY_DATASET="$BIGQUERY_DATASET" \
   RAW_BUCKET="$RAW_BUCKET" \
