@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib
 import os
+from dataclasses import dataclass
 from collections.abc import Callable
 from types import ModuleType
 
@@ -22,12 +23,14 @@ def build_runtime(
     *,
     import_module: Callable[[str], ModuleType | object] = importlib.import_module,
 ) -> RuntimeAdapters:
-    discovery_module = import_module("googleapiclient.discovery")
     object_store = _build_object_store(config=config, import_module=import_module)
     structured_store = _build_structured_store(config=config, import_module=import_module)
+    discovery_module = (
+        import_module("googleapiclient.discovery") if config.review_sheet_id or config.gmail_label_id else None
+    )
 
-    sheets_service = discovery_module.build("sheets", "v4")
-    gmail_service = discovery_module.build("gmail", "v1") if config.gmail_label_id else None
+    sheets_service = discovery_module.build("sheets", "v4") if discovery_module and config.review_sheet_id else None
+    gmail_service = discovery_module.build("gmail", "v1") if discovery_module and config.gmail_label_id else None
 
     notifier = None
     slack_token = os.getenv("SLACK_BOT_TOKEN", "")
@@ -41,11 +44,24 @@ def build_runtime(
     return RuntimeAdapters(
         object_store=object_store,
         structured_store=structured_store,
-        review_queue=GoogleSheetReviewQueue(service=sheets_service, spreadsheet_id=config.review_sheet_id),
+        review_queue=(
+            GoogleSheetReviewQueue(service=sheets_service, spreadsheet_id=config.review_sheet_id)
+            if sheets_service
+            else UnavailableReviewQueue()
+        ),
         notifier=notifier,
         wiki_store=SQLiteWikiStore(root=config.wiki_root),
         gmail_source=GmailLabelSource(service=gmail_service, user_id="me", label_id=config.gmail_label_id) if gmail_service else None,
     )
+
+
+@dataclass(slots=True)
+class UnavailableReviewQueue:
+    def publish_cards(self, *, sheet_tab: str, rows: list[dict[str, object]]) -> int:
+        raise RuntimeConfigError("REVIEW_SHEET_ID is required for Sheet review queue writes")
+
+    def read_pending_reviews(self, *, sheet_tab: str) -> list[dict[str, str]]:
+        raise RuntimeConfigError("REVIEW_SHEET_ID is required for Sheet review queue reads")
 
 
 def _build_object_store(

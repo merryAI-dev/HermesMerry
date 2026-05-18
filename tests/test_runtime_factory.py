@@ -135,3 +135,31 @@ def test_runtime_factory_uses_sqlite_structured_store_without_bigquery_client(mo
     assert isinstance(runtime.structured_store, SQLiteStructuredStore)
     assert runtime.structured_store.db_path == tmp_path / "mother.db"
     assert "google.cloud.bigquery" not in imported_modules
+
+
+def test_runtime_factory_uses_sqlite_backup_runtime_without_google_clients(monkeypatch, tmp_path) -> None:
+    imported_modules = []
+
+    def fake_import(name: str):
+        imported_modules.append(name)
+        raise AssertionError(f"unexpected import: {name}")
+
+    monkeypatch.delenv("SLACK_BOT_TOKEN", raising=False)
+    config = RuntimeConfig(
+        project_id="",
+        dataset_id="",
+        raw_bucket="",
+        wiki_root=tmp_path / "wiki",
+        object_store_backend="local",
+        raw_root=tmp_path / "raw",
+        structured_store_backend="sqlite",
+        mother_db_path=tmp_path / "mother.db",
+        review_sheet_id="",
+        gmail_label_id="",
+    )
+
+    runtime = build_runtime(config, import_module=fake_import)
+
+    assert isinstance(runtime.object_store, LocalFileObjectStore)
+    assert isinstance(runtime.structured_store, SQLiteStructuredStore)
+    assert imported_modules == []
