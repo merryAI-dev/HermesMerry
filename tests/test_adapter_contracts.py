@@ -225,7 +225,12 @@ def test_bigquery_structured_store_query_rows_returns_dicts() -> None:
     rows = store.query_rows(sql="select * from mother_entities", parameters={"entity_id": "ent_1"})
 
     assert rows == [{"entity_id": "ent_1", "name": "Merry AI"}]
-    assert client.queries[0][1]["default_dataset"] == "p.d"
+    default_dataset = client.queries[0][1]["default_dataset"]
+    if hasattr(default_dataset, "project") and hasattr(default_dataset, "dataset_id"):
+        assert default_dataset.project == "p"
+        assert default_dataset.dataset_id == "d"
+    else:
+        assert str(default_dataset) == "p.d"
 
 
 class FakeScalarQueryParameter:
