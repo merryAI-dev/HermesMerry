@@ -15,12 +15,15 @@
   verified through a short-lived CPU smoke Pod
 - GCP project: `yapnotes-app-2`
 - BigQuery dataset: `merry_ac_discovery_staging`
+- SQLite Mother DB: planned primary runtime path `/workspace/hermes/mother.db`
 - GCS raw bucket: not created; project billing is disabled for GCS bucket creation
 - Object store backend: `local`
 - Raw root: `/workspace/hermes/raw`
 - Sheet tab: not verified
 - Slack channel: not verified
 - Wiki path: `/workspace/hermes/wiki`
+- backup-export: planned primary backup job for SQLite, CSV, JSONL, and wiki
+  archive artifacts under `/workspace/hermes/backups`
 - Code path: `/workspace/hermes/releases/1652d76`
 - Active symlink: `/workspace/hermes/current`
 - Canary venv: `/tmp/hermes-venv-1652d76`

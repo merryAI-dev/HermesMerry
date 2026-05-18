@@ -119,6 +119,7 @@ def test_jobs_cli_loop_rejects_append_mode_for_unbounded_loop(monkeypatch, capsy
         project_id="project-1",
         dataset_id="merry",
         raw_bucket="raw-bucket",
+        structured_store_backend="bigquery",
         bigquery_write_mode="append",
         agent_loop_jobs=("resolve-entities",),
         agent_loop_max_cycles=0,

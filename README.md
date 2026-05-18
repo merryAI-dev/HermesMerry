@@ -10,12 +10,12 @@ It builds a frontless MVP around:
 - Source parsers for article, info mail, external referral, and internal memo inputs
 - Local integration pipelines for ingest, score, and review feedback
 - Fake adapters for deterministic no-network integration testing
-- Thin production adapter contracts for GCS, BigQuery, Google Sheets, Gmail, and Slack
+- Thin production adapter contracts for SQLite, optional BigQuery, Google Sheets, Gmail, and Slack
 - SQLite-backed LLM Wiki memory with Obsidian-compatible markdown projections
 - Probabilistic entity resolution and logit/probit priority scoring
 - Hermes production safety profile
 - Whitelisted MCP tool contracts
-- BigQuery/GCS minimum data layer with optional Cloud Run Jobs and Cloud Scheduler
+- SQLite-backed Mother DB and Sheet console as the primary Runpod staging data layer
 
 ## Local Checks
 
@@ -43,8 +43,12 @@ Runpod runs the long-lived agent loop:
 python3 -m merry_runtime.jobs loop
 ```
 
-GCP is still used for the minimum data and integration layer: BigQuery, GCS,
-Gmail API, Sheets API, and one least-privilege runtime service account. Cloud Run is optional and remains available only through the `cloud_run` Terraform backend mode.
+The primary staging runtime uses a SQLite-backed Mother DB on the Runpod
+persistent volume, local raw storage, an Obsidian wiki projection, and Google
+Sheets as the human operating console. GCP is reduced to Google Workspace API
+access for Gmail and Sheets. BigQuery is optional warehouse/export
+infrastructure. Cloud Run is optional and remains available only through the `cloud_run`
+Terraform backend mode.
 
 ## Runtime Jobs
 
@@ -52,15 +56,20 @@ The container entrypoint is `python3 -m merry_runtime.jobs`. Runtime adapters ar
 
 ```bash
 GCP_PROJECT_ID=my-project
+STRUCTURED_STORE_BACKEND=sqlite
+MOTHER_DB_PATH=/workspace/hermes/mother.db
 BIGQUERY_DATASET=merry_ac_discovery
 RAW_BUCKET=my-raw-bucket
+OBJECT_STORE_BACKEND=local
+RAW_ROOT=/workspace/hermes/raw
+BACKUP_ROOT=/workspace/hermes/backups
 REVIEW_SHEET_ID=google-sheet-id
 AC_ID=ac_climate
 GMAIL_LABEL_ID=Label_123
 SLACK_CHANNEL=C123
 SLACK_BOT_TOKEN=xoxb-...
 WIKI_ROOT=/workspace/hermes/wiki
-AGENT_LOOP_JOBS=ingest-sources,resolve-entities,score-candidates,sync-review-sheet,calibrate-scores
+AGENT_LOOP_JOBS=ingest-sources,resolve-entities,score-candidates,sync-review-sheet,calibrate-scores,backup-export
 AGENT_LOOP_INTERVAL_SECONDS=1800
 ```
 
@@ -72,6 +81,7 @@ python3 -m merry_runtime.jobs run ingest-sources --sources-file sources.json
 python3 -m merry_runtime.jobs run ingest-sources
 python3 -m merry_runtime.jobs run score-candidates --ac-id ac_climate
 python3 -m merry_runtime.jobs run sync-review-sheet --ac-id ac_climate
+python3 -m merry_runtime.jobs run backup-export
 python3 -m merry_runtime.jobs run weekly-summary
 ```
 
@@ -87,7 +97,7 @@ src/merry_runtime/
   review_sync.py         Sheet decision validation and card status updates
   pii.py                 PII detection/redaction before LLM payloads
   hermes_profile.py      Production Hermes safety validation
-  schema.py              BigQuery table schema source of truth
+  schema.py              Structured table schema source of truth
   jobs.py                Runtime job CLI entrypoint
   runtime_config.py      Env-backed runtime configuration
   runtime_factory.py     ADC/client-backed production adapter factory
@@ -111,7 +121,7 @@ configs/
   scoring_weights.json
 
 infra/terraform/
-  BigQuery, GCS, optional Secret Manager, optional Cloud Run Jobs, optional Scheduler, IAM
+  Optional BigQuery, GCS, Secret Manager, Cloud Run Jobs, Scheduler, IAM
 ```
 
 ## Safety Boundary
@@ -122,8 +132,8 @@ See `docs/SAFETY.md` for the explicit guardrail checklist.
 
 ## Next Implementation Steps
 
-1. Bind real GCP and Google Workspace clients from environment/ADC in `merry_runtime.jobs`.
-2. Wire pipeline outputs into `SQLiteWikiStore` so each ingest updates the Obsidian wiki projection.
-3. Build and push the Docker Hub private image, then apply the Runpod minimal GCP layer in a staging GCP project.
-4. Start a one-cycle Runpod canary before switching to the always-on loop.
-5. Load the first AC profile and run a 50-candidate real-data pilot before scaling toward the 1,000-candidate Mother DB target.
+1. Create the staging Google Sheet console tabs and confirm reviewer workflow.
+2. Run `backup-export` after each staging loop canary and verify restore files.
+3. Build and push the Docker Hub private image, then run the SQLite-first Runpod template.
+4. Load the first AC profile and run a 50-candidate real-data pilot before scaling toward the 1,000-candidate Mother DB target.
+5. Add optional BigQuery export only after billing and IAM are intentionally enabled.

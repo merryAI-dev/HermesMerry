@@ -1,8 +1,10 @@
 # Hermes Runpod Staging Runbook
 
 Use this runbook for the primary staging path. Runpod is the execution backend.
-GCP is the minimum data layer for BigQuery, GCS, Gmail API, Sheets API, and one
-least-privilege runtime service account.
+SQLite on the Runpod persistent volume is the primary Mother DB. Google Sheets
+is the human operating console, the Obsidian wiki is the readable projection,
+and GCP is limited to Google Workspace API access for Gmail and Sheets.
+BigQuery is optional warehouse/export infrastructure.
 
 ## Backend
 
@@ -24,13 +26,11 @@ Cloud Run is optional and belongs to `docs/runbooks/staging-canary.md`.
 
 - `DOCKERHUB_USERNAME=boram1220`
 - `GCP_PROJECT_ID`
-- `BIGQUERY_DATASET`
-- `RAW_BUCKET`
+- `STRUCTURED_STORE_BACKEND=sqlite`
+- `MOTHER_DB_PATH=/workspace/hermes/mother.db`
 - `OBJECT_STORE_BACKEND=local`
 - `RAW_ROOT=/workspace/hermes/raw`
-- `BIGQUERY_WRITE_MODE=merge` for the always-on loop
-- `BIGQUERY_WRITE_MODE=append` only with `AGENT_LOOP_MAX_CYCLES=1` when the
-  staging GCP project has billing disabled and BigQuery DML is unavailable
+- `BACKUP_ROOT=/workspace/hermes/backups`
 - `REVIEW_SHEET_ID`
 - `AC_ID`
 - `GMAIL_LABEL_ID`
@@ -38,9 +38,9 @@ Cloud Run is optional and belongs to `docs/runbooks/staging-canary.md`.
 - `SLACK_BOT_TOKEN`
 - `GOOGLE_APPLICATION_CREDENTIALS_JSON`
 - `WIKI_ROOT=/workspace/hermes/wiki`
-- `AGENT_LOOP_JOBS=ingest-sources,resolve-entities,score-candidates,sync-review-sheet,calibrate-scores`
+- `AGENT_LOOP_JOBS=ingest-sources,resolve-entities,score-candidates,sync-review-sheet,calibrate-scores,backup-export`
 - `AGENT_LOOP_INTERVAL_SECONDS=1800`
-- `AGENT_LOOP_MAX_CYCLES=1` for the first canary only
+- `AGENT_LOOP_MAX_CYCLES=0` for the always-on SQLite loop
 
 ## Stop Conditions
 
@@ -54,6 +54,8 @@ Stop before push, apply, or canary if any condition is true:
 - Any staging value contains `prod` or `production`.
 - `GOOGLE_APPLICATION_CREDENTIALS_JSON` is written to git, Terraform state, or
   a persistent repo file.
+- `MOTHER_DB_PATH`, `RAW_ROOT`, `BACKUP_ROOT`, or `WIKI_ROOT` is outside
+  `/workspace/hermes`.
 - `WIKI_ROOT` is not under `/workspace/hermes`.
 - `REVIEW_SHEET_ID`, `GMAIL_LABEL_ID`, or `SLACK_CHANNEL` points to a
   production resource.
@@ -100,11 +102,11 @@ tofu -chdir=infra/terraform plan -var-file=runpod-staging.tfvars
 
 Expected plan scope:
 
-- Staging BigQuery dataset and tables.
-- Staging GCS raw bucket only when `create_raw_bucket = true`.
 - Runpod local raw storage under `/workspace/hermes/raw` when
   `OBJECT_STORE_BACKEND=local`.
-- Hermes runtime service account and least-privilege IAM.
+- Hermes runtime service account with Gmail and Sheets API access.
+- No required BigQuery dataset.
+- No required GCS raw bucket.
 - No Cloud Run jobs.
 - No Cloud Scheduler jobs.
 - No Artifact Registry repository.
@@ -120,10 +122,13 @@ Image: docker.io/boram1220/hermes-merry:staging
 Command: python3 -m merry_runtime.jobs loop
 Volume path: /workspace
 WIKI_ROOT: /workspace/hermes/wiki
+STRUCTURED_STORE_BACKEND: sqlite
+MOTHER_DB_PATH: /workspace/hermes/mother.db
 OBJECT_STORE_BACKEND: local
 RAW_ROOT: /workspace/hermes/raw
-BIGQUERY_WRITE_MODE: append
-AGENT_LOOP_MAX_CYCLES: 1
+BACKUP_ROOT: /workspace/hermes/backups
+AGENT_LOOP_JOBS: ingest-sources,resolve-entities,score-candidates,sync-review-sheet,calibrate-scores,backup-export
+AGENT_LOOP_MAX_CYCLES: 0
 ```
 
 Store sensitive values as Runpod secrets. `GOOGLE_APPLICATION_CREDENTIALS_JSON`
@@ -153,8 +158,8 @@ dockerStartCmd: runpod-entrypoint python3 -m merry_runtime.jobs loop; status=$?;
 ```
 
 This prevents Runpod from restarting a finite command repeatedly while the Pod
-desired status remains `RUNNING`. Delete the Pod after BigQuery evidence is
-captured.
+desired status remains `RUNNING`. Delete one-cycle canary Pods after SQLite,
+Sheet, wiki, and backup evidence is captured.
 
 ## One-cycle Canary
 
@@ -167,11 +172,11 @@ The Pod command remains:
 python3 -m merry_runtime.jobs loop
 ```
 
-Verify BigQuery from the operator machine:
+Verify the SQLite Mother DB and backup artifacts inside the Runpod shell:
 
 ```bash
-bq query --use_legacy_sql=false \
-  'select job_name, status, started_at, finished_at from `PROJECT.DATASET.agent_runs` order by started_at desc limit 10'
+test -f /workspace/hermes/mother.db
+find /workspace/hermes/backups -maxdepth 3 -type f | sort | tail
 ```
 
 Verify the persistent wiki path inside the Runpod shell:
@@ -181,13 +186,23 @@ test -d /workspace/hermes/wiki
 find /workspace/hermes/wiki -maxdepth 2 -type f | sort | head
 ```
 
-`BIGQUERY_WRITE_MODE=append` only with `AGENT_LOOP_MAX_CYCLES=1`; it writes
-direct load-job appends and can duplicate logical rows if left on in a loop.
-
-Only after the one-cycle canary is reviewed, switch:
+Verify Sheet console tabs:
 
 ```text
+Review Queue
+Candidate Detail
+Evidence
+Decision Log
+AC Settings
+Exploration Queue
+Run Log
+```
+
+BigQuery is optional. Use it only as a warehouse/export mirror after billing and
+IAM are explicitly enabled:
+
+```text
+STRUCTURED_STORE_BACKEND=bigquery
+BIGQUERY_DATASET=merry_ac_discovery_staging
 BIGQUERY_WRITE_MODE=merge
-AGENT_LOOP_MAX_CYCLES=0
-AGENT_LOOP_INTERVAL_SECONDS=1800
 ```

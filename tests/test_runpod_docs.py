@@ -9,6 +9,7 @@ def test_readme_marks_runpod_as_primary_staging_backend() -> None:
 
     assert "Runpod-first staging" in readme
     assert "docker.io/boram1220/hermes-merry:staging" in readme
+    assert "SQLite-backed Mother DB" in readme
     assert "Cloud Run is optional" in readme
 
 
@@ -18,6 +19,8 @@ def test_runpod_runbook_contains_required_stop_conditions() -> None:
     for required in (
         "GOOGLE_APPLICATION_CREDENTIALS_JSON",
         "/workspace/hermes/wiki",
+        "/workspace/hermes/mother.db",
+        "backup-export",
         "infra/terraform/runpod-staging.tfvars",
         "docker buildx build --platform linux/amd64",
         "docker.io/boram1220/hermes-merry:staging",
@@ -39,8 +42,8 @@ def test_runpod_canary_results_template_captures_required_evidence() -> None:
     for required in (
         "Docker Hub image digest",
         "Runpod Pod ID",
-        "BigQuery agent_runs row",
-        "GCS raw object",
+        "SQLite Mother DB",
+        "backup-export",
         "Sheet tab",
         "Slack message timestamp",
         "Wiki path",
@@ -49,11 +52,13 @@ def test_runpod_canary_results_template_captures_required_evidence() -> None:
         assert required in template
 
 
-def test_runpod_append_mode_is_documented_as_one_cycle_canary_only() -> None:
+def test_runpod_sqlite_mode_is_documented_as_primary_runtime() -> None:
     env_example = (REPO_ROOT / "configs" / "runpod.env.example").read_text()
     runbook = (REPO_ROOT / "docs" / "runbooks" / "runpod-staging.md").read_text()
 
-    assert "BIGQUERY_WRITE_MODE=merge" in env_example
+    assert "STRUCTURED_STORE_BACKEND=sqlite" in env_example
+    assert "MOTHER_DB_PATH=/workspace/hermes/mother.db" in env_example
+    assert "BACKUP_ROOT=/workspace/hermes/backups" in env_example
     assert "AGENT_LOOP_MAX_CYCLES=0" in env_example
-    assert "`BIGQUERY_WRITE_MODE=append` only with `AGENT_LOOP_MAX_CYCLES=1`" in runbook
-    assert "`BIGQUERY_WRITE_MODE=merge`" in runbook
+    assert "BigQuery is optional" in runbook
+    assert "STRUCTURED_STORE_BACKEND=bigquery" in runbook

@@ -109,6 +109,15 @@ def test_runpod_entrypoint_materializes_gcp_credentials_to_tmp_only() -> None:
     assert "/workspace" not in entrypoint
 
 
+def test_runpod_env_defaults_to_sqlite_sheet_runtime() -> None:
+    env_example = (REPO_ROOT / "configs" / "runpod.env.example").read_text()
+
+    assert "STRUCTURED_STORE_BACKEND=sqlite" in env_example
+    assert "MOTHER_DB_PATH=/workspace/hermes/mother.db" in env_example
+    assert "BACKUP_ROOT=/workspace/hermes/backups" in env_example
+    assert "OBJECT_STORE_BACKEND=local" in env_example
+
+
 def test_dockerfile_uses_runpod_entrypoint_before_jobs_cli() -> None:
     dockerfile = (REPO_ROOT / "Dockerfile").read_text()
 
