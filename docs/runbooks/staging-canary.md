@@ -16,7 +16,7 @@ resources.
   Scheduler, BigQuery, Cloud Storage, Artifact Registry, Secret Manager, Gmail
   API, and Sheets API.
 - Confirm Slack Web API access is available through a staging Slack app and bot
-  token.
+  token for the Cloud Run `weekly-summary` job.
 - Confirm `infra/terraform/staging.tfvars` exists and points only to staging
   resources.
 - Confirm `project_id`, `dataset_id`, `raw_bucket_name`, `image_uri`,
@@ -24,7 +24,8 @@ resources.
   `infra/terraform/staging.tfvars` are staging IDs.
 - Confirm `review_sheet_id` is a staging Sheet.
 - Confirm `gmail_label_id` is a staging Gmail label.
-- Confirm `slack_channel` is a staging Slack channel.
+- Confirm `slack_channel` is a staging Slack channel for the Cloud Run
+  `weekly-summary` path.
 - Confirm Secret Manager versions exist for `llm_api_key_secret_id` and
   `slack_bot_token_secret_id`.
 - Confirm `ops_alert_email` is a staging/operator address, or
@@ -57,6 +58,7 @@ export STAGING_PROJECT='...'       # project_id
 export STAGING_DATASET='...'       # dataset_id
 export STAGING_RAW_BUCKET='...'    # raw_bucket_name
 export STAGING_IMAGE_URI='...'     # image_uri
+export STAGING_WIKI_ROOT='...'     # wiki_root
 ```
 
 Check the copied values before continuing. Stop if any printed value differs
@@ -67,6 +69,7 @@ printf 'STAGING_PROJECT=%s\n' "$STAGING_PROJECT"
 printf 'STAGING_DATASET=%s\n' "$STAGING_DATASET"
 printf 'STAGING_RAW_BUCKET=%s\n' "$STAGING_RAW_BUCKET"
 printf 'STAGING_IMAGE_URI=%s\n' "$STAGING_IMAGE_URI"
+printf 'STAGING_WIKI_ROOT=%s\n' "$STAGING_WIKI_ROOT"
 
 ACTIVE_PROJECT="$(gcloud config get-value project)"
 test "$ACTIVE_PROJECT" = "$STAGING_PROJECT" || {
@@ -86,7 +89,8 @@ case "$(printf '%s\n' \
   "$STAGING_PROJECT" \
   "$STAGING_DATASET" \
   "$STAGING_RAW_BUCKET" \
-  "$STAGING_IMAGE_URI" | tr '[:upper:]' '[:lower:]')" in
+  "$STAGING_IMAGE_URI" \
+  "$STAGING_WIKI_ROOT" | tr '[:upper:]' '[:lower:]')" in
   *prod*|*production*)
     echo "STOP: staging shell values include a production-looking ID"
     exit 1
@@ -142,22 +146,21 @@ docker push "$STAGING_IMAGE_URI"
 
 ## Synthetic Ingest Source
 
-The preferred canary path is the Cloud Run job sequence below. Local synthetic
+The preferred canary path is the Cloud Run job sequence below. That path also
+verifies the staging Slack channel when `weekly-summary` runs. Local synthetic
 ingest is optional and is only for seeding one known synthetic candidate from an
-operator machine. Do not run it with ambient local environment values.
+operator machine. Do not run it with ambient local environment values or Slack
+environment variables.
 
-Before local synthetic ingest, copy these values exactly from
-`infra/terraform/staging.tfvars`.
+Before local synthetic ingest, derive only the ingest values from the staging
+shell values copied from `infra/terraform/staging.tfvars`. Do not set
+`SLACK_CHANNEL` or `SLACK_BOT_TOKEN` for local ingest.
 
 ```bash
-export GCP_PROJECT_ID='...'       # project_id
-export BIGQUERY_DATASET='...'     # dataset_id
-export RAW_BUCKET='...'           # raw_bucket_name
-export REVIEW_SHEET_ID='...'      # review_sheet_id
-export AC_ID='...'                # ac_id
-export GMAIL_LABEL_ID='...'       # gmail_label_id
-export SLACK_CHANNEL='...'        # slack_channel
-export WIKI_ROOT='...'            # wiki_root
+GCP_PROJECT_ID="$STAGING_PROJECT"
+BIGQUERY_DATASET="$STAGING_DATASET"
+RAW_BUCKET="$STAGING_RAW_BUCKET"
+WIKI_ROOT="$STAGING_WIKI_ROOT"
 ```
 
 Echo the values, compare them with `infra/terraform/staging.tfvars`, and stop if
@@ -167,10 +170,6 @@ any value differs or points to production.
 printf 'GCP_PROJECT_ID=%s\n' "$GCP_PROJECT_ID"
 printf 'BIGQUERY_DATASET=%s\n' "$BIGQUERY_DATASET"
 printf 'RAW_BUCKET=%s\n' "$RAW_BUCKET"
-printf 'REVIEW_SHEET_ID=%s\n' "$REVIEW_SHEET_ID"
-printf 'AC_ID=%s\n' "$AC_ID"
-printf 'GMAIL_LABEL_ID=%s\n' "$GMAIL_LABEL_ID"
-printf 'SLACK_CHANNEL=%s\n' "$SLACK_CHANNEL"
 printf 'WIKI_ROOT=%s\n' "$WIKI_ROOT"
 
 test "$GCP_PROJECT_ID" = "$STAGING_PROJECT" || {
@@ -183,6 +182,10 @@ test "$BIGQUERY_DATASET" = "$STAGING_DATASET" || {
 }
 test "$RAW_BUCKET" = "$STAGING_RAW_BUCKET" || {
   echo "STOP: RAW_BUCKET differs from the staging raw bucket"
+  exit 1
+}
+test "$WIKI_ROOT" = "$STAGING_WIKI_ROOT" || {
+  echo "STOP: WIKI_ROOT differs from the staging wiki root"
   exit 1
 }
 
@@ -202,14 +205,18 @@ case "$RAW_BUCKET" in
     ;;
 esac
 
+case "$WIKI_ROOT" in
+  /*) ;;
+  *)
+    echo "STOP: WIKI_ROOT must be an absolute staging path"
+    exit 1
+    ;;
+esac
+
 case "$(printf '%s\n' \
   "$GCP_PROJECT_ID" \
   "$BIGQUERY_DATASET" \
   "$RAW_BUCKET" \
-  "$REVIEW_SHEET_ID" \
-  "$AC_ID" \
-  "$GMAIL_LABEL_ID" \
-  "$SLACK_CHANNEL" \
   "$WIKI_ROOT" | tr '[:upper:]' '[:lower:]')" in
   *prod*|*production*)
     echo "STOP: local ingest environment includes a production-looking ID"
@@ -221,7 +228,12 @@ esac
 Use one synthetic candidate as the optional local canary source.
 
 ```bash
-python3 -m merry_runtime.jobs run ingest-sources --sources-json '[{"channel":"external_referral","payload":{"company":"Canary CareFarm","region":"Jeonbuk","industry":"AgriTech","reason":"Canary synthetic referral","tags":"social_problem:rural_income, beneficiary:older_farmers","confidence":"0.91"}}]'
+env -u SLACK_CHANNEL -u SLACK_BOT_TOKEN \
+  GCP_PROJECT_ID="$GCP_PROJECT_ID" \
+  BIGQUERY_DATASET="$BIGQUERY_DATASET" \
+  RAW_BUCKET="$RAW_BUCKET" \
+  WIKI_ROOT="$WIKI_ROOT" \
+  python3 -m merry_runtime.jobs run ingest-sources --sources-json '[{"channel":"external_referral","payload":{"company":"Canary CareFarm","region":"Jeonbuk","industry":"AgriTech","reason":"Canary synthetic referral","tags":"social_problem:rural_income, beneficiary:older_farmers","confidence":"0.91"}}]'
 ```
 
 ## Cloud Run Job Order
