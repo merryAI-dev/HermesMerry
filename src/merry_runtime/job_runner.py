@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 from dataclasses import asdict, dataclass
+from datetime import UTC, datetime
 from typing import Any
 
 from merry_runtime.adapters.interfaces import Notifier, ObjectStore, ReviewQueue, StructuredStore
@@ -73,7 +75,10 @@ def run_job(
 
 
 def _sources_from_json(value: str) -> list[dict[str, Any]]:
-    payload = json.loads(value)
+    try:
+        payload = json.loads(value)
+    except json.JSONDecodeError as exc:
+        raise JobRunError(f"sources JSON is invalid: {exc.msg}") from exc
     if not isinstance(payload, list):
         raise JobRunError("sources JSON must be a list")
     return payload
@@ -113,12 +118,44 @@ def _run_weekly_summary(*, runtime: RuntimeAdapters, config: RuntimeConfig) -> d
         raise JobRunError("weekly-summary requires notifier")
     if not config.slack_channel:
         raise JobRunError("weekly-summary requires SLACK_CHANNEL")
+    started_at = _now()
     summary = build_weekly_summary(structured_store=runtime.structured_store)
     message_id = runtime.notifier.send_message(channel=config.slack_channel, text=summary.text)
-    return {"job_name": "weekly-summary", "message_id": message_id, "card_count": summary.card_count, "counts": summary.counts}
+    run_id = f"run_weekly_summary_{_short_digest(started_at, message_id)}"
+    runtime.structured_store.upsert_rows(
+        table="agent_runs",
+        rows=[
+            {
+                "run_id": run_id,
+                "job_name": "weekly-summary",
+                "status": "success",
+                "started_at": started_at,
+                "finished_at": _now(),
+                "input_count": summary.card_count,
+                "output_count": 1,
+                "error_message": "",
+            }
+        ],
+        key_fields=("run_id",),
+    )
+    return {
+        "job_name": "weekly-summary",
+        "run_id": run_id,
+        "message_id": message_id,
+        "card_count": summary.card_count,
+        "counts": summary.counts,
+    }
 
 
 def _run_resolve_entities(*, runtime: RuntimeAdapters) -> dict[str, object]:
     result = resolve_entities(structured_store=runtime.structured_store, review_queue=runtime.review_queue)
     return {"job_name": "resolve-entities", **asdict(result)}
 
+
+def _short_digest(*parts: str) -> str:
+    payload = "\n".join(parts)
+    return hashlib.sha1(payload.encode("utf-8")).hexdigest()[:12]
+
+
+def _now() -> str:
+    return datetime.now(UTC).isoformat()

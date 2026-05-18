@@ -77,7 +77,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"Job failed: {exc}", file=sys.stderr)
             return 2
         except Exception as exc:
-            _record_failed_agent_run(runtime=runtime, job_name=args.job_name, started_at=started_at, exc=exc)
+            try:
+                _record_failed_agent_run(runtime=runtime, job_name=args.job_name, started_at=started_at, exc=exc)
+            except Exception:
+                pass
             print(f"Job failed: {_bounded_error_message(exc)}", file=sys.stderr)
             return 1
 

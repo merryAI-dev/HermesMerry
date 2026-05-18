@@ -7,6 +7,13 @@ from merry_runtime.runtime_config import RuntimeConfig
 from merry_runtime.wiki_store import SQLiteWikiStore
 
 
+class FailingAgentRunStore(FakeStructuredStore):
+    def upsert_rows(self, *, table: str, rows: list[dict[str, object]], key_fields: tuple[str, ...]) -> int:
+        if table == "agent_runs":
+            raise RuntimeError("secondary persistence failed with private source payload")
+        return super().upsert_rows(table=table, rows=rows, key_fields=key_fields)
+
+
 def test_jobs_cli_run_invokes_runtime_runner(monkeypatch, tmp_path, capsys) -> None:
     config = RuntimeConfig(
         project_id="project-1",
@@ -104,3 +111,63 @@ def test_jobs_cli_persists_unexpected_job_failure_after_runtime_creation(monkeyp
     assert failure_row["finished_at"]
     assert failure_row["error_message"].startswith("RuntimeError: adapter exploded")
     assert len(failure_row["error_message"]) <= 1000
+
+
+def test_jobs_cli_preserves_original_failure_when_failure_record_write_fails(monkeypatch, tmp_path, capsys) -> None:
+    config = RuntimeConfig(
+        project_id="project-1",
+        dataset_id="merry",
+        raw_bucket="raw-bucket",
+        review_sheet_id="sheet-1",
+        slack_channel="C123",
+        gmail_label_id="Label_123",
+        default_ac_id="ac_climate",
+        wiki_root=tmp_path,
+    )
+    runtime = RuntimeAdapters(
+        object_store=FakeObjectStore(bucket="raw-bucket"),
+        structured_store=FailingAgentRunStore(),
+        review_queue=FakeReviewQueue(),
+        notifier=FakeNotifier(),
+        wiki_store=SQLiteWikiStore(root=tmp_path),
+    )
+
+    def fail_job(*args, **kwargs):
+        raise RuntimeError("primary adapter exploded")
+
+    monkeypatch.setattr("merry_runtime.jobs.RuntimeConfig.from_env", lambda: config)
+    monkeypatch.setattr("merry_runtime.jobs.build_runtime", lambda config: runtime)
+    monkeypatch.setattr("merry_runtime.jobs.run_job", fail_job)
+
+    exit_code = main(["run", "score-candidates", "--ac-id", "ac_climate"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert "Job failed: RuntimeError: primary adapter exploded" in captured.err
+    assert "secondary persistence failed" not in captured.err
+
+
+def test_jobs_cli_invalid_sources_json_returns_job_error_without_failure_row(monkeypatch, tmp_path, capsys) -> None:
+    config = RuntimeConfig(
+        project_id="project-1",
+        dataset_id="merry",
+        raw_bucket="raw-bucket",
+        wiki_root=tmp_path,
+    )
+    store = FakeStructuredStore()
+    runtime = RuntimeAdapters(
+        object_store=FakeObjectStore(bucket="raw-bucket"),
+        structured_store=store,
+        review_queue=FakeReviewQueue(),
+        wiki_store=SQLiteWikiStore(root=tmp_path),
+    )
+
+    monkeypatch.setattr("merry_runtime.jobs.RuntimeConfig.from_env", lambda: config)
+    monkeypatch.setattr("merry_runtime.jobs.build_runtime", lambda config: runtime)
+
+    exit_code = main(["run", "ingest-sources", "--sources-json", "{not-json"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert "Job failed: sources JSON is invalid" in captured.err
+    assert store.tables["agent_runs"] == []

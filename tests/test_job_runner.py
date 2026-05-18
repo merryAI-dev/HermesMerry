@@ -88,6 +88,15 @@ def test_run_weekly_summary_posts_slack_counts(tmp_path) -> None:
     assert result["job_name"] == "weekly-summary"
     assert result["message_id"] == "msg_000001"
     assert "priority=1" in runtime.notifier.messages[0]["text"]
+    [run_row] = store.tables["agent_runs"]
+    assert run_row["run_id"] == result["run_id"]
+    assert run_row["job_name"] == "weekly-summary"
+    assert run_row["status"] == "success"
+    assert run_row["started_at"]
+    assert run_row["finished_at"]
+    assert run_row["input_count"] == 1
+    assert run_row["output_count"] == 1
+    assert run_row["error_message"] == ""
 
 
 def test_run_weekly_summary_includes_failures_reviews_and_resolution_events(tmp_path) -> None:
