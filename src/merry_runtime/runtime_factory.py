@@ -8,7 +8,7 @@ from types import ModuleType
 
 from merry_runtime.adapters.bigquery import BigQueryStructuredStore
 from merry_runtime.adapters.gcs import GCSObjectStore
-from merry_runtime.adapters.gmail import GmailLabelSource
+from merry_runtime.adapters.gmail import GmailDraftClient, GmailLabelSource
 from merry_runtime.adapters.google_sheets import GoogleSheetReviewQueue
 from merry_runtime.adapters.local_files import LocalFileObjectStore
 from merry_runtime.adapters.sminfo_playwright import SminfoPlaywrightClient
@@ -31,7 +31,11 @@ def build_runtime(
     )
 
     sheets_service = discovery_module.build("sheets", "v4") if discovery_module and config.review_sheet_id else None
-    gmail_service = discovery_module.build("gmail", "v1") if discovery_module and config.gmail_label_id else None
+    gmail_service = (
+        discovery_module.build("gmail", "v1")
+        if discovery_module and (config.review_sheet_id or config.gmail_label_id)
+        else None
+    )
 
     notifier = None
     slack_token = os.getenv("SLACK_BOT_TOKEN", "")
@@ -52,7 +56,12 @@ def build_runtime(
         ),
         notifier=notifier,
         wiki_store=SQLiteWikiStore(root=config.wiki_root),
-        gmail_source=GmailLabelSource(service=gmail_service, user_id="me", label_id=config.gmail_label_id) if gmail_service else None,
+        gmail_source=(
+            GmailLabelSource(service=gmail_service, user_id="me", label_id=config.gmail_label_id)
+            if gmail_service and config.gmail_label_id
+            else None
+        ),
+        email_draft_client=GmailDraftClient(service=gmail_service, user_id="me", from_name="Merry") if gmail_service else None,
         sminfo_client=(
             SminfoPlaywrightClient(
                 user_id=config.sminfo_user_id,

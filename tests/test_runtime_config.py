@@ -134,6 +134,18 @@ def test_runtime_config_requires_sminfo_credentials_and_review_sheet(monkeypatch
     assert "SMINFO_PASSWORD" in str(error.value)
 
 
+def test_runtime_config_requires_review_sheet_for_draft_outreach_emails(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("STRUCTURED_STORE_BACKEND", "sqlite")
+    monkeypatch.setenv("MOTHER_DB_PATH", str(tmp_path / "mother.db"))
+
+    config = RuntimeConfig.from_env()
+
+    with pytest.raises(RuntimeConfigError) as error:
+        config.validate_for_job("draft-outreach-emails")
+
+    assert "REVIEW_SHEET_ID" in str(error.value)
+
+
 def test_runtime_config_bounds_sminfo_batch_limit_to_site_safe_range(monkeypatch) -> None:
     monkeypatch.setenv("SMINFO_BATCH_LIMIT", "999")
     assert RuntimeConfig.from_env().sminfo_batch_limit == 20

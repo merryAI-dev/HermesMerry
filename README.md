@@ -77,7 +77,7 @@ WIKI_ROOT=/home/hermes/hermes/wiki
 HERMES_AGENT_ID=runpod-hermes-staging
 CRAWL_SHEET_TAB=Crawl Sources
 CRAWL_TARGETS_JSON=[{"url":"https://thevc.kr/","source_kind":"thevc_investment_ma","max_cards":20}]
-AGENT_LOOP_JOBS=crawl-sources,enrich-sminfo,backup-export
+AGENT_LOOP_JOBS=crawl-sources,draft-outreach-emails,enrich-sminfo,backup-export
 AGENT_LOOP_INTERVAL_SECONDS=3600
 AGENT_LOOP_MAX_CYCLES=0
 ```
@@ -96,6 +96,7 @@ python3 -m merry_runtime.jobs run score-candidates --ac-id ac_climate
 python3 -m merry_runtime.jobs run sync-review-sheet --ac-id ac_climate
 python3 -m merry_runtime.jobs run backup-export
 python3 -m merry_runtime.jobs run weekly-summary
+python3 -m merry_runtime.jobs run draft-outreach-emails
 ```
 
 Without `--sources-file` or `--sources-json`, `crawl-sources` reads URL targets
@@ -105,6 +106,10 @@ If `crawl4ai` is installed in the runtime image, the crawler uses it first;
 otherwise it falls back to a bounded stdlib HTML fetch for server-rendered pages.
 Without source flags, `ingest-sources` reads Gmail messages from
 `GMAIL_LABEL_ID`.
+
+`draft-outreach-emails` reads `Candidate Detail.contact_email`, creates Gmail
+drafts only, and records the draft state in SQLite plus the `Outreach Drafts`
+Sheet tab. It does not send email.
 
 ## Runtime Layout
 

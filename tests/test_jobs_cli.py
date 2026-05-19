@@ -238,6 +238,39 @@ def test_jobs_cli_runs_enrich_sminfo(monkeypatch, tmp_path, capsys) -> None:
     assert output["matched_count"] == 1
 
 
+def test_jobs_cli_runs_draft_outreach_emails(monkeypatch, tmp_path, capsys) -> None:
+    config = RuntimeConfig(
+        project_id="",
+        dataset_id="",
+        raw_bucket="",
+        review_sheet_id="sheet-1",
+        wiki_root=tmp_path / "wiki",
+        mother_db_path=tmp_path / "mother.db",
+        structured_store_backend="sqlite",
+    )
+    runtime = RuntimeAdapters(
+        object_store=FakeObjectStore(bucket="raw-bucket"),
+        structured_store=FakeStructuredStore(),
+        review_queue=FakeReviewQueue(),
+        wiki_store=SQLiteWikiStore(root=tmp_path / "wiki"),
+        email_draft_client=object(),
+    )
+
+    monkeypatch.setattr("merry_runtime.jobs.RuntimeConfig.from_env", lambda: config)
+    monkeypatch.setattr("merry_runtime.jobs.build_runtime", lambda config: runtime)
+    monkeypatch.setattr(
+        "merry_runtime.jobs.run_job",
+        lambda job_name, **kwargs: {"job_name": job_name, "drafted_count": 1, "skipped_count": 0},
+    )
+
+    exit_code = main(["run", "draft-outreach-emails"])
+
+    output = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert output["job_name"] == "draft-outreach-emails"
+    assert output["drafted_count"] == 1
+
+
 def test_jobs_cli_persists_unexpected_job_failure_after_runtime_creation(monkeypatch, tmp_path, capsys) -> None:
     config = RuntimeConfig(
         project_id="project-1",

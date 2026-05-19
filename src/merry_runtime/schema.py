@@ -184,6 +184,18 @@ BIGQUERY_TABLES: Final[dict[str, list[dict[str, str]]]] = {
         _field("updated_at", "TIMESTAMP", "REQUIRED"),
         _field("completed_at", "TIMESTAMP"),
     ],
+    "outreach_email_drafts": [
+        _field("outreach_id", "STRING", "REQUIRED"),
+        _field("company", "STRING", "REQUIRED"),
+        _field("contact_email", "STRING", "REQUIRED"),
+        _field("subject", "STRING", "REQUIRED"),
+        _field("body_text", "STRING"),
+        _field("gmail_draft_id", "STRING"),
+        _field("status", "STRING", "REQUIRED"),
+        _field("source_url", "STRING"),
+        _field("drafted_at", "TIMESTAMP", "REQUIRED"),
+        _field("error_message", "STRING"),
+    ],
 }
 
 

@@ -159,6 +159,18 @@ OPERATOR_CONSOLE_HEADERS: dict[str, tuple[str, ...]] = {
         "source_url",
         "updated_at",
     ),
+    "Outreach Drafts": (
+        "drafted_at",
+        "company",
+        "contact_email",
+        "subject",
+        "gmail_draft_id",
+        "status",
+        "source_url",
+        "business_model",
+        "investment_round",
+        "error_message",
+    ),
     "Decision Log": (
         "review_id",
         "card_id",
@@ -303,6 +315,18 @@ OPERATOR_CONSOLE_LABELS: dict[str, dict[str, str]] = {
         "last_profile_id": "최근 프로필 ID",
         "source_url": "출처 URL",
         "updated_at": "수정시각",
+    },
+    "Outreach Drafts": {
+        "drafted_at": "임시저장 시각",
+        "company": "기업명",
+        "contact_email": "수신 이메일",
+        "subject": "제목",
+        "gmail_draft_id": "Gmail 임시저장 ID",
+        "status": "상태",
+        "source_url": "출처 URL",
+        "business_model": "비즈니스모델",
+        "investment_round": "투자 단계",
+        "error_message": "오류",
     },
 }
 SHEET_OWNED_UPDATE_FIELDS: dict[str, set[str]] = {

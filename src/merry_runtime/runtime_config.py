@@ -13,6 +13,8 @@ _BIGQUERY_WRITE_MODES = {"merge", "append"}
 _STRUCTURED_STORE_BACKENDS = {"sqlite", "bigquery"}
 _SMINFO_BATCH_LIMIT_MIN = 1
 _SMINFO_BATCH_LIMIT_MAX = 20
+_OUTREACH_DRAFT_BATCH_LIMIT_MIN = 1
+_OUTREACH_DRAFT_BATCH_LIMIT_MAX = 20
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,6 +51,7 @@ class RuntimeConfig:
     sminfo_min_interval_seconds: int = 35
     sminfo_batch_limit: int = 20
     sminfo_stale_days: int = 30
+    outreach_draft_batch_limit: int = 10
 
     @classmethod
     def from_env(cls) -> RuntimeConfig:
@@ -86,6 +89,12 @@ class RuntimeConfig:
                 maximum=_SMINFO_BATCH_LIMIT_MAX,
             ),
             sminfo_stale_days=_parse_int(os.getenv("SMINFO_STALE_DAYS", ""), default=30),
+            outreach_draft_batch_limit=_parse_bounded_int(
+                os.getenv("OUTREACH_DRAFT_BATCH_LIMIT", ""),
+                default=10,
+                minimum=_OUTREACH_DRAFT_BATCH_LIMIT_MIN,
+                maximum=_OUTREACH_DRAFT_BATCH_LIMIT_MAX,
+            ),
         )
 
     def validate_for_job(self, job_name: str, *, has_inline_sources: bool = False) -> None:
@@ -120,6 +129,8 @@ class RuntimeConfig:
             required.extend(["MOTHER_DB_PATH", "BACKUP_ROOT"])
         elif job_name == "enrich-sminfo":
             required.extend(["REVIEW_SHEET_ID", "SMINFO_USER_ID", "SMINFO_PASSWORD"])
+        elif job_name == "draft-outreach-emails":
+            required.append("REVIEW_SHEET_ID")
         elif job_name == "resolve-entities":
             pass
         else:
@@ -175,6 +186,7 @@ class RuntimeConfig:
             "HERMES_AGENT_ID": self.hermes_agent_id,
             "SMINFO_USER_ID": self.sminfo_user_id,
             "SMINFO_PASSWORD": self.sminfo_password,
+            "OUTREACH_DRAFT_BATCH_LIMIT": str(self.outreach_draft_batch_limit),
         }[name]
 
 

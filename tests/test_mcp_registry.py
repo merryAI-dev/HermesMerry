@@ -6,6 +6,7 @@ def test_mcp_registry_exposes_only_domain_tools() -> None:
         "ingest_raw_source",
         "crawl_public_sources",
         "enrich_sminfo_candidates",
+        "draft_outreach_emails",
         "upsert_entity_signal",
         "enqueue_candidate_card",
         "record_review_feedback",
@@ -35,3 +36,13 @@ def test_enrich_sminfo_candidates_tool_is_bounded_to_candidate_names() -> None:
     assert tool.input_schema["properties"]["max_items"]["maximum"] == 20
     assert tool.input_schema["properties"]["company_names"]["maxItems"] == 20
     assert "url" not in tool.input_schema["properties"]
+
+
+def test_draft_outreach_emails_tool_only_creates_bounded_drafts_from_existing_candidates() -> None:
+    tool = TOOL_REGISTRY["draft_outreach_emails"]
+
+    assert tool.side_effect_scope == "gmail_drafts_sheets_sqlite"
+    assert tool.input_schema["additionalProperties"] is False
+    assert tool.input_schema["properties"]["max_items"]["maximum"] == 20
+    assert tool.input_schema["properties"]["company_names"]["maxItems"] == 20
+    assert "body" not in tool.input_schema["properties"]

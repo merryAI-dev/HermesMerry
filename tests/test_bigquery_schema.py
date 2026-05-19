@@ -15,6 +15,7 @@ def test_bigquery_schema_contains_required_mother_tables() -> None:
         "agent_runs",
         "sminfo_company_profiles",
         "sminfo_enrichment_queue",
+        "outreach_email_drafts",
     }.issubset(BIGQUERY_TABLES.keys())
 
 
@@ -149,4 +150,21 @@ def test_sminfo_enrichment_queue_schema_captures_agent_work_state() -> None:
         "created_at",
         "updated_at",
         "completed_at",
+    }.issubset(fields)
+
+
+def test_outreach_email_drafts_schema_captures_gmail_draft_state() -> None:
+    fields = table_field_names("outreach_email_drafts")
+
+    assert {
+        "outreach_id",
+        "company",
+        "contact_email",
+        "subject",
+        "body_text",
+        "gmail_draft_id",
+        "status",
+        "source_url",
+        "drafted_at",
+        "error_message",
     }.issubset(fields)

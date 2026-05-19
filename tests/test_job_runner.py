@@ -4,6 +4,7 @@ import pytest
 
 from merry_runtime.adapters.fakes import FakeNotifier, FakeObjectStore, FakeReviewQueue, FakeStructuredStore
 from merry_runtime.job_runner import JobRunError, RuntimeAdapters, run_job
+from merry_runtime.pipelines.draft_outreach_emails import OutreachDraftResult
 from merry_runtime.pipelines.enrich_sminfo import SminfoEnrichmentResult
 from merry_runtime.pipelines.crawl_sources import CrawlResult
 from merry_runtime.runtime_config import RuntimeConfig
@@ -399,6 +400,32 @@ def test_run_enrich_sminfo_passes_agent_identity(monkeypatch, tmp_path) -> None:
 
     assert result["job_name"] == "enrich-sminfo"
     assert seen == {"agent_id": "runpod-pod-1", "stale_days": 17}
+
+
+def test_run_draft_outreach_emails_uses_candidate_detail_contacts(monkeypatch, tmp_path) -> None:
+    runtime = _runtime(tmp_path)
+    runtime.email_draft_client = object()
+    seen: dict[str, object] = {}
+
+    def fake_draft_outreach_emails(**kwargs):
+        seen["draft_client"] = kwargs["draft_client"]
+        seen["max_items"] = kwargs["max_items"]
+        return OutreachDraftResult(
+            run_id="run_outreach_job",
+            candidate_count=2,
+            drafted_count=1,
+            skipped_count=1,
+            error_count=0,
+        )
+
+    monkeypatch.setattr("merry_runtime.job_runner.draft_outreach_emails", fake_draft_outreach_emails)
+
+    result = run_job("draft-outreach-emails", runtime=runtime, config=_config(tmp_path))
+
+    assert result["job_name"] == "draft-outreach-emails"
+    assert result["drafted_count"] == 1
+    assert seen["draft_client"] is runtime.email_draft_client
+    assert seen["max_items"] == 10
 
 
 def test_run_job_rejects_missing_ingest_sources(tmp_path) -> None:

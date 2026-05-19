@@ -1,6 +1,6 @@
 from merry_runtime.adapters.bigquery import BigQueryStructuredStore
 from merry_runtime.adapters.gcs import GCSObjectStore
-from merry_runtime.adapters.gmail import GmailLabelSource
+from merry_runtime.adapters.gmail import GmailDraftClient, GmailLabelSource
 from merry_runtime.adapters.google_sheets import GoogleSheetReviewQueue
 from merry_runtime.adapters.local_files import LocalFileObjectStore
 from merry_runtime.adapters.sminfo_playwright import SminfoPlaywrightClient
@@ -64,9 +64,44 @@ def test_runtime_factory_builds_production_adapters(monkeypatch, tmp_path) -> No
     assert isinstance(runtime.structured_store, BigQueryStructuredStore)
     assert isinstance(runtime.review_queue, GoogleSheetReviewQueue)
     assert isinstance(runtime.gmail_source, GmailLabelSource)
+    assert isinstance(runtime.email_draft_client, GmailDraftClient)
     assert isinstance(runtime.notifier, SlackNotifier)
     assert isinstance(runtime.wiki_store, SQLiteWikiStore)
     assert runtime.structured_store.write_mode == "merge"
+    assert built_services == [("sheets", "v4"), ("gmail", "v1")]
+
+
+def test_runtime_factory_builds_gmail_draft_client_for_sheet_runtime(monkeypatch, tmp_path) -> None:
+    built_services = []
+
+    def fake_build(service_name: str, version: str):
+        built_services.append((service_name, version))
+        return {"service": service_name, "version": version}
+
+    def fake_import(name: str):
+        modules = {
+            "googleapiclient.discovery": type("Discovery", (), {"build": staticmethod(fake_build)}),
+        }
+        return modules[name]
+
+    monkeypatch.delenv("SLACK_BOT_TOKEN", raising=False)
+    config = RuntimeConfig(
+        project_id="",
+        dataset_id="",
+        raw_bucket="",
+        review_sheet_id="sheet-1",
+        wiki_root=tmp_path / "wiki",
+        object_store_backend="local",
+        raw_root=tmp_path / "raw",
+        structured_store_backend="sqlite",
+        mother_db_path=tmp_path / "mother.db",
+        gmail_label_id="",
+    )
+
+    runtime = build_runtime(config, import_module=fake_import)
+
+    assert isinstance(runtime.email_draft_client, GmailDraftClient)
+    assert runtime.gmail_source is None
     assert built_services == [("sheets", "v4"), ("gmail", "v1")]
 
 

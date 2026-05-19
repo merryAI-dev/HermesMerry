@@ -11,6 +11,7 @@ from merry_runtime.clock import now_kst
 from merry_runtime.pipelines.backup_export import backup_export
 from merry_runtime.pipelines.calibrate_scores import calibrate_scores
 from merry_runtime.pipelines.crawl_sources import crawl_sources
+from merry_runtime.pipelines.draft_outreach_emails import draft_outreach_emails
 from merry_runtime.pipelines.enrich_sminfo import enrich_sminfo_candidates
 from merry_runtime.pipelines.ingest_ac_profiles import ingest_ac_profiles
 from merry_runtime.pipelines.ingest_sources import ingest_sources
@@ -35,6 +36,7 @@ class RuntimeAdapters:
     wiki_store: SQLiteWikiStore | None = None
     gmail_source: Any | None = None
     sminfo_client: Any | None = None
+    email_draft_client: Any | None = None
 
 
 def run_job(
@@ -131,6 +133,17 @@ def run_job(
             min_interval_seconds=config.sminfo_min_interval_seconds,
             stale_days=config.sminfo_stale_days,
             agent_id=config.hermes_agent_id,
+        )
+        return {"job_name": job_name, **asdict(result)}
+
+    if job_name == "draft-outreach-emails":
+        if runtime.email_draft_client is None:
+            raise JobRunError("draft-outreach-emails requires a configured Gmail draft client")
+        result = draft_outreach_emails(
+            review_queue=runtime.review_queue,
+            structured_store=runtime.structured_store,
+            draft_client=runtime.email_draft_client,
+            max_items=config.outreach_draft_batch_limit,
         )
         return {"job_name": job_name, **asdict(result)}
 

@@ -1,4 +1,4 @@
-from merry_runtime.adapters.interfaces import Notifier, ObjectStore, ReviewQueue, StructuredStore
+from merry_runtime.adapters.interfaces import EmailDraftClient, Notifier, ObjectStore, ReviewQueue, StructuredStore
 
 
 def test_adapter_protocols_define_required_runtime_methods() -> None:
@@ -10,3 +10,4 @@ def test_adapter_protocols_define_required_runtime_methods() -> None:
     assert "replace_rows" in ReviewQueue.__dict__
     assert "read_pending_reviews" in ReviewQueue.__dict__
     assert "send_message" in Notifier.__dict__
+    assert "create_draft" in EmailDraftClient.__dict__

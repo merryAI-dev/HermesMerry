@@ -60,6 +60,21 @@ _TOOLS = {
             },
         },
     ),
+    "draft_outreach_emails": MCPToolContract(
+        name="draft_outreach_emails",
+        description="Create bounded Gmail drafts from existing Candidate Detail contact emails without sending them.",
+        side_effect_scope="gmail_drafts_sheets_sqlite",
+        input_schema={
+            "type": "object",
+            "required": [],
+            "additionalProperties": False,
+            "properties": {
+                "max_items": {"type": "integer", "minimum": 1, "maximum": 20},
+                "company_names": {"type": "array", "items": {"type": "string"}, "maxItems": 20},
+                "reason": {"type": "string", "maxLength": 1000},
+            },
+        },
+    ),
     "upsert_entity_signal": MCPToolContract(
         name="upsert_entity_signal",
         description="Create or merge a Mother DB entity and attach evidence-backed signals.",

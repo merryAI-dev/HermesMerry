@@ -5,7 +5,12 @@ from google.api_core.exceptions import PreconditionFailed
 
 from merry_runtime.adapters.bigquery import BigQueryStructuredStore, build_query_job_config
 from merry_runtime.adapters.gcs import GCSObjectStore
+import base64
+from email import policy
+from email.parser import BytesParser
+
 from merry_runtime.adapters.gmail import GmailLabelSource
+from merry_runtime.adapters.gmail import GmailDraftClient
 from merry_runtime.adapters.google_sheets import GoogleSheetReviewQueue, OPERATOR_CONSOLE_HEADERS
 from merry_runtime.adapters.slack import SlackNotifier
 
@@ -556,6 +561,32 @@ def test_google_sheet_review_queue_creates_missing_tab_before_headers() -> None:
     assert service.batch_update_body == {"requests": [{"addSheet": {"properties": {"title": "Evidence"}}}]}
     assert "Evidence" in service.sheet_titles
     assert service.values_obj.update_kwargs["range"] == "Evidence!A1:M1"
+
+
+def test_google_sheet_review_queue_publishes_outreach_draft_log_schema() -> None:
+    service = FakeSheetsService()
+    service.values_obj.get_responses.extend([{"values": []}, {"values": []}])
+    queue = GoogleSheetReviewQueue(service=service, spreadsheet_id="sheet_1")
+
+    queue.upsert_cards(
+        sheet_tab="Outreach Drafts",
+        rows=[
+            {
+                "drafted_at": "2026-05-19T12:00:00+09:00",
+                "company": "에이아이오",
+                "contact_email": "hello@the-aio.com",
+                "subject": "에이아이오 관련하여 인사드립니다",
+                "gmail_draft_id": "draft_1",
+                "status": "draft_created",
+            }
+        ],
+        key_fields=("company", "contact_email"),
+    )
+
+    assert service.values_obj.update_kwargs["range"] == "'Outreach Drafts'!A1:J2"
+    rewritten = service.values_obj.update_body["values"]  # type: ignore[index]
+    assert rewritten[1][1] == "에이아이오"
+    assert rewritten[1][4] == "draft_1"
 
 
 def test_google_sheet_review_queue_uses_raw_values_and_escapes_formula_cells() -> None:
@@ -1509,6 +1540,18 @@ def test_google_sheet_review_queue_supports_operator_console_tabs() -> None:
             "source_url",
             "updated_at",
         ),
+        "Outreach Drafts": (
+            "drafted_at",
+            "company",
+            "contact_email",
+            "subject",
+            "gmail_draft_id",
+            "status",
+            "source_url",
+            "business_model",
+            "investment_round",
+            "error_message",
+        ),
         "Decision Log": (
             "review_id",
             "card_id",
@@ -1647,12 +1690,52 @@ class FakeGmailService:
         return self.messages_obj
 
 
+class FakeGmailDrafts:
+    def create(self, **kwargs: object) -> "FakeGmailDrafts":
+        self.create_kwargs = kwargs
+        return self
+
+    def execute(self) -> dict[str, object]:
+        return {"id": "draft_1", "message": {"id": "msg_1"}}
+
+
+class FakeGmailDraftService:
+    def __init__(self) -> None:
+        self.drafts_obj = FakeGmailDrafts()
+
+    def users(self) -> "FakeGmailDraftService":
+        return self
+
+    def drafts(self) -> FakeGmailDrafts:
+        return self.drafts_obj
+
+
 def test_gmail_label_source_fetches_messages_by_label() -> None:
     source = GmailLabelSource(service=FakeGmailService(), user_id="me", label_id="Label_123")
 
     messages = source.fetch_labeled_messages(max_results=10)
 
     assert messages == [{"id": "msg_1", "snippet": "Company: Merry AI"}]
+
+
+def test_gmail_draft_client_creates_rfc822_draft_without_sending() -> None:
+    service = FakeGmailDraftService()
+    client = GmailDraftClient(service=service, user_id="me", from_name="Merry")
+
+    draft_id = client.create_draft(
+        to="hello@the-aio.com",
+        subject="에이아이오 관련하여 인사드립니다",
+        body_text="안녕하세요.\nMYSC Merry 리서치팀입니다.",
+    )
+
+    raw = service.drafts_obj.create_kwargs["body"]["message"]["raw"]  # type: ignore[index]
+    message = BytesParser(policy=policy.default).parsebytes(base64.urlsafe_b64decode(raw))
+    assert draft_id == "draft_1"
+    assert service.drafts_obj.create_kwargs["userId"] == "me"
+    assert message["To"] == "hello@the-aio.com"
+    assert message["From"] == "Merry"
+    assert message["Subject"] == "에이아이오 관련하여 인사드립니다"
+    assert message.get_content() == "안녕하세요.\nMYSC Merry 리서치팀입니다.\n"
 
 
 class FakeSlackClient:

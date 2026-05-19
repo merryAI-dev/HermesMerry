@@ -25,3 +25,7 @@ class ReviewQueue(Protocol):
 
 class Notifier(Protocol):
     def send_message(self, *, channel: str, text: str) -> str: ...
+
+
+class EmailDraftClient(Protocol):
+    def create_draft(self, *, to: str, subject: str, body_text: str) -> str: ...
