@@ -57,11 +57,15 @@ def build_runtime(
         notifier=notifier,
         wiki_store=SQLiteWikiStore(root=config.wiki_root),
         gmail_source=(
-            GmailLabelSource(service=gmail_service, user_id="me", label_id=config.gmail_label_id)
+            GmailLabelSource(service=gmail_service, user_id=config.gmail_user_id, label_id=config.gmail_label_id)
             if gmail_service and config.gmail_label_id
             else None
         ),
-        email_draft_client=GmailDraftClient(service=gmail_service, user_id="me", from_name="Merry") if gmail_service else None,
+        email_draft_client=(
+            GmailDraftClient(service=gmail_service, user_id=config.gmail_user_id, from_name=config.gmail_from_name)
+            if gmail_service
+            else None
+        ),
         sminfo_client=(
             SminfoPlaywrightClient(
                 user_id=config.sminfo_user_id,

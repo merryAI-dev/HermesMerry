@@ -25,6 +25,8 @@ class RuntimeConfig:
     review_sheet_id: str = ""
     slack_channel: str = ""
     gmail_label_id: str = ""
+    gmail_user_id: str = "me"
+    gmail_from_name: str = "Merry"
     crawl_sheet_tab: str = "Crawl Sources"
     crawl_targets_json: str = ""
     default_ac_id: str = ""
@@ -62,6 +64,8 @@ class RuntimeConfig:
             review_sheet_id=os.getenv("REVIEW_SHEET_ID", ""),
             slack_channel=os.getenv("SLACK_CHANNEL", ""),
             gmail_label_id=os.getenv("GMAIL_LABEL_ID", ""),
+            gmail_user_id=os.getenv("GMAIL_USER_ID", "me"),
+            gmail_from_name=os.getenv("GMAIL_FROM_NAME", "Merry"),
             crawl_sheet_tab=os.getenv("CRAWL_SHEET_TAB", "Crawl Sources"),
             crawl_targets_json=os.getenv("CRAWL_TARGETS_JSON", ""),
             default_ac_id=os.getenv("AC_ID", ""),
@@ -180,6 +184,8 @@ class RuntimeConfig:
             "REVIEW_SHEET_ID": self.review_sheet_id,
             "SLACK_CHANNEL": self.slack_channel,
             "GMAIL_LABEL_ID": self.gmail_label_id,
+            "GMAIL_USER_ID": self.gmail_user_id,
+            "GMAIL_FROM_NAME": self.gmail_from_name,
             "CRAWL_SHEET_TAB": self.crawl_sheet_tab,
             "AC_ID": self.default_ac_id,
             "RAW_ROOT": str(self.raw_root),

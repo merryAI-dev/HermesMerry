@@ -105,6 +105,41 @@ def test_runtime_factory_builds_gmail_draft_client_for_sheet_runtime(monkeypatch
     assert built_services == [("sheets", "v4"), ("gmail", "v1")]
 
 
+def test_runtime_factory_uses_configured_gmail_mailbox_and_from_name(monkeypatch, tmp_path) -> None:
+    def fake_build(service_name: str, version: str):
+        return {"service": service_name, "version": version}
+
+    def fake_import(name: str):
+        modules = {
+            "googleapiclient.discovery": type("Discovery", (), {"build": staticmethod(fake_build)}),
+        }
+        return modules[name]
+
+    monkeypatch.delenv("SLACK_BOT_TOKEN", raising=False)
+    config = RuntimeConfig(
+        project_id="",
+        dataset_id="",
+        raw_bucket="",
+        review_sheet_id="sheet-1",
+        wiki_root=tmp_path / "wiki",
+        object_store_backend="local",
+        raw_root=tmp_path / "raw",
+        structured_store_backend="sqlite",
+        mother_db_path=tmp_path / "mother.db",
+        gmail_label_id="Label_123",
+        gmail_user_id="operator@mysc.co.kr",
+        gmail_from_name="Merry",
+    )
+
+    runtime = build_runtime(config, import_module=fake_import)
+
+    assert isinstance(runtime.gmail_source, GmailLabelSource)
+    assert isinstance(runtime.email_draft_client, GmailDraftClient)
+    assert runtime.gmail_source.user_id == "operator@mysc.co.kr"
+    assert runtime.email_draft_client.user_id == "operator@mysc.co.kr"
+    assert runtime.email_draft_client.from_name == "Merry"
+
+
 def test_runtime_factory_uses_local_object_store_without_storage_client(monkeypatch, tmp_path) -> None:
     imported_modules = []
 

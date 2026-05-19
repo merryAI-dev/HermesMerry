@@ -139,8 +139,17 @@ def _normalize_target(target: dict[str, Any]) -> dict[str, Any]:
     url = str(target.get("url") or "").strip()
     if not url:
         raise ValueError("crawl target requires url")
-    source_kind = str(target.get("source_kind") or target.get("channel") or THEVC_INVESTMENT_CHANNEL).strip()
+    source_kind = _canonical_source_kind(str(target.get("source_kind") or target.get("channel") or THEVC_INVESTMENT_CHANNEL).strip())
     return {**target, "url": url, "source_kind": source_kind}
+
+
+def _canonical_source_kind(source_kind: str) -> str:
+    aliases = {
+        "platum_investment": PLATUM_INVESTMENT_CHANNEL,
+        "platum": PLATUM_INVESTMENT_CHANNEL,
+        "thevc": THEVC_INVESTMENT_CHANNEL,
+    }
+    return aliases.get(source_kind.casefold(), source_kind)
 
 
 def _is_active_target(target: dict[str, Any]) -> bool:

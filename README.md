@@ -71,6 +71,8 @@ BACKUP_ROOT=/home/hermes/hermes/backups
 REVIEW_SHEET_ID=google-sheet-id
 AC_ID=ac_climate
 GMAIL_LABEL_ID=Label_123
+GMAIL_USER_ID=operator@mysc.co.kr
+GMAIL_FROM_NAME=Merry
 SLACK_CHANNEL=C123
 SLACK_BOT_TOKEN=xoxb-...
 WIKI_ROOT=/home/hermes/hermes/wiki
@@ -109,7 +111,9 @@ Without source flags, `ingest-sources` reads Gmail messages from
 
 `draft-outreach-emails` reads `Candidate Detail.contact_email`, creates Gmail
 drafts only, and records the draft state in SQLite plus the `Outreach Drafts`
-Sheet tab. It does not send email.
+Sheet tab. It does not send email. `GMAIL_USER_ID` selects the Gmail mailbox
+used by the API; the default is `me`, which means the authenticated Google
+credentials account. Local ADC must include `https://www.googleapis.com/auth/gmail.compose`.
 
 ## Runtime Layout
 

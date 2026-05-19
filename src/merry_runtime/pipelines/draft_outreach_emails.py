@@ -41,7 +41,10 @@ def draft_outreach_emails(
     run_id = run_id or f"run_outreach_{_short_digest(started_at)}"
     rows = review_queue.read_pending_reviews(sheet_tab="Candidate Detail")
     candidates = _candidate_rows(rows=rows, company_names=company_names or [])
-    existing_keys = _existing_draft_keys(structured_store=structured_store)
+    existing_keys = _existing_draft_keys(
+        structured_store=structured_store,
+        review_queue=review_queue,
+    )
 
     draft_rows: list[dict[str, object]] = []
     sheet_rows: list[dict[str, object]] = []
@@ -142,13 +145,20 @@ def _candidate_rows(*, rows: list[dict[str, str]], company_names: list[str]) -> 
     return candidates
 
 
-def _existing_draft_keys(*, structured_store: StructuredStore) -> set[tuple[str, str]]:
+def _existing_draft_keys(*, structured_store: StructuredStore, review_queue: ReviewQueue) -> set[tuple[str, str]]:
     rows = structured_store.query_rows(sql="select * from outreach_email_drafts", parameters={})
-    return {
+    keys = {
         _draft_key(company=str(row.get("company") or ""), contact_email=str(row.get("contact_email") or ""))
         for row in rows
         if str(row.get("status") or "") == "draft_created"
     }
+    sheet_rows = review_queue.read_pending_reviews(sheet_tab=OUTREACH_DRAFTS_TAB)
+    keys.update(
+        _draft_key(company=str(row.get("company") or ""), contact_email=str(row.get("contact_email") or ""))
+        for row in sheet_rows
+        if str(row.get("status") or "") == "draft_created" and str(row.get("gmail_draft_id") or "")
+    )
+    return keys
 
 
 def _candidate_company(candidate: dict[str, str]) -> str:

@@ -10,6 +10,8 @@ def test_runtime_config_reads_required_environment(monkeypatch) -> None:
     monkeypatch.setenv("REVIEW_SHEET_ID", "sheet-1")
     monkeypatch.setenv("SLACK_CHANNEL", "C123")
     monkeypatch.setenv("GMAIL_LABEL_ID", "Label_123")
+    monkeypatch.setenv("GMAIL_USER_ID", "operator@mysc.co.kr")
+    monkeypatch.setenv("GMAIL_FROM_NAME", "Merry")
     monkeypatch.setenv("AC_ID", "ac_climate")
     monkeypatch.setenv("WIKI_ROOT", "/tmp/wiki")
     monkeypatch.setenv("SMINFO_USER_ID", "sminfo-user")
@@ -27,6 +29,8 @@ def test_runtime_config_reads_required_environment(monkeypatch) -> None:
     assert config.review_sheet_id == "sheet-1"
     assert config.slack_channel == "C123"
     assert config.gmail_label_id == "Label_123"
+    assert config.gmail_user_id == "operator@mysc.co.kr"
+    assert config.gmail_from_name == "Merry"
     assert config.default_ac_id == "ac_climate"
     assert str(config.wiki_root) == "/tmp/wiki"
     assert config.object_store_backend == "gcs"

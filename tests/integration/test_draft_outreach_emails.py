@@ -107,3 +107,43 @@ def test_draft_outreach_emails_does_not_create_duplicate_drafts_for_existing_con
     assert second.skipped_count == 1
     assert len(client.drafts) == 1
     assert len(store.tables["outreach_email_drafts"]) == 1
+
+
+def test_draft_outreach_emails_uses_sheet_draft_log_to_prevent_duplicate_drafts() -> None:
+    queue = FakeReviewQueue()
+    queue.seed_reviews(
+        "Candidate Detail",
+        [
+            {
+                "company": "에이아이오",
+                "homepage": "https://the-aio.com/",
+                "contact_email": "hello@the-aio.com",
+            }
+        ],
+    )
+    queue.seed_reviews(
+        "Outreach Drafts",
+        [
+            {
+                "company": "에이아이오",
+                "contact_email": "hello@the-aio.com",
+                "gmail_draft_id": "draft_existing",
+                "status": "draft_created",
+            }
+        ],
+    )
+    store = FakeStructuredStore()
+    client = FakeEmailDraftClient()
+
+    result = draft_outreach_emails(
+        review_queue=queue,
+        structured_store=store,
+        draft_client=client,
+        max_items=10,
+        run_id="run_outreach_sheet_duplicate",
+    )
+
+    assert result.drafted_count == 0
+    assert result.skipped_count == 1
+    assert client.drafts == []
+    assert store.tables["outreach_email_drafts"] == []
