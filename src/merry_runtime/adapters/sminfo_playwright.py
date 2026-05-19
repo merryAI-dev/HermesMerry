@@ -24,6 +24,8 @@ class SminfoPlaywrightClient:
     headless: bool = True
     timeout_ms: int = 30000
     min_interval_seconds: int = 35
+    max_lookup_attempts: int = 3
+    retry_backoff_seconds: float = 10.0
     sleep_fn: Callable[[float], None] = time.sleep
     monotonic_fn: Callable[[], float] = time.monotonic
     _playwright: Any = field(default=None, init=False, repr=False)
@@ -34,6 +36,18 @@ class SminfoPlaywrightClient:
 
     def lookup_company(self, *, company_name: str, candidate: dict[str, str]) -> SminfoProfile:
         self._wait_for_rate_limit()
+        last_error: Exception | None = None
+        for attempt in range(max(self.max_lookup_attempts, 1)):
+            try:
+                return self._lookup_company_once(company_name=company_name, candidate=candidate)
+            except Exception as exc:
+                last_error = exc
+                if attempt >= max(self.max_lookup_attempts, 1) - 1 or not _is_transient_browser_error(exc):
+                    raise
+                self.sleep_fn(self.retry_backoff_seconds)
+        raise RuntimeError(f"SMINFO lookup failed: {last_error}")
+
+    def _lookup_company_once(self, *, company_name: str, candidate: dict[str, str]) -> SminfoProfile:
         page = self._ensure_page()
         self._ensure_logged_in(page)
         page.goto(DETAIL_SEARCH_URL, wait_until="domcontentloaded", timeout=self.timeout_ms)
@@ -162,4 +176,18 @@ def _extract_tables(page: Any) -> list[dict[str, object]]:
           ).filter((cells) => cells.length > 0)
         }))
         """
+    )
+
+
+def _is_transient_browser_error(exc: Exception) -> bool:
+    message = str(exc)
+    return any(
+        marker in message
+        for marker in (
+            "ERR_CONNECTION_RESET",
+            "ERR_TIMED_OUT",
+            "ERR_CONNECTION_CLOSED",
+            "Timeout",
+            "net::ERR",
+        )
     )

@@ -29,6 +29,10 @@ class FakeSminfoClient:
             operating_income_krw_thousand="-13097004",
             net_income_krw_thousand="-19903884",
             total_assets_krw_thousand="27096382",
+            shareholder_composition="권진형 52.00% (52,000주); 백상열 48.00% (48,000주)",
+            largest_shareholder="권진형",
+            largest_shareholder_ratio_pct="52.00",
+            shareholder_count="2",
             sminfo_url="https://sminfo.mss.go.kr/si/ei/IEI001R0.do?cmd=com&kcd=0007451769",
         )
 
@@ -85,6 +89,11 @@ def test_enrich_sminfo_candidates_persists_profile_to_sqlite_projection_and_shee
     assert candidate_update["homepage"] == "https://the-aio.com/"
     assert candidate_update["sminfo_status"] == "matched"
     assert candidate_update["sminfo_company"] == "(주)에이아이오"
+    assert candidate_update["sminfo_latest_financial_year"] == "2025-12-31"
+    assert candidate_update["sminfo_revenue_krw_thousand"] == "17851006"
+    assert candidate_update["sminfo_shareholder_composition"] == "권진형 52.00% (52,000주); 백상열 48.00% (48,000주)"
+    assert candidate_update["sminfo_largest_shareholder"] == "권진형"
+    assert candidate_update["sminfo_largest_shareholder_ratio_pct"] == "52.00"
     assert candidate_update["sminfo_profile_url"].endswith("0007451769")
 
 

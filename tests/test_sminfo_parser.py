@@ -85,6 +85,14 @@ def test_parse_sminfo_profile_tables_extracts_basic_profile_and_latest_financial
                     ["2025-12-31", "27,096,382", "32,342,619", "-55,546,710", "17,851,006", "-13,097,004", "-19,903,884"],
                 ],
             },
+            {
+                "caption": "주주현황",
+                "rows": [
+                    ["주주명", "주식수", "지분율"],
+                    ["권진형", "52,000", "52.00%"],
+                    ["백상열", "48,000", "48.00%"],
+                ],
+            },
         ],
     )
 
@@ -103,4 +111,20 @@ def test_parse_sminfo_profile_tables_extracts_basic_profile_and_latest_financial
     assert profile.operating_income_krw_thousand == "-13097004"
     assert profile.net_income_krw_thousand == "-19903884"
     assert profile.total_assets_krw_thousand == "27096382"
+    assert profile.shareholder_composition == "권진형 52.00% (52,000주); 백상열 48.00% (48,000주)"
+    assert profile.largest_shareholder == "권진형"
+    assert profile.largest_shareholder_ratio_pct == "52.00"
+    assert profile.shareholder_count == "2"
     assert "저장하면 안 되는 값" not in str(profile.raw_payload)
+
+
+def test_parse_sminfo_profile_tables_marks_empty_detail_page_as_error() -> None:
+    profile = parse_sminfo_profile_tables(
+        requested_company="에이아이오",
+        sminfo_url="https://sminfo.mss.go.kr/gc/sf/GSF002R0.print",
+        tables=[{"caption": "기업 상세검색 목록", "rows": [["기업명", "대표자명"]]}],
+    )
+
+    assert profile.match_status == "error"
+    assert profile.matched_company == ""
+    assert "detail tables" in profile.error_message

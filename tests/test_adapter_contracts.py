@@ -713,7 +713,7 @@ def test_google_sheet_review_queue_upserts_existing_row_by_key() -> None:
 
     assert count == 1
     assert service.values_obj.append_body is None
-    assert service.values_obj.update_kwargs["range"] == "'Candidate Detail'!A2:W2"
+    assert service.values_obj.update_kwargs["range"] == "'Candidate Detail'!A2:AF2"
     assert service.values_obj.update_body["values"][0][3] == "New Founder"  # type: ignore[index]
     assert service.values_obj.update_body["values"][0][5] == "founder@merry.ai"  # type: ignore[index]
     assert service.values_obj.update_body["values"][0][8] == "공개 카드 -> Merry AI"  # type: ignore[index]
@@ -793,7 +793,7 @@ def test_google_sheet_review_queue_migrates_candidate_detail_from_entity_id_sche
 
     assert count == 1
     rewritten = service.values_obj.update_body["values"]  # type: ignore[index]
-    assert service.values_obj.update_kwargs["range"] == "'Candidate Detail'!A1:W2"
+    assert service.values_obj.update_kwargs["range"] == "'Candidate Detail'!A1:AF2"
     assert rewritten[0][0] == "collected_at"
     assert "entity_id" not in rewritten[0]
     assert rewritten[1][0] == "2026-05-19T00:00:00+00:00"
@@ -887,8 +887,8 @@ def test_google_sheet_review_queue_rewrites_legacy_candidate_detail_projection_r
 
     assert count == 1
     rewritten = service.values_obj.update_body["values"]  # type: ignore[index]
-    assert service.values_obj.update_kwargs["range"] == "'Candidate Detail'!A1:W2"
-    assert service.values_obj.clear_kwargs["range"] == "'Candidate Detail'!A3:W3"
+    assert service.values_obj.update_kwargs["range"] == "'Candidate Detail'!A1:AF2"
+    assert service.values_obj.clear_kwargs["range"] == "'Candidate Detail'!A3:AF3"
     assert len(rewritten) == 2
     assert rewritten[1][1] == "Merry AI"
     assert rewritten[1][8] == "공개 카드 -> Merry AI"
@@ -1175,8 +1175,8 @@ def test_google_sheet_review_queue_compacts_candidate_detail_by_company_or_homep
     assert count == 1
     assert service.values_obj.calls[-2][0] == "update"
     assert service.values_obj.calls[-1][0] == "clear"
-    assert service.values_obj.update_kwargs["range"] == "'Candidate Detail'!A1:W2"
-    assert service.values_obj.clear_kwargs["range"] == "'Candidate Detail'!A3:W4"
+    assert service.values_obj.update_kwargs["range"] == "'Candidate Detail'!A1:AF2"
+    assert service.values_obj.clear_kwargs["range"] == "'Candidate Detail'!A3:AF4"
     rewritten = service.values_obj.update_body["values"]  # type: ignore[index]
     assert len(rewritten) == 2
     assert rewritten[1][1] == "Merry AI"
@@ -1355,6 +1355,15 @@ def test_google_sheet_review_queue_supports_operator_console_tabs() -> None:
             "wiki_path",
             "sminfo_status",
             "sminfo_company",
+            "sminfo_latest_financial_year",
+            "sminfo_revenue_krw_thousand",
+            "sminfo_operating_income_krw_thousand",
+            "sminfo_net_income_krw_thousand",
+            "sminfo_total_assets_krw_thousand",
+            "sminfo_shareholder_composition",
+            "sminfo_largest_shareholder",
+            "sminfo_largest_shareholder_ratio_pct",
+            "sminfo_error_message",
             "sminfo_profile_url",
             "sminfo_collected_at",
         ),
@@ -1404,6 +1413,10 @@ def test_google_sheet_review_queue_supports_operator_console_tabs() -> None:
             "operating_income_krw_thousand",
             "net_income_krw_thousand",
             "total_assets_krw_thousand",
+            "shareholder_composition",
+            "largest_shareholder",
+            "largest_shareholder_ratio_pct",
+            "shareholder_count",
             "sminfo_url",
             "error_message",
         ),

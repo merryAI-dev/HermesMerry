@@ -24,6 +24,9 @@ _PROFILE_RAW_FIELDS = (
     "정보수정일자",
 )
 _FINANCIAL_RAW_FIELDS = ("결산년도", "총자산", "매출액", "영업이익", "당기순이익")
+_SHAREHOLDER_NAME_HEADERS = ("주주명", "성명", "이름", "주주")
+_SHAREHOLDER_SHARE_HEADERS = ("주식수", "주식", "보유주식수", "보유수")
+_SHAREHOLDER_RATIO_HEADERS = ("지분율", "비율", "율")
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,6 +64,10 @@ class SminfoProfile:
     operating_income_krw_thousand: str = ""
     net_income_krw_thousand: str = ""
     total_assets_krw_thousand: str = ""
+    shareholder_composition: str = ""
+    largest_shareholder: str = ""
+    largest_shareholder_ratio_pct: str = ""
+    shareholder_count: str = ""
     sminfo_url: str = ""
     error_message: str = ""
     raw_payload: dict[str, Any] = field(default_factory=dict)
@@ -102,6 +109,15 @@ def parse_sminfo_profile_tables(
 ) -> SminfoProfile:
     profile_fields = _profile_fields(_table_rows(tables, "기업프로필정보"))
     financial_fields = _latest_financial_fields(_table_rows(tables, "매출현황"))
+    shareholder_fields = _shareholder_fields(_first_matching_table_rows(tables, "주주"))
+    if not profile_fields and not financial_fields and not shareholder_fields:
+        return SminfoProfile(
+            requested_company=requested_company,
+            match_status="error",
+            sminfo_url=sminfo_url,
+            error_message="SMINFO detail tables were not found",
+            raw_payload={"table_captions": [str(table.get("caption") or "") for table in tables]},
+        )
     return SminfoProfile(
         requested_company=requested_company,
         match_status="matched",
@@ -119,10 +135,15 @@ def parse_sminfo_profile_tables(
         operating_income_krw_thousand=_clean_number(financial_fields.get("영업이익", "")),
         net_income_krw_thousand=_clean_number(financial_fields.get("당기순이익", "")),
         total_assets_krw_thousand=_clean_number(financial_fields.get("총자산", "")),
+        shareholder_composition=shareholder_fields.get("shareholder_composition", ""),
+        largest_shareholder=shareholder_fields.get("largest_shareholder", ""),
+        largest_shareholder_ratio_pct=shareholder_fields.get("largest_shareholder_ratio_pct", ""),
+        shareholder_count=shareholder_fields.get("shareholder_count", ""),
         sminfo_url=sminfo_url,
         raw_payload={
             "profile_fields": _allowlisted_fields(profile_fields, _PROFILE_RAW_FIELDS),
             "latest_financial_fields": _allowlisted_fields(financial_fields, _FINANCIAL_RAW_FIELDS),
+            "shareholder_fields": shareholder_fields,
         },
     )
 
@@ -146,6 +167,10 @@ def sminfo_profile_row(*, profile: SminfoProfile, profile_id: str, collected_at:
         "operating_income_krw_thousand": profile.operating_income_krw_thousand,
         "net_income_krw_thousand": profile.net_income_krw_thousand,
         "total_assets_krw_thousand": profile.total_assets_krw_thousand,
+        "shareholder_composition": profile.shareholder_composition,
+        "largest_shareholder": profile.largest_shareholder,
+        "largest_shareholder_ratio_pct": profile.largest_shareholder_ratio_pct,
+        "shareholder_count": profile.shareholder_count,
         "sminfo_url": profile.sminfo_url,
         "raw_json": json.dumps(profile.raw_payload or asdict(profile), ensure_ascii=False, sort_keys=True),
         "error_message": profile.error_message,
@@ -189,6 +214,14 @@ def _table_rows(tables: list[dict[str, object]], caption: str) -> list[list[str]
     return []
 
 
+def _first_matching_table_rows(tables: list[dict[str, object]], caption_token: str) -> list[list[str]]:
+    for table in tables:
+        if caption_token in str(table.get("caption") or ""):
+            rows = table.get("rows") or []
+            return [[str(cell).strip() for cell in row] for row in rows if isinstance(row, list)]
+    return []
+
+
 def _profile_fields(rows: list[list[str]]) -> dict[str, str]:
     fields: dict[str, str] = {}
     for row in rows:
@@ -210,8 +243,73 @@ def _latest_financial_fields(rows: list[list[str]]) -> dict[str, str]:
     return dict(zip(headers, values, strict=False))
 
 
+def _shareholder_fields(rows: list[list[str]]) -> dict[str, str]:
+    if len(rows) < 2:
+        return {}
+    headers = rows[0]
+    name_index = _first_header_index(headers, _SHAREHOLDER_NAME_HEADERS)
+    shares_index = _first_header_index(headers, _SHAREHOLDER_SHARE_HEADERS)
+    ratio_index = _first_header_index(headers, _SHAREHOLDER_RATIO_HEADERS)
+    if name_index is None:
+        return {}
+
+    shareholders: list[dict[str, str]] = []
+    for row in rows[1:]:
+        name = _cell(row, name_index)
+        if not name or name in {"합계", "계", "총계"}:
+            continue
+        shares = _cell(row, shares_index) if shares_index is not None else ""
+        ratio = _clean_percent(_cell(row, ratio_index)) if ratio_index is not None else ""
+        shareholders.append({"name": name, "shares": shares, "ratio_pct": ratio})
+
+    if not shareholders:
+        return {}
+
+    largest = max(shareholders, key=lambda item: _ratio_sort_key(item["ratio_pct"]))
+    return {
+        "shareholder_composition": "; ".join(_shareholder_summary(item) for item in shareholders),
+        "largest_shareholder": largest["name"],
+        "largest_shareholder_ratio_pct": largest["ratio_pct"],
+        "shareholder_count": str(len(shareholders)),
+    }
+
+
+def _first_header_index(headers: list[str], candidates: tuple[str, ...]) -> int | None:
+    for candidate in candidates:
+        for index, header in enumerate(headers):
+            if candidate in header:
+                return index
+    return None
+
+
+def _cell(row: list[str], index: int | None) -> str:
+    if index is None or index >= len(row):
+        return ""
+    return row[index].strip()
+
+
+def _shareholder_summary(item: dict[str, str]) -> str:
+    summary = item["name"]
+    if item["ratio_pct"]:
+        summary += f" {item['ratio_pct']}%"
+    if item["shares"]:
+        summary += f" ({item['shares']}주)"
+    return summary
+
+
+def _ratio_sort_key(value: str) -> float:
+    try:
+        return float(value)
+    except ValueError:
+        return -1.0
+
+
 def _clean_number(value: str) -> str:
     return _NUMBER.sub("", value)
+
+
+def _clean_percent(value: str) -> str:
+    return re.sub(r"[^0-9.]", "", value)
 
 
 def _allowlisted_fields(fields: dict[str, str], allowed_keys: tuple[str, ...]) -> dict[str, str]:
