@@ -11,17 +11,17 @@ from merry_runtime.ingestion.kvic import build_kvic_investor_profiles, parse_kvi
 
 INVESTOR_DB_TAB = "Investor DB"
 INVESTOR_DB_HEADERS: tuple[str, ...] = (
-    "manager_name",
-    "active_fund_count",
-    "total_fund_count",
-    "active_amount_eok",
-    "active_commitment_eok",
-    "fund_fields",
-    "representative_funds",
-    "profile_tags",
-    "next_expiry_at",
-    "latest_expiry_at",
-    "collected_at",
+    "투자사",
+    "활성 펀드 수",
+    "전체 펀드 수",
+    "활성 운용액(억원)",
+    "활성 약정액(억원)",
+    "출자 분야",
+    "대표 펀드",
+    "프로필 태그",
+    "다음 만기일",
+    "최종 만기일",
+    "수집시각",
 )
 _STATE_KEY = "fund_snapshot"
 
@@ -99,17 +99,17 @@ def _sheet_rows(profiles: list[dict[str, object]]) -> list[dict[str, object]]:
     for profile in profiles:
         rows.append(
             {
-                "manager_name": profile["manager_name"],
-                "active_fund_count": profile["active_fund_count"],
-                "total_fund_count": profile["total_fund_count"],
-                "active_amount_eok": profile["active_amount_eok"],
-                "active_commitment_eok": profile["active_commitment_eok"],
-                "fund_fields": _join(profile.get("fund_fields")),
-                "representative_funds": _join(profile.get("representative_funds")),
-                "profile_tags": _join(profile.get("profile_tags")),
-                "next_expiry_at": profile.get("next_expiry_at", ""),
-                "latest_expiry_at": profile.get("latest_expiry_at", ""),
-                "collected_at": profile["collected_at"],
+                "투자사": profile["manager_name"],
+                "활성 펀드 수": profile["active_fund_count"],
+                "전체 펀드 수": profile["total_fund_count"],
+                "활성 운용액(억원)": profile["active_amount_eok"],
+                "활성 약정액(억원)": profile["active_commitment_eok"],
+                "출자 분야": _join(profile.get("fund_fields")),
+                "대표 펀드": _join(profile.get("representative_funds")),
+                "프로필 태그": _join(profile.get("profile_tags")),
+                "다음 만기일": profile.get("next_expiry_at", ""),
+                "최종 만기일": profile.get("latest_expiry_at", ""),
+                "수집시각": profile["collected_at"],
             }
         )
     return rows

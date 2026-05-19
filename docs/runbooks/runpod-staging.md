@@ -241,6 +241,30 @@ stale tail rows only after the new snapshot has been written.
 counts, representative fund names, active amount/commitment, fund fields, and
 profile tags without opening SQLite.
 
+`Investor DB` uses Korean sheet headers because it is a human-facing operator
+view:
+
+```text
+투자사
+활성 펀드 수
+전체 펀드 수
+활성 운용액(억원)
+활성 약정액(억원)
+출자 분야
+대표 펀드
+프로필 태그
+다음 만기일
+최종 만기일
+수집시각
+```
+
+Runpod staging should delegate the refresh to Hermes every day:
+
+```text
+AGENT_LOOP_JOBS=sync-kvic-funds,crawl-sources,draft-outreach-emails,enrich-sminfo,backup-export
+KVIC_SYNC_INTERVAL_SECONDS=86400
+```
+
 Seed the `Crawl Sources` tab with at least:
 
 ```text

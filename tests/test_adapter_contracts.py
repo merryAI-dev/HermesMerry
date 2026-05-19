@@ -748,7 +748,7 @@ def test_google_sheet_review_queue_upserts_existing_row_by_key() -> None:
 
     assert count == 1
     assert service.values_obj.append_body is None
-    assert service.values_obj.update_kwargs["range"] == "'Candidate Detail'!A2:AF2"
+    assert service.values_obj.update_kwargs["range"] == "'Candidate Detail'!A2:AM2"
     assert service.values_obj.update_body["values"][0][3] == "New Founder"  # type: ignore[index]
     assert service.values_obj.update_body["values"][0][5] == "founder@merry.ai"  # type: ignore[index]
     assert service.values_obj.update_body["values"][0][8] == "공개 카드 -> Merry AI"  # type: ignore[index]
@@ -794,6 +794,7 @@ def test_google_sheet_review_queue_rewrites_below_korean_display_label_row() -> 
     labels[headers.index("representative")] = "대표자"
     labels[headers.index("sminfo_status")] = "error"
     labels[headers.index("sminfo_profile_url")] = "https://sminfo.mss.go.kr/gc/sf/GSF002R0.print"
+    labels[headers.index("kvic_active_fund_count")] = "old kvic"
     existing_row = [
         "2026-05-18T00:00:00+00:00",
         "에이아이오",
@@ -822,11 +823,12 @@ def test_google_sheet_review_queue_rewrites_below_korean_display_label_row() -> 
         key_fields=("company", "homepage"),
     )
 
-    assert service.values_obj.update_kwargs["range"] == "'Candidate Detail'!A1:AF3"
+    assert service.values_obj.update_kwargs["range"] == "'Candidate Detail'!A1:AM3"
     rewritten = service.values_obj.update_body["values"]  # type: ignore[index]
     assert rewritten[1][headers.index("company")] == "기업명"
     assert rewritten[1][headers.index("sminfo_status")] == "중기현황 상태"
     assert rewritten[1][headers.index("sminfo_profile_url")] == "중기현황 URL"
+    assert rewritten[1][headers.index("kvic_active_fund_count")] == "KVIC 활성 펀드 수"
     assert rewritten[2][headers.index("company")] == "에이아이오"
     assert rewritten[2][headers.index("sminfo_company")] == "(주)에이아이오"
 
@@ -904,7 +906,7 @@ def test_google_sheet_review_queue_migrates_candidate_detail_from_entity_id_sche
 
     assert count == 1
     rewritten = service.values_obj.update_body["values"]  # type: ignore[index]
-    assert service.values_obj.update_kwargs["range"] == "'Candidate Detail'!A1:AF2"
+    assert service.values_obj.update_kwargs["range"] == "'Candidate Detail'!A1:AM2"
     assert rewritten[0][0] == "collected_at"
     assert "entity_id" not in rewritten[0]
     assert rewritten[1][0] == "2026-05-19T00:00:00+00:00"
@@ -998,8 +1000,8 @@ def test_google_sheet_review_queue_rewrites_legacy_candidate_detail_projection_r
 
     assert count == 1
     rewritten = service.values_obj.update_body["values"]  # type: ignore[index]
-    assert service.values_obj.update_kwargs["range"] == "'Candidate Detail'!A1:AF2"
-    assert service.values_obj.clear_kwargs["range"] == "'Candidate Detail'!A3:AF3"
+    assert service.values_obj.update_kwargs["range"] == "'Candidate Detail'!A1:AM2"
+    assert service.values_obj.clear_kwargs["range"] == "'Candidate Detail'!A3:AM3"
     assert len(rewritten) == 2
     assert rewritten[1][1] == "Merry AI"
     assert rewritten[1][8] == "공개 카드 -> Merry AI"
@@ -1286,8 +1288,8 @@ def test_google_sheet_review_queue_compacts_candidate_detail_by_company_or_homep
     assert count == 1
     assert service.values_obj.calls[-2][0] == "update"
     assert service.values_obj.calls[-1][0] == "clear"
-    assert service.values_obj.update_kwargs["range"] == "'Candidate Detail'!A1:AF2"
-    assert service.values_obj.clear_kwargs["range"] == "'Candidate Detail'!A3:AF4"
+    assert service.values_obj.update_kwargs["range"] == "'Candidate Detail'!A1:AM2"
+    assert service.values_obj.clear_kwargs["range"] == "'Candidate Detail'!A3:AM4"
     rewritten = service.values_obj.update_body["values"]  # type: ignore[index]
     assert len(rewritten) == 2
     assert rewritten[1][1] == "Merry AI"
@@ -1477,6 +1479,13 @@ def test_google_sheet_review_queue_supports_operator_console_tabs() -> None:
             "sminfo_error_message",
             "sminfo_profile_url",
             "sminfo_collected_at",
+            "kvic_matched_investors",
+            "kvic_active_fund_count",
+            "kvic_active_amount_eok",
+            "kvic_fund_fields",
+            "kvic_representative_funds",
+            "kvic_profile_tags",
+            "kvic_next_expiry_at",
         ),
         "Evidence": (
             "source_id",

@@ -81,17 +81,17 @@ def test_sync_kvic_funds_upserts_funds_profiles_state_and_investor_sheet(tmp_pat
     assert review_queue.replaced_headers["Investor DB"] == INVESTOR_DB_HEADERS
     assert review_queue.published["Investor DB"] == [
         {
-            "manager_name": "디쓰리쥬빌리파트너스",
-            "active_fund_count": 2,
-            "total_fund_count": 2,
-            "active_amount_eok": 435.0,
-            "active_commitment_eok": 270.0,
-            "fund_fields": "미래환경산업, 소셜임팩트",
-            "representative_funds": "디쓰리 미래환경 ECO 벤처투자조합, D3 임팩트 벤처투자조합 제1호",
-            "profile_tags": "climate_environment, impact",
-            "next_expiry_at": "2026-08-16",
-            "latest_expiry_at": "2029-08-25",
-            "collected_at": "2026-05-19T16:00:00+09:00",
+            "투자사": "디쓰리쥬빌리파트너스",
+            "활성 펀드 수": 2,
+            "전체 펀드 수": 2,
+            "활성 운용액(억원)": 435.0,
+            "활성 약정액(억원)": 270.0,
+            "출자 분야": "미래환경산업, 소셜임팩트",
+            "대표 펀드": "디쓰리 미래환경 ECO 벤처투자조합, D3 임팩트 벤처투자조합 제1호",
+            "프로필 태그": "climate_environment, impact",
+            "다음 만기일": "2026-08-16",
+            "최종 만기일": "2029-08-25",
+            "수집시각": "2026-05-19T16:00:00+09:00",
         }
     ]
 
