@@ -147,6 +147,13 @@ def _publish_sheet_projection(*, review_queue: ReviewQueue, sources: list[dict[s
         rows=[_evidence_row(parsed) for parsed in parsed_sources],
         key_fields=("source_id", "url"),
     )
+    portfolio_news_sources = [parsed for parsed in parsed_sources if parsed.raw_source.channel == PLATUM_INVESTMENT_CHANNEL]
+    if portfolio_news_sources:
+        review_queue.upsert_cards(
+            sheet_tab="Portfolio News",
+            rows=[_portfolio_news_row(parsed, collected_at=collected_at) for parsed in portfolio_news_sources],
+            key_fields=("url", "company"),
+        )
     candidate_detail_sources = [parsed for parsed in parsed_sources if parsed.raw_source.channel == THEVC_INVESTMENT_CHANNEL]
     if not candidate_detail_sources:
         return
@@ -181,6 +188,23 @@ def _evidence_row(parsed: ParsedSource) -> dict[str, object]:
         "tags": ", ".join(signal.tags),
         "contains_pii": parsed.raw_source.contains_pii,
         "raw_text_path": parsed.raw_source.raw_text_path,
+    }
+
+
+def _portfolio_news_row(parsed: ParsedSource, *, collected_at: str) -> dict[str, object]:
+    fields = _payload_fields(parsed.raw_text)
+    return {
+        "collected_at": collected_at,
+        "company": parsed.entity.name,
+        "title": parsed.raw_source.title,
+        "summary": fields.get("summary", ""),
+        "url": parsed.raw_source.uri,
+        "published_at": parsed.raw_source.published_at or "",
+        "source": "Platum",
+        "channel": parsed.raw_source.channel,
+        "matched_companies": fields.get("matched companies", parsed.entity.name),
+        "notified_at": "",
+        "status": "new",
     }
 
 

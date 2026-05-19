@@ -156,6 +156,18 @@ def test_crawl_sources_sends_slack_for_new_platum_portfolio_news_only(tmp_path) 
     assert structured_store.tables["mother_entities"][0]["name"] == "비저너리"
     assert structured_store.tables["signals"][0]["signal_type"] == "portfolio_news"
     assert len(review_queue.published["Evidence"]) == 1
+    assert len(review_queue.published["Portfolio News"]) == 1
+    portfolio_news = review_queue.published["Portfolio News"][0]
+    assert portfolio_news["company"] == "비저너리"
+    assert portfolio_news["title"] == "비저너리, 카이스트청년창업투자지주로부터 시드 투자 유치"
+    assert portfolio_news["summary"] == "공간 지능 데이터 소프트웨어 스타트업 비저너리가 총 8억 원 규모의 시드 투자를 유치했다."
+    assert portfolio_news["url"] == "https://platum.kr/archives/286764"
+    assert portfolio_news["published_at"] == "2026-05-13T12:39:15+09:00"
+    assert portfolio_news["source"] == "Platum"
+    assert portfolio_news["channel"] == "platum_investment_news"
+    assert portfolio_news["matched_companies"] == "비저너리"
+    assert portfolio_news["notified_at"] == ""
+    assert portfolio_news["status"] == "new"
     assert len(notifier.messages) == 1
     assert notifier.messages[0]["channel"] == "C123"
     assert "비저너리" in notifier.messages[0]["text"]
