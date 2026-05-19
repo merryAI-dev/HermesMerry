@@ -1,3 +1,6 @@
+import hashlib
+import hmac
+import json
 import logging
 
 import pytest
@@ -11,6 +14,7 @@ from email.parser import BytesParser
 
 from merry_runtime.adapters.gmail import GmailLabelSource
 from merry_runtime.adapters.gmail import GmailDraftClient
+from merry_runtime.adapters.apps_script import AppsScriptDraftClient
 from merry_runtime.adapters.google_sheets import GoogleSheetReviewQueue, OPERATOR_CONSOLE_HEADERS
 from merry_runtime.adapters.slack import SlackNotifier
 
@@ -1736,6 +1740,63 @@ def test_gmail_draft_client_creates_rfc822_draft_without_sending() -> None:
     assert message["From"] == "Merry"
     assert message["Subject"] == "에이아이오 관련하여 인사드립니다"
     assert message.get_content() == "안녕하세요.\nMYSC Merry 리서치팀입니다.\n"
+
+
+class FakeUrlopenResponse:
+    def __init__(self, payload: dict[str, object]) -> None:
+        self.payload = payload
+
+    def read(self) -> bytes:
+        return json.dumps(self.payload).encode("utf-8")
+
+
+class CapturingUrlopen:
+    def __init__(self) -> None:
+        self.request = None
+        self.timeout = None
+
+    def __call__(self, request, *, timeout: float):
+        self.request = request
+        self.timeout = timeout
+        return FakeUrlopenResponse({"ok": True, "draft_id": "apps_script_draft_1"})
+
+
+def test_apps_script_draft_client_posts_signed_draft_request_without_exposing_secret() -> None:
+    urlopen = CapturingUrlopen()
+    client = AppsScriptDraftClient(
+        webhook_url="https://script.google.com/macros/s/deployment/exec",
+        secret="shared-secret",
+        timeout_seconds=7.5,
+        clock=lambda: 1_770_000_000,
+        nonce_factory=lambda: "nonce-1",
+        urlopen=urlopen,
+    )
+
+    draft_id = client.create_draft(
+        to="hello@the-aio.com",
+        subject="에이아이오 관련하여 인사드립니다",
+        body_text="안녕하세요.\nMYSC Merry 리서치팀입니다.",
+    )
+
+    request_payload = json.loads(urlopen.request.data.decode("utf-8"))
+    body_sha256 = hashlib.sha256("안녕하세요.\nMYSC Merry 리서치팀입니다.".encode("utf-8")).hexdigest()
+    expected_signature = hmac.new(
+        b"shared-secret",
+        f"1770000000\nnonce-1\nhello@the-aio.com\n에이아이오 관련하여 인사드립니다\n{body_sha256}".encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+    assert draft_id == "apps_script_draft_1"
+    assert urlopen.timeout == 7.5
+    assert urlopen.request.full_url == "https://script.google.com/macros/s/deployment/exec"
+    assert dict(urlopen.request.header_items())["Content-type"] == "application/json"
+    assert request_payload["timestamp"] == "1770000000"
+    assert request_payload["nonce"] == "nonce-1"
+    assert request_payload["to"] == "hello@the-aio.com"
+    assert request_payload["subject"] == "에이아이오 관련하여 인사드립니다"
+    assert request_payload["body_text"] == "안녕하세요.\nMYSC Merry 리서치팀입니다."
+    assert request_payload["body_sha256"] == body_sha256
+    assert request_payload["signature"] == expected_signature
+    assert "shared-secret" not in urlopen.request.data.decode("utf-8")
 
 
 class FakeSlackClient:

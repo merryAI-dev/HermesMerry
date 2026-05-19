@@ -18,6 +18,7 @@ def test_runpod_runbook_contains_required_stop_conditions() -> None:
 
     for required in (
         "GOOGLE_APPLICATION_CREDENTIALS_JSON",
+        "APPS_SCRIPT_DRAFT_SECRET",
         "/home/hermes/hermes/wiki",
         "/home/hermes/hermes/mother.db",
         "backup-export",
@@ -60,7 +61,9 @@ def test_runpod_sqlite_mode_is_documented_as_primary_runtime() -> None:
     assert "MOTHER_DB_PATH=/home/hermes/hermes/mother.db" in env_example
     assert "BACKUP_ROOT=/home/hermes/hermes/backups" in env_example
     assert "HERMES_AGENT_ID=runpod-hermes-staging" in env_example
-    assert "AGENT_LOOP_JOBS=crawl-sources,enrich-sminfo,backup-export" in env_example
+    assert "APPS_SCRIPT_DRAFT_WEBHOOK_URL=" in env_example
+    assert "APPS_SCRIPT_DRAFT_SECRET=" in env_example
+    assert "AGENT_LOOP_JOBS=crawl-sources,draft-outreach-emails,enrich-sminfo,backup-export" in env_example
     assert "AGENT_LOOP_MAX_CYCLES=0" in env_example
     assert "BigQuery is optional" in runbook
     assert "STRUCTURED_STORE_BACKEND=bigquery" in runbook

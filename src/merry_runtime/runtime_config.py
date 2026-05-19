@@ -27,6 +27,9 @@ class RuntimeConfig:
     gmail_label_id: str = ""
     gmail_user_id: str = "me"
     gmail_from_name: str = "Merry"
+    apps_script_draft_webhook_url: str = ""
+    apps_script_draft_secret: str = ""
+    apps_script_draft_timeout_seconds: int = 10
     crawl_sheet_tab: str = "Crawl Sources"
     crawl_targets_json: str = ""
     default_ac_id: str = ""
@@ -66,6 +69,12 @@ class RuntimeConfig:
             gmail_label_id=os.getenv("GMAIL_LABEL_ID", ""),
             gmail_user_id=os.getenv("GMAIL_USER_ID", "me"),
             gmail_from_name=os.getenv("GMAIL_FROM_NAME", "Merry"),
+            apps_script_draft_webhook_url=os.getenv("APPS_SCRIPT_DRAFT_WEBHOOK_URL", ""),
+            apps_script_draft_secret=os.getenv("APPS_SCRIPT_DRAFT_SECRET", ""),
+            apps_script_draft_timeout_seconds=max(
+                1,
+                _parse_int(os.getenv("APPS_SCRIPT_DRAFT_TIMEOUT_SECONDS", ""), default=10),
+            ),
             crawl_sheet_tab=os.getenv("CRAWL_SHEET_TAB", "Crawl Sources"),
             crawl_targets_json=os.getenv("CRAWL_TARGETS_JSON", ""),
             default_ac_id=os.getenv("AC_ID", ""),
@@ -135,6 +144,10 @@ class RuntimeConfig:
             required.extend(["REVIEW_SHEET_ID", "SMINFO_USER_ID", "SMINFO_PASSWORD"])
         elif job_name == "draft-outreach-emails":
             required.append("REVIEW_SHEET_ID")
+            if self.apps_script_draft_webhook_url:
+                required.append("APPS_SCRIPT_DRAFT_SECRET")
+            if self.apps_script_draft_secret:
+                required.append("APPS_SCRIPT_DRAFT_WEBHOOK_URL")
         elif job_name == "resolve-entities":
             pass
         else:
@@ -186,6 +199,9 @@ class RuntimeConfig:
             "GMAIL_LABEL_ID": self.gmail_label_id,
             "GMAIL_USER_ID": self.gmail_user_id,
             "GMAIL_FROM_NAME": self.gmail_from_name,
+            "APPS_SCRIPT_DRAFT_WEBHOOK_URL": self.apps_script_draft_webhook_url,
+            "APPS_SCRIPT_DRAFT_SECRET": self.apps_script_draft_secret,
+            "APPS_SCRIPT_DRAFT_TIMEOUT_SECONDS": str(self.apps_script_draft_timeout_seconds),
             "CRAWL_SHEET_TAB": self.crawl_sheet_tab,
             "AC_ID": self.default_ac_id,
             "RAW_ROOT": str(self.raw_root),

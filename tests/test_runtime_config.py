@@ -12,6 +12,9 @@ def test_runtime_config_reads_required_environment(monkeypatch) -> None:
     monkeypatch.setenv("GMAIL_LABEL_ID", "Label_123")
     monkeypatch.setenv("GMAIL_USER_ID", "operator@mysc.co.kr")
     monkeypatch.setenv("GMAIL_FROM_NAME", "Merry")
+    monkeypatch.setenv("APPS_SCRIPT_DRAFT_WEBHOOK_URL", "https://script.google.com/macros/s/deployment/exec")
+    monkeypatch.setenv("APPS_SCRIPT_DRAFT_SECRET", "shared-secret")
+    monkeypatch.setenv("APPS_SCRIPT_DRAFT_TIMEOUT_SECONDS", "9")
     monkeypatch.setenv("AC_ID", "ac_climate")
     monkeypatch.setenv("WIKI_ROOT", "/tmp/wiki")
     monkeypatch.setenv("SMINFO_USER_ID", "sminfo-user")
@@ -31,6 +34,9 @@ def test_runtime_config_reads_required_environment(monkeypatch) -> None:
     assert config.gmail_label_id == "Label_123"
     assert config.gmail_user_id == "operator@mysc.co.kr"
     assert config.gmail_from_name == "Merry"
+    assert config.apps_script_draft_webhook_url == "https://script.google.com/macros/s/deployment/exec"
+    assert config.apps_script_draft_secret == "shared-secret"
+    assert config.apps_script_draft_timeout_seconds == 9
     assert config.default_ac_id == "ac_climate"
     assert str(config.wiki_root) == "/tmp/wiki"
     assert config.object_store_backend == "gcs"
@@ -148,6 +154,20 @@ def test_runtime_config_requires_review_sheet_for_draft_outreach_emails(monkeypa
         config.validate_for_job("draft-outreach-emails")
 
     assert "REVIEW_SHEET_ID" in str(error.value)
+
+
+def test_runtime_config_requires_apps_script_secret_when_gateway_url_is_configured(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("STRUCTURED_STORE_BACKEND", "sqlite")
+    monkeypatch.setenv("MOTHER_DB_PATH", str(tmp_path / "mother.db"))
+    monkeypatch.setenv("REVIEW_SHEET_ID", "sheet-1")
+    monkeypatch.setenv("APPS_SCRIPT_DRAFT_WEBHOOK_URL", "https://script.google.com/macros/s/deployment/exec")
+
+    config = RuntimeConfig.from_env()
+
+    with pytest.raises(RuntimeConfigError) as error:
+        config.validate_for_job("draft-outreach-emails")
+
+    assert "APPS_SCRIPT_DRAFT_SECRET" in str(error.value)
 
 
 def test_runtime_config_bounds_sminfo_batch_limit_to_site_safe_range(monkeypatch) -> None:

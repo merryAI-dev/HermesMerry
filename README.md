@@ -73,6 +73,9 @@ AC_ID=ac_climate
 GMAIL_LABEL_ID=Label_123
 GMAIL_USER_ID=operator@mysc.co.kr
 GMAIL_FROM_NAME=Merry
+APPS_SCRIPT_DRAFT_WEBHOOK_URL=https://script.google.com/macros/s/deployment-id/exec
+APPS_SCRIPT_DRAFT_SECRET=runpod-secret-hermes-draft-gateway
+APPS_SCRIPT_DRAFT_TIMEOUT_SECONDS=10
 SLACK_CHANNEL=C123
 SLACK_BOT_TOKEN=xoxb-...
 WIKI_ROOT=/home/hermes/hermes/wiki
@@ -111,9 +114,17 @@ Without source flags, `ingest-sources` reads Gmail messages from
 
 `draft-outreach-emails` reads `Candidate Detail.contact_email`, creates Gmail
 drafts only, and records the draft state in SQLite plus the `Outreach Drafts`
-Sheet tab. It does not send email. `GMAIL_USER_ID` selects the Gmail mailbox
-used by the API; the default is `me`, which means the authenticated Google
-credentials account. Local ADC must include `https://www.googleapis.com/auth/gmail.compose`.
+Sheet tab. It does not send email. If `APPS_SCRIPT_DRAFT_WEBHOOK_URL` and
+`APPS_SCRIPT_DRAFT_SECRET` are set, Hermes creates drafts through the Apps
+Script gateway in `apps_script/gmail_draft_gateway/`. Otherwise it falls back
+to the direct Gmail API client. `GMAIL_USER_ID` only applies to that direct
+fallback path.
+
+To set up the Apps Script gateway, create a Google Apps Script project, copy
+`apps_script/gmail_draft_gateway/Code.gs` and `appsscript.json`, set script
+properties `HERMES_DRAFT_SECRET`, `HERMES_DRAFT_FROM_NAME`, and optionally
+`HERMES_DRAFT_MAX_PER_DAY`, then deploy as a web app that executes as the owner.
+Store the deployment URL and shared secret in Runpod secrets.
 
 ## Runtime Layout
 

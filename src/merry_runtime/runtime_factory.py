@@ -8,6 +8,7 @@ from types import ModuleType
 
 from merry_runtime.adapters.bigquery import BigQueryStructuredStore
 from merry_runtime.adapters.gcs import GCSObjectStore
+from merry_runtime.adapters.apps_script import AppsScriptDraftClient
 from merry_runtime.adapters.gmail import GmailDraftClient, GmailLabelSource
 from merry_runtime.adapters.google_sheets import GoogleSheetReviewQueue
 from merry_runtime.adapters.local_files import LocalFileObjectStore
@@ -31,9 +32,10 @@ def build_runtime(
     )
 
     sheets_service = discovery_module.build("sheets", "v4") if discovery_module and config.review_sheet_id else None
+    needs_direct_gmail_draft_client = config.review_sheet_id and not config.apps_script_draft_webhook_url
     gmail_service = (
         discovery_module.build("gmail", "v1")
-        if discovery_module and (config.review_sheet_id or config.gmail_label_id)
+        if discovery_module and (config.gmail_label_id or needs_direct_gmail_draft_client)
         else None
     )
 
@@ -61,11 +63,7 @@ def build_runtime(
             if gmail_service and config.gmail_label_id
             else None
         ),
-        email_draft_client=(
-            GmailDraftClient(service=gmail_service, user_id=config.gmail_user_id, from_name=config.gmail_from_name)
-            if gmail_service
-            else None
-        ),
+        email_draft_client=_build_email_draft_client(config=config, gmail_service=gmail_service),
         sminfo_client=(
             SminfoPlaywrightClient(
                 user_id=config.sminfo_user_id,
@@ -122,3 +120,15 @@ def _build_structured_store(
         dataset_id=config.dataset_id,
         write_mode=config.bigquery_write_mode,
     )
+
+
+def _build_email_draft_client(*, config: RuntimeConfig, gmail_service: object | None) -> AppsScriptDraftClient | GmailDraftClient | None:
+    if config.apps_script_draft_webhook_url and config.apps_script_draft_secret:
+        return AppsScriptDraftClient(
+            webhook_url=config.apps_script_draft_webhook_url,
+            secret=config.apps_script_draft_secret,
+            timeout_seconds=config.apps_script_draft_timeout_seconds,
+        )
+    if gmail_service:
+        return GmailDraftClient(service=gmail_service, user_id=config.gmail_user_id, from_name=config.gmail_from_name)
+    return None

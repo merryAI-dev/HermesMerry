@@ -1,5 +1,6 @@
 from merry_runtime.adapters.bigquery import BigQueryStructuredStore
 from merry_runtime.adapters.gcs import GCSObjectStore
+from merry_runtime.adapters.apps_script import AppsScriptDraftClient
 from merry_runtime.adapters.gmail import GmailDraftClient, GmailLabelSource
 from merry_runtime.adapters.google_sheets import GoogleSheetReviewQueue
 from merry_runtime.adapters.local_files import LocalFileObjectStore
@@ -103,6 +104,45 @@ def test_runtime_factory_builds_gmail_draft_client_for_sheet_runtime(monkeypatch
     assert isinstance(runtime.email_draft_client, GmailDraftClient)
     assert runtime.gmail_source is None
     assert built_services == [("sheets", "v4"), ("gmail", "v1")]
+
+
+def test_runtime_factory_prefers_apps_script_draft_client_without_gmail_service(monkeypatch, tmp_path) -> None:
+    built_services = []
+
+    def fake_build(service_name: str, version: str):
+        built_services.append((service_name, version))
+        return {"service": service_name, "version": version}
+
+    def fake_import(name: str):
+        modules = {
+            "googleapiclient.discovery": type("Discovery", (), {"build": staticmethod(fake_build)}),
+        }
+        return modules[name]
+
+    monkeypatch.delenv("SLACK_BOT_TOKEN", raising=False)
+    config = RuntimeConfig(
+        project_id="",
+        dataset_id="",
+        raw_bucket="",
+        review_sheet_id="sheet-1",
+        wiki_root=tmp_path / "wiki",
+        object_store_backend="local",
+        raw_root=tmp_path / "raw",
+        structured_store_backend="sqlite",
+        mother_db_path=tmp_path / "mother.db",
+        apps_script_draft_webhook_url="https://script.google.com/macros/s/deployment/exec",
+        apps_script_draft_secret="shared-secret",
+        apps_script_draft_timeout_seconds=9,
+    )
+
+    runtime = build_runtime(config, import_module=fake_import)
+
+    assert isinstance(runtime.email_draft_client, AppsScriptDraftClient)
+    assert runtime.email_draft_client.webhook_url == "https://script.google.com/macros/s/deployment/exec"
+    assert runtime.email_draft_client.secret == "shared-secret"
+    assert runtime.email_draft_client.timeout_seconds == 9
+    assert runtime.gmail_source is None
+    assert built_services == [("sheets", "v4")]
 
 
 def test_runtime_factory_uses_configured_gmail_mailbox_and_from_name(monkeypatch, tmp_path) -> None:

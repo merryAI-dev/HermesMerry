@@ -35,6 +35,8 @@ Cloud Run is optional and belongs to `docs/runbooks/staging-canary.md`.
 - `REVIEW_SHEET_ID`
 - `AC_ID`
 - `GMAIL_LABEL_ID`
+- `APPS_SCRIPT_DRAFT_WEBHOOK_URL`
+- `APPS_SCRIPT_DRAFT_SECRET`
 - `SLACK_CHANNEL`
 - `SLACK_BOT_TOKEN`
 - `GOOGLE_APPLICATION_CREDENTIALS_JSON`
@@ -42,7 +44,7 @@ Cloud Run is optional and belongs to `docs/runbooks/staging-canary.md`.
 - `HERMES_AGENT_ID=runpod-hermes-staging`
 - `CRAWL_SHEET_TAB=Crawl Sources`
 - `CRAWL_TARGETS_JSON=[{"url":"https://thevc.kr/","source_kind":"thevc_investment_ma","max_cards":20}]`
-- `AGENT_LOOP_JOBS=crawl-sources,enrich-sminfo,backup-export`
+- `AGENT_LOOP_JOBS=crawl-sources,draft-outreach-emails,enrich-sminfo,backup-export`
 - `AGENT_LOOP_INTERVAL_SECONDS=3600`
 - `AGENT_LOOP_MAX_CYCLES=0` for the always-on SQLite loop that repeats every 1 hour
 
@@ -134,15 +136,23 @@ BACKUP_ROOT: /home/hermes/hermes/backups
 HERMES_AGENT_ID: runpod-hermes-staging
 CRAWL_SHEET_TAB: Crawl Sources
 CRAWL_TARGETS_JSON: [{"url":"https://thevc.kr/","source_kind":"thevc_investment_ma","max_cards":20}]
-AGENT_LOOP_JOBS: crawl-sources,enrich-sminfo,backup-export
+AGENT_LOOP_JOBS: crawl-sources,draft-outreach-emails,enrich-sminfo,backup-export
 AGENT_LOOP_INTERVAL_SECONDS: 3600
 AGENT_LOOP_MAX_CYCLES: 0
 ```
 
+For outreach drafts, prefer the Apps Script gateway:
+
+```text
+APPS_SCRIPT_DRAFT_WEBHOOK_URL: https://script.google.com/macros/s/deployment-id/exec
+APPS_SCRIPT_DRAFT_SECRET: Runpod secret matching HERMES_DRAFT_SECRET in Apps Script
+APPS_SCRIPT_DRAFT_TIMEOUT_SECONDS: 10
+```
+
 Store sensitive values as Runpod secrets. `GOOGLE_APPLICATION_CREDENTIALS_JSON`
-must be a Runpod secret, not a committed file. For the private image, configure
-Runpod Container Registry Auth with the Docker Hub user `boram1220` and a Docker
-Hub access token.
+and `APPS_SCRIPT_DRAFT_SECRET` must be Runpod secrets, not committed files. For
+the private image, configure Runpod Container Registry Auth with the Docker Hub
+user `boram1220` and a Docker Hub access token.
 
 The prepared one-cycle template is:
 
