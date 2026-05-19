@@ -11,12 +11,13 @@ from merry_runtime.adapters.gcs import GCSObjectStore
 from merry_runtime.adapters.apps_script import AppsScriptDraftClient
 from merry_runtime.adapters.gmail import GmailDraftClient, GmailLabelSource
 from merry_runtime.adapters.google_sheets import GoogleSheetReviewQueue
+from merry_runtime.adapters.anthropic import AnthropicMessagesClient
 from merry_runtime.adapters.kvic import KVICClient
 from merry_runtime.adapters.local_files import LocalFileObjectStore
 from merry_runtime.adapters.sminfo_playwright import SminfoPlaywrightClient
 from merry_runtime.adapters.slack import SlackNotifier
 from merry_runtime.adapters.sqlite_store import SQLiteStructuredStore
-from merry_runtime.adapters.web_search import DuckDuckGoSearchClient
+from merry_runtime.adapters.web_search import PublicWebSearchClient
 from merry_runtime.job_runner import RuntimeAdapters
 from merry_runtime.runtime_config import RuntimeConfig, RuntimeConfigError
 from merry_runtime.wiki_store import SQLiteWikiStore
@@ -80,7 +81,16 @@ def build_runtime(
             if config.kvic_api_key
             else None
         ),
-        web_search_client=DuckDuckGoSearchClient(timeout_seconds=config.kvic_request_timeout_seconds),
+        web_search_client=PublicWebSearchClient(timeout_seconds=config.kvic_request_timeout_seconds),
+        llm_client=(
+            AnthropicMessagesClient(
+                api_key=config.anthropic_api_key,
+                model=config.hermes_llm_model,
+                timeout_seconds=config.hermes_llm_timeout_seconds,
+            )
+            if config.anthropic_api_key
+            else None
+        ),
     )
 
 

@@ -15,6 +15,7 @@ from merry_runtime.pipelines.draft_outreach_emails import draft_outreach_emails
 from merry_runtime.pipelines.enrich_sminfo import enrich_sminfo_candidates
 from merry_runtime.pipelines.ingest_ac_profiles import ingest_ac_profiles
 from merry_runtime.pipelines.ingest_sources import ingest_sources
+from merry_runtime.pipelines.research_investors import research_investors
 from merry_runtime.pipelines.resolve_entities import resolve_entities
 from merry_runtime.pipelines.score_candidates import score_candidates
 from merry_runtime.pipelines.sync_kvic_funds import sync_kvic_funds
@@ -40,6 +41,7 @@ class RuntimeAdapters:
     email_draft_client: Any | None = None
     kvic_client: Any | None = None
     web_search_client: Any | None = None
+    llm_client: Any | None = None
 
 
 def run_job(
@@ -162,6 +164,22 @@ def run_job(
             fund_description_batch_limit=config.kvic_fund_description_batch_limit,
             fund_description_stale_days=config.kvic_fund_description_stale_days,
             fund_search_max_results=config.kvic_fund_search_max_results,
+        )
+        return {"job_name": job_name, **asdict(result)}
+
+    if job_name == "research-investors":
+        if runtime.web_search_client is None:
+            raise JobRunError("research-investors requires a configured web search client")
+        if runtime.llm_client is None:
+            raise JobRunError("research-investors requires a configured LLM client")
+        result = research_investors(
+            structured_store=runtime.structured_store,
+            review_queue=runtime.review_queue if config.review_sheet_id else None,
+            search_client=runtime.web_search_client,
+            llm_client=runtime.llm_client,
+            batch_limit=config.investor_research_batch_limit,
+            stale_days=config.investor_research_stale_days,
+            search_max_results=config.investor_research_search_max_results,
         )
         return {"job_name": job_name, **asdict(result)}
 

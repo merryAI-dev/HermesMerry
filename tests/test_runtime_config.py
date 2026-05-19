@@ -28,6 +28,12 @@ def test_runtime_config_reads_required_environment(monkeypatch) -> None:
     monkeypatch.setenv("KVIC_FUND_DESCRIPTION_BATCH_LIMIT", "25")
     monkeypatch.setenv("KVIC_FUND_DESCRIPTION_STALE_DAYS", "45")
     monkeypatch.setenv("KVIC_FUND_SEARCH_MAX_RESULTS", "7")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "anthropic-key")
+    monkeypatch.setenv("HERMES_LLM_MODEL", "claude-sonnet-4-6")
+    monkeypatch.setenv("HERMES_LLM_TIMEOUT_SECONDS", "31")
+    monkeypatch.setenv("INVESTOR_RESEARCH_BATCH_LIMIT", "12")
+    monkeypatch.setenv("INVESTOR_RESEARCH_STALE_DAYS", "9")
+    monkeypatch.setenv("INVESTOR_RESEARCH_SEARCH_MAX_RESULTS", "8")
 
     config = RuntimeConfig.from_env()
 
@@ -60,6 +66,12 @@ def test_runtime_config_reads_required_environment(monkeypatch) -> None:
     assert config.kvic_fund_description_batch_limit == 25
     assert config.kvic_fund_description_stale_days == 45
     assert config.kvic_fund_search_max_results == 7
+    assert config.anthropic_api_key == "anthropic-key"
+    assert config.hermes_llm_model == "claude-sonnet-4-6"
+    assert config.hermes_llm_timeout_seconds == 31
+    assert config.investor_research_batch_limit == 12
+    assert config.investor_research_stale_days == 9
+    assert config.investor_research_search_max_results == 8
 
 
 def test_runtime_config_requires_job_specific_fields(monkeypatch) -> None:
@@ -214,6 +226,32 @@ def test_runtime_config_bounds_kvic_fund_description_search_controls(monkeypatch
     assert config.kvic_fund_description_batch_limit == 100
     assert config.kvic_fund_description_stale_days == 1
     assert config.kvic_fund_search_max_results == 10
+
+
+def test_runtime_config_requires_anthropic_key_for_investor_research(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("STRUCTURED_STORE_BACKEND", "sqlite")
+    monkeypatch.setenv("MOTHER_DB_PATH", str(tmp_path / "mother.db"))
+
+    config = RuntimeConfig.from_env()
+
+    with pytest.raises(RuntimeConfigError) as error:
+        config.validate_for_job("research-investors")
+
+    assert "ANTHROPIC_API_KEY" in str(error.value)
+
+
+def test_runtime_config_bounds_investor_research_controls(monkeypatch) -> None:
+    monkeypatch.setenv("INVESTOR_RESEARCH_BATCH_LIMIT", "999")
+    monkeypatch.setenv("INVESTOR_RESEARCH_STALE_DAYS", "0")
+    monkeypatch.setenv("INVESTOR_RESEARCH_SEARCH_MAX_RESULTS", "99")
+    monkeypatch.setenv("HERMES_LLM_TIMEOUT_SECONDS", "0")
+
+    config = RuntimeConfig.from_env()
+
+    assert config.investor_research_batch_limit == 50
+    assert config.investor_research_stale_days == 1
+    assert config.investor_research_search_max_results == 10
+    assert config.hermes_llm_timeout_seconds == 1
 
 
 def test_runtime_config_bounds_sminfo_batch_limit_to_site_safe_range(monkeypatch) -> None:

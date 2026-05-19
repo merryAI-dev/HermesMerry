@@ -89,6 +89,20 @@ _TOOLS = {
             },
         },
     ),
+    "research_investors": MCPToolContract(
+        name="research_investors",
+        description="Research bounded investor AUM/profile evidence with public search and an LLM encoder, then update SQLite and Investor DB.",
+        side_effect_scope="public_web_llm_sqlite_sheets",
+        input_schema={
+            "type": "object",
+            "required": [],
+            "additionalProperties": False,
+            "properties": {
+                "max_items": {"type": "integer", "minimum": 1, "maximum": 50},
+                "reason": {"type": "string", "maxLength": 1000},
+            },
+        },
+    ),
     "upsert_entity_signal": MCPToolContract(
         name="upsert_entity_signal",
         description="Create or merge a Mother DB entity and attach evidence-backed signals.",

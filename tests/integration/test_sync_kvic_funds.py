@@ -3,9 +3,9 @@ from typing import Any
 
 from merry_runtime.adapters.fakes import FakeReviewQueue
 from merry_runtime.adapters.sqlite_store import SQLiteStructuredStore
+from merry_runtime.pipelines.research_investors import INVESTOR_RESEARCH_HEADERS
 from merry_runtime.pipelines.sync_kvic_funds import (
     FUND_DB_HEADERS,
-    INVESTOR_DB_HEADERS,
     _needs_description_refresh,
     sync_kvic_funds,
 )
@@ -93,14 +93,22 @@ def test_sync_kvic_funds_upserts_funds_profiles_state_and_investor_sheet(tmp_pat
     assert state["fund_count"] == 2
     assert state["manager_count"] == 1
 
-    assert review_queue.replaced_headers["Investor DB"] == INVESTOR_DB_HEADERS
+    assert review_queue.replaced_headers["Investor DB"] == INVESTOR_RESEARCH_HEADERS
     assert review_queue.published["Investor DB"] == [
         {
             "투자사": "디쓰리쥬빌리파트너스",
-            "활성 펀드 수": 2,
-            "전체 펀드 수": 2,
-            "활성 운용액(억원)": 435.0,
-            "활성 약정액(억원)": 270.0,
+            "KVIC 공개 활성 펀드 수": 2,
+            "KVIC 공개 전체 펀드 수": 2,
+            "KVIC 공개 활성 운용액(억원)": 435.0,
+            "KVIC 공개 활성 약정액(억원)": 270.0,
+            "외부 공개 AUM(억원)": "",
+            "외부 공개 운용 조합 수": "",
+            "외부 공개 누적 투자액(억원)": "",
+            "AUM 설명": "",
+            "AUM 근거 제목": "",
+            "AUM 근거 URL": "",
+            "AUM 신뢰도": "",
+            "AUM 상태": "",
             "출자 분야": "미래환경산업, 소셜임팩트",
             "대표 펀드": "디쓰리 미래환경 ECO 벤처투자조합, D3 임팩트 벤처투자조합 제1호",
             "프로필 태그": "climate_environment, impact",

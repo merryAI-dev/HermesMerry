@@ -23,7 +23,9 @@ def test_runpod_runbook_contains_required_stop_conditions() -> None:
         "/home/hermes/hermes/mother.db",
         "backup-export",
         "sync-kvic-funds",
+        "research-investors",
         "KVIC_SYNC_INTERVAL_SECONDS=86400",
+        "ANTHROPIC_API_KEY",
         "Investor DB",
         "Fund DB",
         "KVIC_FUND_DESCRIPTION_BATCH_LIMIT=50",
@@ -70,12 +72,16 @@ def test_runpod_sqlite_mode_is_documented_as_primary_runtime() -> None:
     assert "APPS_SCRIPT_DRAFT_SECRET=" in env_example
     assert "KVIC_API_KEY=" in env_example
     assert "KVIC_SYNC_INTERVAL_SECONDS=86400" in env_example
-    assert "AGENT_LOOP_JOBS=sync-kvic-funds,crawl-sources,draft-outreach-emails,enrich-sminfo,backup-export" in env_example
+    assert "AGENT_LOOP_JOBS=sync-kvic-funds,research-investors,crawl-sources,draft-outreach-emails,enrich-sminfo,backup-export" in env_example
     assert "KVIC_FUND_DESCRIPTION_BATCH_LIMIT=50" in env_example
     assert "KVIC_FUND_DESCRIPTION_STALE_DAYS=30" in env_example
     assert "KVIC_FUND_SEARCH_MAX_RESULTS=5" in env_example
+    assert "ANTHROPIC_API_KEY=" in env_example
+    assert "HERMES_LLM_MODEL=claude-sonnet-4-6" in env_example
+    assert "INVESTOR_RESEARCH_BATCH_LIMIT=20" in env_example
     assert "AGENT_LOOP_MAX_CYCLES=0" in env_example
     assert "sync-kvic-funds" in runbook
+    assert "research-investors" in runbook
     assert "Investor DB" in runbook
     assert "Fund DB" in runbook
     assert "BigQuery is optional" in runbook

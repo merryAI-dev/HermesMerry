@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from io import BytesIO
 
-from merry_runtime.adapters.web_search import DuckDuckGoSearchClient
+from merry_runtime.adapters.web_search import DuckDuckGoSearchClient, PublicWebSearchClient
 
 
 class FakeResponse(BytesIO):
@@ -49,3 +49,39 @@ def test_duckduckgo_search_client_extracts_result_title_url_and_snippet() -> Non
     ]
     assert urlopen.timeout == 9
     assert "duckduckgo.com/html/" in urlopen.request.full_url
+
+
+def test_public_web_search_client_falls_back_to_bing_when_duckduckgo_has_no_results() -> None:
+    class RoutingUrlopen:
+        def __init__(self) -> None:
+            self.urls: list[str] = []
+
+        def __call__(self, request, *, timeout: int):
+            self.urls.append(request.full_url)
+            if "duckduckgo" in request.full_url:
+                return FakeResponse(b"<html><body>Unfortunately, bots use DuckDuckGo too.</body></html>")
+            return FakeResponse(
+                b"""
+                <html><body><ol id="b_results">
+                  <li class="b_algo">
+                    <h2><a href="https://www.bing.com/ck/a?u=a1aHR0cHM6Ly9leGFtcGxlLmNvbS9teXNjLWF1bQ">MYSC AUM report</a></h2>
+                    <div class="b_caption"><p>MYSC AUM 1,107 eok and 20 funds.</p></div>
+                  </li>
+                </ol></body></html>
+                """
+            )
+
+    urlopen = RoutingUrlopen()
+    client = PublicWebSearchClient(urlopen=urlopen, timeout_seconds=9)
+
+    results = client.search("MYSC AUM", max_results=3)
+
+    assert results == [
+        {
+            "title": "MYSC AUM report",
+            "url": "https://example.com/mysc-aum",
+            "snippet": "MYSC AUM 1,107 eok and 20 funds.",
+        }
+    ]
+    assert any("duckduckgo" in url for url in urlopen.urls)
+    assert any("bing.com/search" in url for url in urlopen.urls)

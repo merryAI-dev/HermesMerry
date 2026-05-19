@@ -8,6 +8,7 @@ def test_mcp_registry_exposes_only_domain_tools() -> None:
         "enrich_sminfo_candidates",
         "draft_outreach_emails",
         "sync_kvic_funds",
+        "research_investors",
         "upsert_entity_signal",
         "enqueue_candidate_card",
         "record_review_feedback",
@@ -56,3 +57,13 @@ def test_sync_kvic_funds_tool_exposes_daily_investor_db_refresh() -> None:
     assert tool.input_schema["required"] == []
     assert tool.input_schema["additionalProperties"] is False
     assert tool.input_schema["properties"]["force"]["type"] == "boolean"
+
+
+def test_research_investors_tool_is_bounded_to_investor_profiles() -> None:
+    tool = TOOL_REGISTRY["research_investors"]
+
+    assert tool.side_effect_scope == "public_web_llm_sqlite_sheets"
+    assert tool.input_schema["required"] == []
+    assert tool.input_schema["additionalProperties"] is False
+    assert tool.input_schema["properties"]["max_items"]["maximum"] == 50
+    assert "url" not in tool.input_schema["properties"]

@@ -39,3 +39,7 @@ class KVICDataClient(Protocol):
 
 class WebSearchClient(Protocol):
     def search(self, query: str, *, max_results: int) -> list[dict[str, str]]: ...
+
+
+class LLMClient(Protocol):
+    def complete_json(self, *, system_prompt: str, user_prompt: str, max_tokens: int) -> dict[str, object]: ...

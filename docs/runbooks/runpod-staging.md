@@ -47,9 +47,14 @@ Cloud Run is optional and belongs to `docs/runbooks/staging-canary.md`.
 - `KVIC_FUND_DESCRIPTION_BATCH_LIMIT=50`
 - `KVIC_FUND_DESCRIPTION_STALE_DAYS=30`
 - `KVIC_FUND_SEARCH_MAX_RESULTS=5`
+- `ANTHROPIC_API_KEY`
+- `HERMES_LLM_MODEL=claude-sonnet-4-6`
+- `INVESTOR_RESEARCH_BATCH_LIMIT=20`
+- `INVESTOR_RESEARCH_STALE_DAYS=7`
+- `INVESTOR_RESEARCH_SEARCH_MAX_RESULTS=5`
 - `CRAWL_SHEET_TAB=Crawl Sources`
 - `CRAWL_TARGETS_JSON=[{"url":"https://thevc.kr/","source_kind":"thevc_investment_ma","max_cards":20}]`
-- `AGENT_LOOP_JOBS=sync-kvic-funds,crawl-sources,draft-outreach-emails,enrich-sminfo,backup-export`
+- `AGENT_LOOP_JOBS=sync-kvic-funds,research-investors,crawl-sources,draft-outreach-emails,enrich-sminfo,backup-export`
 - `AGENT_LOOP_INTERVAL_SECONDS=3600`
 - `AGENT_LOOP_MAX_CYCLES=0` for the always-on SQLite loop that repeats every 1 hour
 
@@ -145,9 +150,15 @@ KVIC_REQUEST_TIMEOUT_SECONDS: 15
 KVIC_FUND_DESCRIPTION_BATCH_LIMIT: 50
 KVIC_FUND_DESCRIPTION_STALE_DAYS: 30
 KVIC_FUND_SEARCH_MAX_RESULTS: 5
+ANTHROPIC_API_KEY: Runpod secret for Claude Messages API
+HERMES_LLM_MODEL: claude-sonnet-4-6
+HERMES_LLM_TIMEOUT_SECONDS: 30
+INVESTOR_RESEARCH_BATCH_LIMIT: 20
+INVESTOR_RESEARCH_STALE_DAYS: 7
+INVESTOR_RESEARCH_SEARCH_MAX_RESULTS: 5
 CRAWL_SHEET_TAB: Crawl Sources
 CRAWL_TARGETS_JSON: [{"url":"https://thevc.kr/","source_kind":"thevc_investment_ma","max_cards":20}]
-AGENT_LOOP_JOBS: sync-kvic-funds,crawl-sources,draft-outreach-emails,enrich-sminfo,backup-export
+AGENT_LOOP_JOBS: sync-kvic-funds,research-investors,crawl-sources,draft-outreach-emails,enrich-sminfo,backup-export
 AGENT_LOOP_INTERVAL_SECONDS: 3600
 AGENT_LOOP_MAX_CYCLES: 0
 ```
@@ -168,9 +179,9 @@ APPS_SCRIPT_DRAFT_TIMEOUT_SECONDS: 10
 ```
 
 Store sensitive values as Runpod secrets. `GOOGLE_APPLICATION_CREDENTIALS_JSON`
-and `APPS_SCRIPT_DRAFT_SECRET` must be Runpod secrets, not committed files. For
-the private image, configure Runpod Container Registry Auth with the Docker Hub
-user `boram1220` and a Docker Hub access token.
+`APPS_SCRIPT_DRAFT_SECRET`, and `ANTHROPIC_API_KEY` must be Runpod secrets, not
+committed files. For the private image, configure Runpod Container Registry Auth
+with the Docker Hub user `boram1220` and a Docker Hub access token.
 
 The prepared one-cycle template is:
 
@@ -245,18 +256,28 @@ stale tail rows only after the new snapshot has been written.
 
 `Investor DB` and `Fund DB` are also agent-owned. `sync-kvic-funds` rewrites them from SQLite
 `kvic_investor_managers` so humans can inspect investment managers, active fund
-counts, representative fund names, active amount/commitment, fund fields, and
-profile tags without opening SQLite.
+counts, representative fund names, public KVIC amount/commitment, fund fields,
+and profile tags without opening SQLite. `research-investors` then enriches the
+same `Investor DB` from `investor_external_profiles` using public web search
+and Claude as an evidence encoder.
 
 `Investor DB` uses Korean sheet headers because it is a human-facing operator
 view:
 
 ```text
 투자사
-활성 펀드 수
-전체 펀드 수
-활성 운용액(억원)
-활성 약정액(억원)
+KVIC 공개 활성 펀드 수
+KVIC 공개 전체 펀드 수
+KVIC 공개 활성 운용액(억원)
+KVIC 공개 활성 약정액(억원)
+외부 공개 AUM(억원)
+외부 공개 운용 조합 수
+외부 공개 누적 투자액(억원)
+AUM 설명
+AUM 근거 제목
+AUM 근거 URL
+AUM 신뢰도
+AUM 상태
 출자 분야
 대표 펀드
 프로필 태그
@@ -293,11 +314,15 @@ summary and leaves the source URL empty with `설명 상태` set to `no_result`.
 Runpod staging should delegate the refresh to Hermes every day:
 
 ```text
-AGENT_LOOP_JOBS=sync-kvic-funds,crawl-sources,draft-outreach-emails,enrich-sminfo,backup-export
+AGENT_LOOP_JOBS=sync-kvic-funds,research-investors,crawl-sources,draft-outreach-emails,enrich-sminfo,backup-export
 KVIC_SYNC_INTERVAL_SECONDS=86400
 KVIC_FUND_DESCRIPTION_BATCH_LIMIT=50
 KVIC_FUND_DESCRIPTION_STALE_DAYS=30
 KVIC_FUND_SEARCH_MAX_RESULTS=5
+ANTHROPIC_API_KEY=<runpod-secret>
+HERMES_LLM_MODEL=claude-sonnet-4-6
+INVESTOR_RESEARCH_BATCH_LIMIT=20
+INVESTOR_RESEARCH_STALE_DAYS=7
 ```
 
 Seed the `Crawl Sources` tab with at least:

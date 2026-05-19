@@ -8,6 +8,7 @@ from merry_runtime.job_runner import RuntimeAdapters
 from merry_runtime.pipelines.crawl_sources import CrawlResult, crawl_sources
 from merry_runtime.pipelines.draft_outreach_emails import OutreachDraftResult, draft_outreach_emails
 from merry_runtime.pipelines.enrich_sminfo import SminfoEnrichmentResult, enrich_sminfo_candidates
+from merry_runtime.pipelines.research_investors import InvestorResearchResult, research_investors
 from merry_runtime.pipelines.sync_kvic_funds import KVICSyncResult, sync_kvic_funds
 from merry_runtime.runtime_config import RuntimeConfig
 
@@ -20,6 +21,7 @@ def build_runtime_handlers(
     enrich_sminfo_candidates_fn: Callable[..., SminfoEnrichmentResult] = enrich_sminfo_candidates,
     draft_outreach_emails_fn: Callable[..., OutreachDraftResult] = draft_outreach_emails,
     sync_kvic_funds_fn: Callable[..., KVICSyncResult] = sync_kvic_funds,
+    research_investors_fn: Callable[..., InvestorResearchResult] = research_investors,
 ) -> dict[str, Callable[[dict[str, Any]], dict[str, object]]]:
     return {
         "crawl_public_sources": lambda payload: _crawl_public_sources(
@@ -45,6 +47,12 @@ def build_runtime_handlers(
             runtime=runtime,
             config=config,
             sync_kvic_funds_fn=sync_kvic_funds_fn,
+        ),
+        "research_investors": lambda payload: _research_investors(
+            payload,
+            runtime=runtime,
+            config=config,
+            research_investors_fn=research_investors_fn,
         ),
     }
 
@@ -126,3 +134,26 @@ def _sync_kvic_funds(
         fund_search_max_results=config.kvic_fund_search_max_results,
     )
     return {"job_name": "sync-kvic-funds", **asdict(result)}
+
+
+def _research_investors(
+    payload: dict[str, Any],
+    *,
+    runtime: RuntimeAdapters,
+    config: RuntimeConfig,
+    research_investors_fn: Callable[..., InvestorResearchResult],
+) -> dict[str, object]:
+    if runtime.web_search_client is None:
+        raise RuntimeError("Web search client is not configured")
+    if runtime.llm_client is None:
+        raise RuntimeError("LLM client is not configured")
+    result = research_investors_fn(
+        structured_store=runtime.structured_store,
+        review_queue=runtime.review_queue if config.review_sheet_id else None,
+        search_client=runtime.web_search_client,
+        llm_client=runtime.llm_client,
+        batch_limit=int(payload.get("max_items") or config.investor_research_batch_limit),
+        stale_days=config.investor_research_stale_days,
+        search_max_results=config.investor_research_search_max_results,
+    )
+    return {"job_name": "research-investors", **asdict(result)}

@@ -20,6 +20,7 @@ def test_bigquery_schema_contains_required_mother_tables() -> None:
         "kvic_funds",
         "kvic_fund_descriptions",
         "kvic_investor_managers",
+        "investor_external_profiles",
         "kvic_sync_state",
     }.issubset(BIGQUERY_TABLES.keys())
 

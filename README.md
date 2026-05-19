@@ -84,11 +84,17 @@ KVIC_REQUEST_TIMEOUT_SECONDS=15
 KVIC_FUND_DESCRIPTION_BATCH_LIMIT=50
 KVIC_FUND_DESCRIPTION_STALE_DAYS=30
 KVIC_FUND_SEARCH_MAX_RESULTS=5
+ANTHROPIC_API_KEY=runpod-secret-anthropic-key
+HERMES_LLM_MODEL=claude-sonnet-4-6
+HERMES_LLM_TIMEOUT_SECONDS=30
+INVESTOR_RESEARCH_BATCH_LIMIT=20
+INVESTOR_RESEARCH_STALE_DAYS=7
+INVESTOR_RESEARCH_SEARCH_MAX_RESULTS=5
 WIKI_ROOT=/home/hermes/hermes/wiki
 HERMES_AGENT_ID=runpod-hermes-staging
 CRAWL_SHEET_TAB=Crawl Sources
 CRAWL_TARGETS_JSON=[{"url":"https://thevc.kr/","source_kind":"thevc_investment_ma","max_cards":20}]
-AGENT_LOOP_JOBS=sync-kvic-funds,crawl-sources,draft-outreach-emails,enrich-sminfo,backup-export
+AGENT_LOOP_JOBS=sync-kvic-funds,research-investors,crawl-sources,draft-outreach-emails,enrich-sminfo,backup-export
 AGENT_LOOP_INTERVAL_SECONDS=3600
 AGENT_LOOP_MAX_CYCLES=0
 ```
@@ -112,6 +118,7 @@ python3 -m merry_runtime.jobs run backup-export
 python3 -m merry_runtime.jobs run weekly-summary
 python3 -m merry_runtime.jobs run draft-outreach-emails
 python3 -m merry_runtime.jobs run sync-kvic-funds
+python3 -m merry_runtime.jobs run research-investors
 ```
 
 Without `--sources-file` or `--sources-json`, `crawl-sources` reads URL targets
@@ -139,6 +146,12 @@ public web for each fund, stores the selected title/URL/snippet in SQLite, and
 keeps the search batch bounded through `KVIC_FUND_DESCRIPTION_BATCH_LIMIT`.
 When public search has no matching evidence, Hermes still writes a conservative
 KVIC-field summary and marks the description status as `no_result`.
+
+`research-investors` reads `kvic_investor_managers`, searches public web
+evidence for investor AUM/profile facts, and sends that evidence to Claude as a
+bounded encoder. Claude returns a source-grounded JSON object; Hermes decodes it
+into `investor_external_profiles` and rewrites `Investor DB` with separate
+`KVIC 공개 ...` and `외부 공개 AUM ...` columns.
 
 To set up the Apps Script gateway, create a Google Apps Script project, copy
 `apps_script/gmail_draft_gateway/Code.gs` and `appsscript.json`, set script

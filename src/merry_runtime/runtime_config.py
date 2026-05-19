@@ -20,6 +20,10 @@ _KVIC_FUND_DESCRIPTION_BATCH_LIMIT_MIN = 1
 _KVIC_FUND_DESCRIPTION_BATCH_LIMIT_MAX = 100
 _KVIC_FUND_SEARCH_MAX_RESULTS_MIN = 1
 _KVIC_FUND_SEARCH_MAX_RESULTS_MAX = 10
+_INVESTOR_RESEARCH_BATCH_LIMIT_MIN = 1
+_INVESTOR_RESEARCH_BATCH_LIMIT_MAX = 50
+_INVESTOR_RESEARCH_SEARCH_MAX_RESULTS_MIN = 1
+_INVESTOR_RESEARCH_SEARCH_MAX_RESULTS_MAX = 10
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,6 +72,12 @@ class RuntimeConfig:
     kvic_fund_description_batch_limit: int = 50
     kvic_fund_description_stale_days: int = 30
     kvic_fund_search_max_results: int = 5
+    anthropic_api_key: str = ""
+    hermes_llm_model: str = "claude-sonnet-4-6"
+    hermes_llm_timeout_seconds: int = 30
+    investor_research_batch_limit: int = 20
+    investor_research_stale_days: int = 7
+    investor_research_search_max_results: int = 5
 
     @classmethod
     def from_env(cls) -> RuntimeConfig:
@@ -144,6 +154,28 @@ class RuntimeConfig:
                 minimum=_KVIC_FUND_SEARCH_MAX_RESULTS_MIN,
                 maximum=_KVIC_FUND_SEARCH_MAX_RESULTS_MAX,
             ),
+            anthropic_api_key=os.getenv("ANTHROPIC_API_KEY", ""),
+            hermes_llm_model=os.getenv("HERMES_LLM_MODEL", "claude-sonnet-4-6"),
+            hermes_llm_timeout_seconds=max(
+                1,
+                _parse_int(os.getenv("HERMES_LLM_TIMEOUT_SECONDS", ""), default=30),
+            ),
+            investor_research_batch_limit=_parse_bounded_int(
+                os.getenv("INVESTOR_RESEARCH_BATCH_LIMIT", ""),
+                default=20,
+                minimum=_INVESTOR_RESEARCH_BATCH_LIMIT_MIN,
+                maximum=_INVESTOR_RESEARCH_BATCH_LIMIT_MAX,
+            ),
+            investor_research_stale_days=max(
+                1,
+                _parse_int(os.getenv("INVESTOR_RESEARCH_STALE_DAYS", ""), default=7),
+            ),
+            investor_research_search_max_results=_parse_bounded_int(
+                os.getenv("INVESTOR_RESEARCH_SEARCH_MAX_RESULTS", ""),
+                default=5,
+                minimum=_INVESTOR_RESEARCH_SEARCH_MAX_RESULTS_MIN,
+                maximum=_INVESTOR_RESEARCH_SEARCH_MAX_RESULTS_MAX,
+            ),
         )
 
     def validate_for_job(self, job_name: str, *, has_inline_sources: bool = False) -> None:
@@ -186,6 +218,8 @@ class RuntimeConfig:
                 required.append("APPS_SCRIPT_DRAFT_WEBHOOK_URL")
         elif job_name == "sync-kvic-funds":
             required.append("KVIC_API_KEY")
+        elif job_name == "research-investors":
+            required.append("ANTHROPIC_API_KEY")
         elif job_name == "resolve-entities":
             pass
         else:
@@ -253,6 +287,12 @@ class RuntimeConfig:
             "KVIC_FUND_DESCRIPTION_BATCH_LIMIT": str(self.kvic_fund_description_batch_limit),
             "KVIC_FUND_DESCRIPTION_STALE_DAYS": str(self.kvic_fund_description_stale_days),
             "KVIC_FUND_SEARCH_MAX_RESULTS": str(self.kvic_fund_search_max_results),
+            "ANTHROPIC_API_KEY": self.anthropic_api_key,
+            "HERMES_LLM_MODEL": self.hermes_llm_model,
+            "HERMES_LLM_TIMEOUT_SECONDS": str(self.hermes_llm_timeout_seconds),
+            "INVESTOR_RESEARCH_BATCH_LIMIT": str(self.investor_research_batch_limit),
+            "INVESTOR_RESEARCH_STALE_DAYS": str(self.investor_research_stale_days),
+            "INVESTOR_RESEARCH_SEARCH_MAX_RESULTS": str(self.investor_research_search_max_results),
         }[name]
 
 

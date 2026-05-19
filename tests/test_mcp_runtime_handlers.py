@@ -6,6 +6,7 @@ from merry_runtime.job_runner import RuntimeAdapters
 from merry_runtime.pipelines.crawl_sources import CrawlResult
 from merry_runtime.pipelines.draft_outreach_emails import OutreachDraftResult
 from merry_runtime.pipelines.enrich_sminfo import SminfoEnrichmentResult
+from merry_runtime.pipelines.research_investors import InvestorResearchResult
 from merry_runtime.pipelines.sync_kvic_funds import KVICSyncResult
 from merry_runtime.runtime_config import RuntimeConfig
 
@@ -166,6 +167,54 @@ def test_runtime_handlers_wire_sync_kvic_funds_to_pipeline(tmp_path) -> None:
     assert seen_payloads[0]["sync_interval_seconds"] == 0
 
 
+def test_runtime_handlers_wire_research_investors_to_pipeline(tmp_path) -> None:
+    runtime = RuntimeAdapters(
+        object_store=FakeObjectStore(bucket="raw-bucket"),
+        structured_store=FakeStructuredStore(),
+        review_queue=FakeReviewQueue(),
+        web_search_client=object(),
+        llm_client=object(),
+    )
+    config = RuntimeConfig(
+        project_id="",
+        dataset_id="",
+        raw_bucket="",
+        review_sheet_id="sheet-1",
+        wiki_root=tmp_path,
+        anthropic_api_key="anthropic-key",
+        investor_research_batch_limit=10,
+        investor_research_stale_days=7,
+        investor_research_search_max_results=5,
+    )
+    seen_payloads = []
+
+    def fake_research_investors(**kwargs):
+        seen_payloads.append(kwargs)
+        return InvestorResearchResult(
+            run_id="run_investor_tool",
+            status="success",
+            investor_count=20,
+            researched_count=10,
+            success_count=7,
+        )
+
+    handlers = build_runtime_handlers(
+        runtime=runtime,
+        config=config,
+        research_investors_fn=fake_research_investors,
+    )
+
+    result = handlers["research_investors"]({"max_items": 3})
+
+    assert result["job_name"] == "research-investors"
+    assert result["success_count"] == 7
+    assert seen_payloads[0]["structured_store"] is runtime.structured_store
+    assert seen_payloads[0]["review_queue"] is runtime.review_queue
+    assert seen_payloads[0]["search_client"] is runtime.web_search_client
+    assert seen_payloads[0]["llm_client"] is runtime.llm_client
+    assert seen_payloads[0]["batch_limit"] == 3
+
+
 def test_runtime_handlers_require_configured_sminfo_client_for_enrichment(tmp_path) -> None:
     runtime = RuntimeAdapters(
         object_store=FakeObjectStore(bucket="raw-bucket"),
@@ -206,3 +255,18 @@ def test_runtime_handlers_require_configured_kvic_client(tmp_path) -> None:
 
     with pytest.raises(RuntimeError, match="KVIC client is not configured"):
         handlers["sync_kvic_funds"]({})
+
+
+def test_runtime_handlers_require_configured_llm_client_for_investor_research(tmp_path) -> None:
+    runtime = RuntimeAdapters(
+        object_store=FakeObjectStore(bucket="raw-bucket"),
+        structured_store=FakeStructuredStore(),
+        review_queue=FakeReviewQueue(),
+        web_search_client=object(),
+    )
+    config = RuntimeConfig(project_id="", dataset_id="", raw_bucket="", review_sheet_id="sheet-1", wiki_root=tmp_path)
+
+    handlers = build_runtime_handlers(runtime=runtime, config=config)
+
+    with pytest.raises(RuntimeError, match="LLM client is not configured"):
+        handlers["research_investors"]({})

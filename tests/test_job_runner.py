@@ -7,6 +7,7 @@ from merry_runtime.job_runner import JobRunError, RuntimeAdapters, run_job
 from merry_runtime.pipelines.draft_outreach_emails import OutreachDraftResult
 from merry_runtime.pipelines.enrich_sminfo import SminfoEnrichmentResult
 from merry_runtime.pipelines.crawl_sources import CrawlResult
+from merry_runtime.pipelines.research_investors import InvestorResearchResult
 from merry_runtime.pipelines.sync_kvic_funds import KVICSyncResult
 from merry_runtime.runtime_config import RuntimeConfig
 from merry_runtime.wiki_store import SQLiteWikiStore
@@ -35,6 +36,7 @@ def _runtime(tmp_path, store: FakeStructuredStore | None = None) -> RuntimeAdapt
         gmail_source=None,
         kvic_client=object(),
         web_search_client=object(),
+        llm_client=object(),
     )
 
 
@@ -305,6 +307,47 @@ def test_run_sync_kvic_funds_routes_to_pipeline(monkeypatch, tmp_path) -> None:
     assert seen["fund_description_batch_limit"] == 25
     assert seen["fund_description_stale_days"] == 45
     assert seen["fund_search_max_results"] == 7
+
+
+def test_run_research_investors_routes_to_pipeline(monkeypatch, tmp_path) -> None:
+    runtime = _runtime(tmp_path)
+    seen: dict[str, object] = {}
+
+    def fake_research_investors(**kwargs):
+        seen.update(kwargs)
+        return InvestorResearchResult(
+            run_id="run_investor_research_test",
+            status="success",
+            investor_count=12,
+            researched_count=3,
+            success_count=2,
+        )
+
+    monkeypatch.setattr("merry_runtime.job_runner.research_investors", fake_research_investors)
+    config = RuntimeConfig(
+        project_id="",
+        dataset_id="",
+        raw_bucket="",
+        review_sheet_id="sheet-1",
+        wiki_root=tmp_path,
+        structured_store_backend="sqlite",
+        anthropic_api_key="anthropic-key",
+        investor_research_batch_limit=3,
+        investor_research_stale_days=5,
+        investor_research_search_max_results=8,
+    )
+
+    result = run_job("research-investors", runtime=runtime, config=config)
+
+    assert result["job_name"] == "research-investors"
+    assert result["researched_count"] == 3
+    assert seen["structured_store"] is runtime.structured_store
+    assert seen["review_queue"] is runtime.review_queue
+    assert seen["search_client"] is runtime.web_search_client
+    assert seen["llm_client"] is runtime.llm_client
+    assert seen["batch_limit"] == 3
+    assert seen["stale_days"] == 5
+    assert seen["search_max_results"] == 8
 
 
 def test_run_weekly_summary_includes_failures_reviews_and_resolution_events(tmp_path) -> None:
