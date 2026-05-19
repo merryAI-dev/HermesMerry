@@ -3,6 +3,7 @@ import sqlite3
 import pytest
 
 from merry_runtime.adapters.sqlite_store import SQLiteStructuredStore
+from merry_runtime.ingestion.sminfo_queue import build_sminfo_task
 from merry_runtime.schema import BIGQUERY_TABLES
 
 
@@ -116,3 +117,33 @@ def test_sqlite_store_rejects_unknown_tables_and_unsafe_queries(tmp_path) -> Non
 
     with pytest.raises(ValueError, match="Only SELECT queries are supported"):
         store.query_rows(sql="delete from signals", parameters={})
+
+
+def test_sqlite_store_leases_sminfo_tasks_once(tmp_path) -> None:
+    store = SQLiteStructuredStore(db_path=tmp_path / "mother.db")
+    task = build_sminfo_task(
+        {"company": "에이아이오", "normalized_name": "에이아이오"},
+        source_channel="thevc_investment_ma",
+        now="2026-05-19T00:00:00+00:00",
+    )
+    store.upsert_rows(table="sminfo_enrichment_queue", rows=[task], key_fields=("task_id",))
+
+    first = store.lease_sminfo_tasks(
+        max_items=1,
+        reference_time="2026-05-19T00:00:01+00:00",
+        agent_id="agent-a",
+        leased_at="2026-05-19T00:00:02+00:00",
+    )
+    second = store.lease_sminfo_tasks(
+        max_items=1,
+        reference_time="2026-05-19T00:00:03+00:00",
+        agent_id="agent-b",
+        leased_at="2026-05-19T00:00:04+00:00",
+    )
+
+    assert len(first) == 1
+    assert second == []
+    [row] = store.query_rows(sql="select * from sminfo_enrichment_queue", parameters={})
+    assert row["status"] == "running"
+    assert row["locked_by"] == "agent-a"
+    assert row["locked_at"] == "2026-05-19T00:00:02+00:00"

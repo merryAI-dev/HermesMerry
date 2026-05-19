@@ -163,6 +163,27 @@ BIGQUERY_TABLES: Final[dict[str, list[dict[str, str]]]] = {
         _field("error_message", "STRING"),
         _field("collected_at", "TIMESTAMP", "REQUIRED"),
     ],
+    "sminfo_enrichment_queue": [
+        _field("task_id", "STRING", "REQUIRED"),
+        _field("company", "STRING", "REQUIRED"),
+        _field("normalized_name", "STRING"),
+        _field("representative", "STRING"),
+        _field("homepage", "STRING"),
+        _field("source_url", "STRING"),
+        _field("source_channel", "STRING", "REQUIRED"),
+        _field("status", "STRING", "REQUIRED"),
+        _field("priority", "INTEGER", "REQUIRED"),
+        _field("attempt_count", "INTEGER", "REQUIRED"),
+        _field("max_attempts", "INTEGER", "REQUIRED"),
+        _field("next_run_at", "TIMESTAMP", "REQUIRED"),
+        _field("locked_at", "TIMESTAMP"),
+        _field("locked_by", "STRING"),
+        _field("last_error", "STRING"),
+        _field("last_profile_id", "STRING"),
+        _field("created_at", "TIMESTAMP", "REQUIRED"),
+        _field("updated_at", "TIMESTAMP", "REQUIRED"),
+        _field("completed_at", "TIMESTAMP"),
+    ],
 }
 
 

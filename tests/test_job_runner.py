@@ -4,6 +4,7 @@ import pytest
 
 from merry_runtime.adapters.fakes import FakeNotifier, FakeObjectStore, FakeReviewQueue, FakeStructuredStore
 from merry_runtime.job_runner import JobRunError, RuntimeAdapters, run_job
+from merry_runtime.pipelines.enrich_sminfo import SminfoEnrichmentResult
 from merry_runtime.pipelines.crawl_sources import CrawlResult
 from merry_runtime.runtime_config import RuntimeConfig
 from merry_runtime.wiki_store import SQLiteWikiStore
@@ -102,6 +103,37 @@ def test_run_crawl_sources_reads_targets_from_sheet_when_json_missing(monkeypatc
     assert result["job_name"] == "crawl-sources"
     assert result["target_count"] == 1
     assert seen_targets == [{"url": "https://thevc.kr/", "source_kind": "thevc_investment_ma"}]
+
+
+def test_run_crawl_sources_passes_sminfo_stale_days(monkeypatch, tmp_path) -> None:
+    runtime = _runtime(tmp_path)
+    runtime.review_queue.seed_reviews("Crawl Sources", [{"url": "https://thevc.kr/", "source_kind": "thevc_investment_ma"}])
+    seen: dict[str, object] = {}
+
+    def fake_crawl_sources(**kwargs):
+        seen["sminfo_stale_days"] = kwargs["sminfo_stale_days"]
+        return CrawlResult(
+            run_id="run_crawl_stale",
+            target_count=1,
+            crawled_source_count=1,
+            ingested_raw_source_count=1,
+            ingested_entity_count=1,
+            ingested_signal_count=1,
+        )
+
+    monkeypatch.setattr("merry_runtime.job_runner.crawl_sources", fake_crawl_sources)
+    config = RuntimeConfig(
+        project_id="project-1",
+        dataset_id="merry",
+        raw_bucket="raw-bucket",
+        review_sheet_id="sheet-1",
+        wiki_root=tmp_path,
+        sminfo_stale_days=17,
+    )
+
+    run_job("crawl-sources", runtime=runtime, config=config)
+
+    assert seen["sminfo_stale_days"] == 17
 
 
 def test_run_crawl_sources_falls_back_to_configured_targets_when_sheet_is_empty(monkeypatch, tmp_path) -> None:
@@ -330,6 +362,43 @@ def test_run_resolve_entities_persists_resolution_events(tmp_path) -> None:
     assert result["needs_review_count"] == 0
     assert store.tables["entity_resolution_events"][0]["status"] == "pending_review"
     assert [row["entity_id"] for row in store.tables["mother_entities"]] == ["ent_a", "ent_b"]
+
+
+def test_run_enrich_sminfo_passes_agent_identity(monkeypatch, tmp_path) -> None:
+    runtime = _runtime(tmp_path)
+    runtime.sminfo_client = object()
+    seen: dict[str, object] = {}
+
+    def fake_enrich_sminfo_candidates(**kwargs):
+        seen["agent_id"] = kwargs["agent_id"]
+        seen["stale_days"] = kwargs["stale_days"]
+        return SminfoEnrichmentResult(
+            run_id="run_sminfo_agent",
+            candidate_count=0,
+            processed_count=0,
+            matched_count=0,
+            not_found_count=0,
+            ambiguous_count=0,
+            error_count=0,
+        )
+
+    monkeypatch.setattr("merry_runtime.job_runner.enrich_sminfo_candidates", fake_enrich_sminfo_candidates)
+    config = RuntimeConfig(
+        project_id="",
+        dataset_id="",
+        raw_bucket="",
+        review_sheet_id="sheet-1",
+        wiki_root=tmp_path,
+        sminfo_user_id="user",
+        sminfo_password="password",
+        hermes_agent_id="runpod-pod-1",
+        sminfo_stale_days=17,
+    )
+
+    result = run_job("enrich-sminfo", runtime=runtime, config=config)
+
+    assert result["job_name"] == "enrich-sminfo"
+    assert seen == {"agent_id": "runpod-pod-1", "stale_days": 17}
 
 
 def test_run_job_rejects_missing_ingest_sources(tmp_path) -> None:

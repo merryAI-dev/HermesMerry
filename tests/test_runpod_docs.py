@@ -59,6 +59,8 @@ def test_runpod_sqlite_mode_is_documented_as_primary_runtime() -> None:
     assert "STRUCTURED_STORE_BACKEND=sqlite" in env_example
     assert "MOTHER_DB_PATH=/home/hermes/hermes/mother.db" in env_example
     assert "BACKUP_ROOT=/home/hermes/hermes/backups" in env_example
+    assert "HERMES_AGENT_ID=runpod-hermes-staging" in env_example
+    assert "AGENT_LOOP_JOBS=crawl-sources,enrich-sminfo,backup-export" in env_example
     assert "AGENT_LOOP_MAX_CYCLES=0" in env_example
     assert "BigQuery is optional" in runbook
     assert "STRUCTURED_STORE_BACKEND=bigquery" in runbook

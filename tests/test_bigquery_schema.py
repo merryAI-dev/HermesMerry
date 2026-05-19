@@ -14,6 +14,7 @@ def test_bigquery_schema_contains_required_mother_tables() -> None:
         "ac_scoring_coefficients",
         "agent_runs",
         "sminfo_company_profiles",
+        "sminfo_enrichment_queue",
     }.issubset(BIGQUERY_TABLES.keys())
 
 
@@ -122,4 +123,30 @@ def test_sminfo_company_profiles_schema_captures_government_enrichment() -> None
         "raw_json",
         "error_message",
         "collected_at",
+    }.issubset(fields)
+
+
+def test_sminfo_enrichment_queue_schema_captures_agent_work_state() -> None:
+    fields = table_field_names("sminfo_enrichment_queue")
+
+    assert {
+        "task_id",
+        "company",
+        "normalized_name",
+        "representative",
+        "homepage",
+        "source_url",
+        "source_channel",
+        "status",
+        "priority",
+        "attempt_count",
+        "max_attempts",
+        "next_run_at",
+        "locked_at",
+        "locked_by",
+        "last_error",
+        "last_profile_id",
+        "created_at",
+        "updated_at",
+        "completed_at",
     }.issubset(fields)

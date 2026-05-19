@@ -69,6 +69,7 @@ def run_job(
             notifier=runtime.notifier,
             slack_channel=config.slack_channel,
             wiki_store=runtime.wiki_store,
+            sminfo_stale_days=config.sminfo_stale_days,
         )
         return {"job_name": job_name, **asdict(result)}
 
@@ -129,6 +130,7 @@ def run_job(
             max_items=config.sminfo_batch_limit,
             min_interval_seconds=config.sminfo_min_interval_seconds,
             stale_days=config.sminfo_stale_days,
+            agent_id=config.hermes_agent_id,
         )
         return {"job_name": job_name, **asdict(result)}
 

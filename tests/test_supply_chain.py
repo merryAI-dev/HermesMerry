@@ -144,6 +144,7 @@ def test_runpod_env_documents_sminfo_enrichment_controls() -> None:
     assert "SMINFO_PASSWORD=" in env_example
     assert "SMINFO_MIN_INTERVAL_SECONDS=35" in env_example
     assert "SMINFO_BATCH_LIMIT=20" in env_example
+    assert "HERMES_AGENT_ID=runpod-hermes-staging" in env_example
 
 
 def test_ghcr_build_script_pushes_linux_amd64_staging_image() -> None:
