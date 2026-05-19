@@ -107,6 +107,11 @@
 - Runpod SQLite image pull smoke: Pod `l7tqb76utbrt8g` reached `RUNNING` from
   the SQLite-first template at `$0.06/hr` and was deleted successfully with HTTP
   204
+- Runpod secret interpolation blocker: reproduced again on 2026-05-19 KST with
+  REST Pod env, GraphQL template env, existing/UI/API-created secrets, and
+  spaced/non-spaced `RUNPOD_SECRET` syntax all resolving to empty strings. The
+  sanitized tracking issue is
+  https://github.com/merryAI-dev/merry/issues/29.
 
 ## Result
 

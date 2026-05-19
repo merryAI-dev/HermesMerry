@@ -144,6 +144,10 @@ fallback path.
 descriptions are evidence-backed web-search projections: Hermes searches the
 public web for each fund, stores the selected title/URL/snippet in SQLite, and
 keeps the search batch bounded through `KVIC_FUND_DESCRIPTION_BATCH_LIMIT`.
+When `ANTHROPIC_API_KEY` is configured, the same job sends only that selected
+evidence to Claude as a bounded encoder and stores a source-grounded fund
+description. Hermes never accepts a Claude-provided source URL unless it matches
+the search evidence URL already selected for that fund.
 When public search has no matching evidence, Hermes still writes a conservative
 KVIC-field summary and marks the description status as `no_result`.
 

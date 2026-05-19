@@ -471,6 +471,11 @@ class GoogleSheetReviewQueue:
             list(headers),
             *[_row_values(row, headers, escape_formula_cells=escape_formula_cells) for row in rows],
         ]
+        self._ensure_sheet_capacity(
+            sheet_tab=sheet_tab,
+            min_rows=len(rewritten_values),
+            min_columns=len(headers),
+        )
         for start_index in range(0, len(rewritten_values), REPLACE_ROWS_BATCH_SIZE):
             batch = rewritten_values[start_index : start_index + REPLACE_ROWS_BATCH_SIZE]
             start_row = start_index + 1
@@ -550,6 +555,43 @@ class GoogleSheetReviewQueue:
             spreadsheetId=self.spreadsheet_id,
             body={"requests": [{"addSheet": {"properties": {"title": sheet_tab}}}]},
         ).execute()
+
+    def _ensure_sheet_capacity(self, *, sheet_tab: str, min_rows: int, min_columns: int) -> None:
+        response = self.service.spreadsheets().get(
+            spreadsheetId=self.spreadsheet_id,
+            fields="sheets.properties(sheetId,title,gridProperties(rowCount,columnCount))",
+        ).execute()
+        for sheet in response.get("sheets", []):
+            properties = sheet.get("properties", {}) if isinstance(sheet, dict) else {}
+            if str(properties.get("title") or "") != sheet_tab:
+                continue
+            grid = properties.get("gridProperties", {}) or {}
+            current_rows = int(grid.get("rowCount") or 0)
+            current_columns = int(grid.get("columnCount") or 0)
+            target_rows = max(current_rows, min_rows)
+            target_columns = max(current_columns, min_columns)
+            if target_rows == current_rows and target_columns == current_columns:
+                return
+            self.service.spreadsheets().batchUpdate(
+                spreadsheetId=self.spreadsheet_id,
+                body={
+                    "requests": [
+                        {
+                            "updateSheetProperties": {
+                                "properties": {
+                                    "sheetId": properties["sheetId"],
+                                    "gridProperties": {
+                                        "rowCount": target_rows,
+                                        "columnCount": target_columns,
+                                    },
+                                },
+                                "fields": "gridProperties(rowCount,columnCount)",
+                            }
+                        }
+                    ]
+                },
+            ).execute()
+            return
 
 
 @dataclass(frozen=True, slots=True)

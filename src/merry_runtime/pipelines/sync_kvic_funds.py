@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from merry_runtime.adapters.interfaces import KVICDataClient, ReviewQueue, StructuredStore, WebSearchClient
+from merry_runtime.adapters.interfaces import KVICDataClient, LLMClient, ReviewQueue, StructuredStore, WebSearchClient
 from merry_runtime.clock import now_kst
 from merry_runtime.ingestion.kvic import build_kvic_investor_profiles, parse_kvic_fund_types, parse_kvic_funds
 from merry_runtime.pipelines.research_investors import publish_investor_db
@@ -49,6 +50,7 @@ def sync_kvic_funds(
     client: KVICDataClient,
     review_queue: ReviewQueue | None = None,
     search_client: WebSearchClient | None = None,
+    llm_client: LLMClient | None = None,
     reference_date: str | None = None,
     collected_at: str | None = None,
     sync_interval_seconds: int = 86400,
@@ -68,6 +70,7 @@ def sync_kvic_funds(
                 structured_store=structured_store,
                 funds=_query_all(structured_store, "kvic_funds"),
                 search_client=search_client,
+                llm_client=llm_client,
                 collected_at=collected_at,
                 batch_limit=fund_description_batch_limit,
                 stale_days=fund_description_stale_days,
@@ -106,6 +109,7 @@ def sync_kvic_funds(
             structured_store=structured_store,
             funds=funds,
             search_client=search_client,
+            llm_client=llm_client,
             collected_at=collected_at,
             batch_limit=fund_description_batch_limit,
             stale_days=fund_description_stale_days,
@@ -178,6 +182,7 @@ def _refresh_fund_descriptions(
     structured_store: StructuredStore,
     funds: list[dict[str, object]],
     search_client: WebSearchClient,
+    llm_client: LLMClient | None,
     collected_at: str,
     batch_limit: int,
     stale_days: int,
@@ -199,6 +204,7 @@ def _refresh_fund_descriptions(
         _describe_fund(
             fund=fund,
             search_client=search_client,
+            llm_client=llm_client,
             collected_at=collected_at,
             max_results=max_results,
         )
@@ -212,6 +218,7 @@ def _describe_fund(
     *,
     fund: dict[str, object],
     search_client: WebSearchClient,
+    llm_client: LLMClient | None,
     collected_at: str,
     max_results: int,
 ) -> dict[str, object]:
@@ -237,6 +244,16 @@ def _describe_fund(
         return {**base, "status": "error", "error_message": f"{type(exc).__name__}: {exc}"[:1000]}
     if result is None:
         return base
+    if llm_client is not None:
+        try:
+            extracted = llm_client.complete_json(
+                system_prompt=_FUND_DESCRIPTION_SYSTEM_PROMPT,
+                user_prompt=_fund_description_user_prompt(fund=fund, evidence=[result]),
+                max_tokens=700,
+            )
+        except Exception as exc:
+            return {**base, "status": "error", "error_message": f"{type(exc).__name__}: {exc}"[:1000]}
+        return _fund_description_row_from_extraction(base=base, extracted=extracted, evidence=[result])
     return {
         **base,
         "description": _fund_description_from_result(fund=fund, result=result),
@@ -245,6 +262,58 @@ def _describe_fund(
         "source_snippet": result.get("snippet", ""),
         "status": "success",
     }
+
+
+_FUND_DESCRIPTION_SYSTEM_PROMPT = """You are Hermes' evidence encoder for KVIC fund research.
+Extract only facts explicitly supported by the provided fund record and search evidence.
+Return one JSON object with keys: status, description, source_title, source_url.
+Write description in Korean, one or two concise sentences, focused on what the fund appears to invest in or support.
+If evidence is weak or unrelated, set status to no_result and keep the description conservative."""
+
+
+def _fund_description_user_prompt(*, fund: dict[str, object], evidence: list[dict[str, str]]) -> str:
+    return json.dumps(
+        {
+            "fund": fund,
+            "kvic_summary": _fund_description_from_fund(fund=fund),
+            "evidence": evidence,
+            "output_policy": "Return only source-grounded JSON. Do not estimate missing mandates or strategy.",
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+    )
+
+
+def _fund_description_row_from_extraction(
+    *,
+    base: dict[str, object],
+    extracted: dict[str, object],
+    evidence: list[dict[str, str]],
+) -> dict[str, object]:
+    matched = _matched_evidence(extracted=extracted, evidence=evidence)
+    status = str(extracted.get("status") or "success")
+    if status not in {"success", "no_result", "error"}:
+        status = "success"
+    description = str(extracted.get("description") or "").strip()
+    if not description:
+        description = str(base.get("description") or "")
+    return {
+        **base,
+        "description": description,
+        "source_title": str(matched.get("title") or ""),
+        "source_url": str(matched.get("url") or ""),
+        "source_snippet": str(matched.get("snippet") or ""),
+        "status": status,
+    }
+
+
+def _matched_evidence(*, extracted: dict[str, object], evidence: list[dict[str, str]]) -> dict[str, str]:
+    evidence_url = str(extracted.get("source_url") or extracted.get("evidence_url") or "")
+    if evidence_url:
+        matched = next((item for item in evidence if item.get("url") == evidence_url), None)
+        if matched is not None:
+            return matched
+    return evidence[0] if evidence else {}
 
 
 def _select_search_result(*, fund: dict[str, object], results: list[dict[str, str]]) -> dict[str, str] | None:

@@ -160,6 +160,7 @@ def run_job(
             client=runtime.kvic_client,
             review_queue=runtime.review_queue if config.review_sheet_id else None,
             search_client=runtime.web_search_client,
+            llm_client=runtime.llm_client,
             sync_interval_seconds=config.kvic_sync_interval_seconds,
             fund_description_batch_limit=config.kvic_fund_description_batch_limit,
             fund_description_stale_days=config.kvic_fund_description_stale_days,

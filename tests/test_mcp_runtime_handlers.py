@@ -130,6 +130,8 @@ def test_runtime_handlers_wire_sync_kvic_funds_to_pipeline(tmp_path) -> None:
         structured_store=FakeStructuredStore(),
         review_queue=FakeReviewQueue(),
         kvic_client=object(),
+        web_search_client=object(),
+        llm_client=object(),
     )
     config = RuntimeConfig(
         project_id="",
@@ -164,6 +166,8 @@ def test_runtime_handlers_wire_sync_kvic_funds_to_pipeline(tmp_path) -> None:
     assert result["manager_count"] == 1
     assert seen_payloads[0]["client"] is runtime.kvic_client
     assert seen_payloads[0]["review_queue"] is runtime.review_queue
+    assert seen_payloads[0]["search_client"] is runtime.web_search_client
+    assert seen_payloads[0]["llm_client"] is runtime.llm_client
     assert seen_payloads[0]["sync_interval_seconds"] == 0
 
 

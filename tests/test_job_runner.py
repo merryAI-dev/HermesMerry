@@ -303,6 +303,7 @@ def test_run_sync_kvic_funds_routes_to_pipeline(monkeypatch, tmp_path) -> None:
     assert seen["client"] is runtime.kvic_client
     assert seen["review_queue"] is runtime.review_queue
     assert seen["search_client"] is runtime.web_search_client
+    assert seen["llm_client"] is runtime.llm_client
     assert seen["sync_interval_seconds"] == 86400
     assert seen["fund_description_batch_limit"] == 25
     assert seen["fund_description_stale_days"] == 45

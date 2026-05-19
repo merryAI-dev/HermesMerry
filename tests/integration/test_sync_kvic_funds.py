@@ -35,6 +35,16 @@ class FakeSearchClient:
         return self.results_by_query.get(query, [])[:max_results]
 
 
+@dataclass(slots=True)
+class FakeLLMClient:
+    response: dict[str, Any]
+    prompts: list[dict[str, object]]
+
+    def complete_json(self, *, system_prompt: str, user_prompt: str, max_tokens: int) -> dict[str, object]:
+        self.prompts.append({"system_prompt": system_prompt, "user_prompt": user_prompt, "max_tokens": max_tokens})
+        return self.response
+
+
 def test_sync_kvic_funds_upserts_funds_profiles_state_and_investor_sheet(tmp_path) -> None:
     store = SQLiteStructuredStore(db_path=tmp_path / "mother.db")
     review_queue = FakeReviewQueue()
@@ -181,6 +191,124 @@ def test_sync_kvic_funds_enriches_fund_db_with_web_search_descriptions(tmp_path)
     assert fund_row["설명 근거 URL"] == "https://example.com/d3-eco"
     assert fund_row["설명 상태"] == "success"
     assert fund_row["검색어"] == search_client.queries[0]
+
+
+def test_sync_kvic_funds_uses_llm_encoder_for_fund_descriptions(tmp_path) -> None:
+    store = SQLiteStructuredStore(db_path=tmp_path / "mother.db")
+    review_queue = FakeReviewQueue()
+    client = FakeKVICClient(
+        fund_types_payload={"result": [{"fundCode": "11", "fundName": "한국모태펀드"}]},
+        funds_payload={
+            "result_11": [
+                {
+                    "year": "2024",
+                    "fd": "소셜임팩트",
+                    "mng": "엠와이소셜컴퍼니",
+                    "asn": "MYSC 소셜임팩트 투자조합",
+                    "exp": "2032-01-01",
+                    "amt": "50000",
+                    "ca": "30000",
+                }
+            ]
+        },
+    )
+    search_client = FakeSearchClient(
+        queries=[],
+        results_by_query={
+            '"MYSC 소셜임팩트 투자조합" "엠와이소셜컴퍼니" 소셜임팩트': [
+                {
+                    "title": "MYSC 소셜임팩트 투자조합 결성",
+                    "url": "https://example.com/mysc-impact-fund",
+                    "snippet": "엠와이소셜컴퍼니는 임팩트 스타트업을 대상으로 투자와 액셀러레이팅을 병행한다.",
+                }
+            ]
+        },
+    )
+    llm_client = FakeLLMClient(
+        prompts=[],
+        response={
+            "status": "success",
+            "description": "MYSC 소셜임팩트 투자조합은 임팩트 스타트업의 성장과 후속투자 연계를 목표로 하는 펀드다.",
+            "source_title": "MYSC 소셜임팩트 투자조합 결성",
+            "source_url": "https://example.com/mysc-impact-fund",
+        },
+    )
+
+    sync_kvic_funds(
+        structured_store=store,
+        client=client,
+        review_queue=review_queue,
+        search_client=search_client,
+        llm_client=llm_client,
+        reference_date="2026-05-19",
+        collected_at="2026-05-19T16:00:00+09:00",
+        fund_description_batch_limit=10,
+    )
+
+    [description] = store.query_rows(sql="select * from kvic_fund_descriptions", parameters={})
+    assert description["status"] == "success"
+    assert description["description"] == "MYSC 소셜임팩트 투자조합은 임팩트 스타트업의 성장과 후속투자 연계를 목표로 하는 펀드다."
+    assert description["source_url"] == "https://example.com/mysc-impact-fund"
+    assert llm_client.prompts
+    assert "MYSC 소셜임팩트 투자조합" in str(llm_client.prompts[0]["user_prompt"])
+    [fund_row] = review_queue.published["Fund DB"]
+    assert fund_row["펀드 설명"] == description["description"]
+
+
+def test_sync_kvic_funds_rejects_llm_hallucinated_source_url(tmp_path) -> None:
+    store = SQLiteStructuredStore(db_path=tmp_path / "mother.db")
+    client = FakeKVICClient(
+        fund_types_payload={"result": [{"fundCode": "11", "fundName": "한국모태펀드"}]},
+        funds_payload={
+            "result_11": [
+                {
+                    "year": "2024",
+                    "fd": "소셜임팩트",
+                    "mng": "엠와이소셜컴퍼니",
+                    "asn": "MYSC 소셜임팩트 투자조합",
+                    "exp": "2032-01-01",
+                    "amt": "50000",
+                    "ca": "30000",
+                }
+            ]
+        },
+    )
+    search_client = FakeSearchClient(
+        queries=[],
+        results_by_query={
+            '"MYSC 소셜임팩트 투자조합" "엠와이소셜컴퍼니" 소셜임팩트': [
+                {
+                    "title": "MYSC 소셜임팩트 투자조합 결성",
+                    "url": "https://example.com/mysc-impact-fund",
+                    "snippet": "MYSC 소셜임팩트 투자조합은 엠와이소셜컴퍼니가 운용하며 임팩트 스타트업을 지원한다.",
+                }
+            ]
+        },
+    )
+    llm_client = FakeLLMClient(
+        prompts=[],
+        response={
+            "status": "success",
+            "description": "MYSC 소셜임팩트 투자조합은 임팩트 스타트업을 지원하는 펀드다.",
+            "source_title": "존재하지 않는 근거",
+            "source_url": "https://hallucinated.example/fund",
+        },
+    )
+
+    sync_kvic_funds(
+        structured_store=store,
+        client=client,
+        search_client=search_client,
+        llm_client=llm_client,
+        reference_date="2026-05-19",
+        collected_at="2026-05-19T16:00:00+09:00",
+        fund_description_batch_limit=10,
+    )
+
+    [description] = store.query_rows(sql="select * from kvic_fund_descriptions", parameters={})
+    assert description["status"] == "success"
+    assert description["source_title"] == "MYSC 소셜임팩트 투자조합 결성"
+    assert description["source_url"] == "https://example.com/mysc-impact-fund"
 
 
 def test_sync_kvic_funds_records_no_result_when_search_evidence_does_not_match(tmp_path) -> None:

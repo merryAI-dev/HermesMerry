@@ -422,6 +422,8 @@ class FakeSheetsService:
     def __init__(self) -> None:
         self.values_obj = FakeValues()
         self.sheet_titles: set[str] = set()
+        self.sheet_properties: dict[str, dict[str, int]] = {}
+        self.batch_update_bodies: list[dict[str, object]] = []
 
     def spreadsheets(self) -> "FakeSheetsService":
         return self
@@ -437,16 +439,49 @@ class FakeSheetsService:
     def batchUpdate(self, **kwargs: object) -> "FakeSheetsService":
         self.batch_update_kwargs = kwargs
         self.batch_update_body = kwargs["body"]  # type: ignore[index]
+        self.batch_update_bodies.append(self.batch_update_body)  # type: ignore[arg-type]
         self._pending_execute = "batchUpdate"
         return self
 
     def execute(self) -> dict[str, object]:
         if getattr(self, "_pending_execute", "") == "batchUpdate":
             for request in self.batch_update_body["requests"]:  # type: ignore[index]
-                title = request["addSheet"]["properties"]["title"]
-                self.sheet_titles.add(title)
+                if "addSheet" in request:
+                    properties = request["addSheet"]["properties"]
+                    title = properties["title"]
+                    self.sheet_titles.add(title)
+                    self.sheet_properties[title] = {
+                        "sheetId": int(properties.get("sheetId", len(self.sheet_properties) + 1)),
+                        "rowCount": int(properties.get("gridProperties", {}).get("rowCount", 1000)),
+                        "columnCount": int(properties.get("gridProperties", {}).get("columnCount", 26)),
+                    }
+                elif "updateSheetProperties" in request:
+                    properties = request["updateSheetProperties"]["properties"]
+                    for title, existing in self.sheet_properties.items():
+                        if existing.get("sheetId") == properties["sheetId"]:
+                            grid = properties["gridProperties"]
+                            existing["rowCount"] = int(grid.get("rowCount", existing["rowCount"]))
+                            existing["columnCount"] = int(grid.get("columnCount", existing["columnCount"]))
             return {"replies": [{}]}
-        return {"sheets": [{"properties": {"title": title}} for title in sorted(self.sheet_titles)]}
+        sheets = []
+        for index, title in enumerate(sorted(self.sheet_titles), start=1):
+            properties = self.sheet_properties.get(
+                title,
+                {"sheetId": index, "rowCount": 1000, "columnCount": 26},
+            )
+            sheets.append(
+                {
+                    "properties": {
+                        "title": title,
+                        "sheetId": properties["sheetId"],
+                        "gridProperties": {
+                            "rowCount": properties["rowCount"],
+                            "columnCount": properties["columnCount"],
+                        },
+                    }
+                }
+            )
+        return {"sheets": sheets}
 
 
 def test_google_sheet_review_queue_publishes_rows_and_reads_reviews() -> None:
@@ -1420,6 +1455,42 @@ def test_google_sheet_review_queue_replaces_large_snapshots_in_batches_before_cl
     assert update_ranges == ["'SQLite Backup'!A1:G500", "'SQLite Backup'!A501:G502"]
     assert service.values_obj.calls[-1][0] == "clear"
     assert service.values_obj.clear_kwargs["range"] == "'SQLite Backup'!A503:G601"
+
+
+def test_google_sheet_review_queue_expands_grid_before_large_replace_rows() -> None:
+    service = FakeSheetsService()
+    service.sheet_titles.add("Fund DB")
+    service.sheet_properties["Fund DB"] = {"sheetId": 42, "rowCount": 1000, "columnCount": 26}
+    headers = tuple(f"col_{index}" for index in range(15))
+    service.values_obj.get_responses.append({"values": [list(headers)]})
+    queue = GoogleSheetReviewQueue(service=service, spreadsheet_id="sheet_1")
+
+    count = queue.replace_rows(
+        sheet_tab="Fund DB",
+        headers=headers,
+        rows=[{header: f"{header}_{row_index}" for header in headers} for row_index in range(1168)],
+    )
+
+    assert count == 1168
+    resize_requests = [
+        request
+        for body in service.batch_update_bodies
+        for request in body["requests"]  # type: ignore[index]
+        if "updateSheetProperties" in request
+    ]
+    assert resize_requests == [
+        {
+            "updateSheetProperties": {
+                "properties": {
+                    "sheetId": 42,
+                    "gridProperties": {"rowCount": 1169, "columnCount": 26},
+                },
+                "fields": "gridProperties(rowCount,columnCount)",
+            }
+        }
+    ]
+    update_ranges = [kwargs["range"] for method, kwargs in service.values_obj.calls if method == "update"]
+    assert update_ranges[-1] == "'Fund DB'!A1001:O1169"
 
 
 def test_google_sheet_review_queue_supports_operator_console_tabs() -> None:

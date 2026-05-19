@@ -254,12 +254,16 @@ Backup Manifest
 tabs. Each `backup-export` run rewrites them as the latest snapshot, then clears
 stale tail rows only after the new snapshot has been written.
 
-`Investor DB` and `Fund DB` are also agent-owned. `sync-kvic-funds` rewrites them from SQLite
-`kvic_investor_managers` so humans can inspect investment managers, active fund
+`Investor DB` and `Fund DB` are also agent-owned. `sync-kvic-funds` rewrites
+them from SQLite `kvic_investor_managers`, `kvic_funds`, and
+`kvic_fund_descriptions` so humans can inspect investment managers, active fund
 counts, representative fund names, public KVIC amount/commitment, fund fields,
-and profile tags without opening SQLite. `research-investors` then enriches the
-same `Investor DB` from `investor_external_profiles` using public web search
-and Claude as an evidence encoder.
+profile tags, and fund-level descriptions without opening SQLite. When
+`ANTHROPIC_API_KEY` is configured, fund descriptions are encoded by Claude from
+selected public-search evidence; Hermes still publishes only evidence-matched
+source URLs. `research-investors` then enriches the same `Investor DB` from
+`investor_external_profiles` using public web search and Claude as an evidence
+encoder.
 
 `Investor DB` uses Korean sheet headers because it is a human-facing operator
 view:

@@ -14,3 +14,5 @@ build/
 terraform.tfvars
 *.tfvars
 .env
+.playwright-cli/
+apps_script/**/.clasp.json
