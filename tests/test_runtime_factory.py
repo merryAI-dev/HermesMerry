@@ -8,6 +8,7 @@ from merry_runtime.adapters.local_files import LocalFileObjectStore
 from merry_runtime.adapters.sminfo_playwright import SminfoPlaywrightClient
 from merry_runtime.adapters.sqlite_store import SQLiteStructuredStore
 from merry_runtime.adapters.slack import SlackNotifier
+from merry_runtime.adapters.web_search import DuckDuckGoSearchClient
 from merry_runtime.runtime_config import RuntimeConfig
 from merry_runtime.runtime_factory import build_runtime
 from merry_runtime.wiki_store import SQLiteWikiStore
@@ -297,6 +298,7 @@ def test_runtime_factory_builds_kvic_client_from_public_api_key(monkeypatch, tmp
     assert isinstance(runtime.kvic_client, KVICClient)
     assert runtime.kvic_client.api_key == "public-kvic-key"
     assert runtime.kvic_client.timeout_seconds == 7
+    assert isinstance(runtime.web_search_client, DuckDuckGoSearchClient)
 
 
 def test_runtime_factory_uses_sqlite_backup_runtime_without_google_clients(monkeypatch, tmp_path) -> None:

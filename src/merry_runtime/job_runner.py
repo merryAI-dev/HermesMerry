@@ -39,6 +39,7 @@ class RuntimeAdapters:
     sminfo_client: Any | None = None
     email_draft_client: Any | None = None
     kvic_client: Any | None = None
+    web_search_client: Any | None = None
 
 
 def run_job(
@@ -156,7 +157,11 @@ def run_job(
             structured_store=runtime.structured_store,
             client=runtime.kvic_client,
             review_queue=runtime.review_queue if config.review_sheet_id else None,
+            search_client=runtime.web_search_client,
             sync_interval_seconds=config.kvic_sync_interval_seconds,
+            fund_description_batch_limit=config.kvic_fund_description_batch_limit,
+            fund_description_stale_days=config.kvic_fund_description_stale_days,
+            fund_search_max_results=config.kvic_fund_search_max_results,
         )
         return {"job_name": job_name, **asdict(result)}
 

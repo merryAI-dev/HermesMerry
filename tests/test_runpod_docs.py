@@ -25,6 +25,8 @@ def test_runpod_runbook_contains_required_stop_conditions() -> None:
         "sync-kvic-funds",
         "KVIC_SYNC_INTERVAL_SECONDS=86400",
         "Investor DB",
+        "Fund DB",
+        "KVIC_FUND_DESCRIPTION_BATCH_LIMIT=50",
         "infra/terraform/runpod-staging.tfvars",
         "docker buildx build --platform linux/amd64",
         "docker.io/boram1220/hermes-merry:staging",
@@ -69,8 +71,12 @@ def test_runpod_sqlite_mode_is_documented_as_primary_runtime() -> None:
     assert "KVIC_API_KEY=" in env_example
     assert "KVIC_SYNC_INTERVAL_SECONDS=86400" in env_example
     assert "AGENT_LOOP_JOBS=sync-kvic-funds,crawl-sources,draft-outreach-emails,enrich-sminfo,backup-export" in env_example
+    assert "KVIC_FUND_DESCRIPTION_BATCH_LIMIT=50" in env_example
+    assert "KVIC_FUND_DESCRIPTION_STALE_DAYS=30" in env_example
+    assert "KVIC_FUND_SEARCH_MAX_RESULTS=5" in env_example
     assert "AGENT_LOOP_MAX_CYCLES=0" in env_example
     assert "sync-kvic-funds" in runbook
     assert "Investor DB" in runbook
+    assert "Fund DB" in runbook
     assert "BigQuery is optional" in runbook
     assert "STRUCTURED_STORE_BACKEND=bigquery" in runbook

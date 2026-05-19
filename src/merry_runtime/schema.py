@@ -220,6 +220,18 @@ BIGQUERY_TABLES: Final[dict[str, list[dict[str, str]]]] = {
         _field("raw_json", "STRING", "REQUIRED"),
         _field("collected_at", "TIMESTAMP", "REQUIRED"),
     ],
+    "kvic_fund_descriptions": [
+        _field("fund_id", "STRING", "REQUIRED"),
+        _field("description", "STRING"),
+        _field("source_title", "STRING"),
+        _field("source_url", "STRING"),
+        _field("source_snippet", "STRING"),
+        _field("search_query", "STRING"),
+        _field("status", "STRING", "REQUIRED"),
+        _field("error_message", "STRING"),
+        _field("collected_at", "TIMESTAMP", "REQUIRED"),
+        _field("updated_at", "TIMESTAMP", "REQUIRED"),
+    ],
     "kvic_investor_managers": [
         _field("manager_id", "STRING", "REQUIRED"),
         _field("manager_name", "STRING", "REQUIRED"),

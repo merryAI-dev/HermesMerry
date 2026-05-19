@@ -119,6 +119,10 @@ def _sync_kvic_funds(
         structured_store=runtime.structured_store,
         client=runtime.kvic_client,
         review_queue=runtime.review_queue if config.review_sheet_id else None,
+        search_client=runtime.web_search_client,
         sync_interval_seconds=0 if bool(payload.get("force")) else config.kvic_sync_interval_seconds,
+        fund_description_batch_limit=config.kvic_fund_description_batch_limit,
+        fund_description_stale_days=config.kvic_fund_description_stale_days,
+        fund_search_max_results=config.kvic_fund_search_max_results,
     )
     return {"job_name": "sync-kvic-funds", **asdict(result)}

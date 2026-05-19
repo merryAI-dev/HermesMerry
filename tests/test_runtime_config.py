@@ -25,6 +25,9 @@ def test_runtime_config_reads_required_environment(monkeypatch) -> None:
     monkeypatch.setenv("HERMES_AGENT_ID", "runpod-pod-1")
     monkeypatch.setenv("KVIC_API_KEY", "public-kvic-key")
     monkeypatch.setenv("KVIC_SYNC_INTERVAL_SECONDS", "86400")
+    monkeypatch.setenv("KVIC_FUND_DESCRIPTION_BATCH_LIMIT", "25")
+    monkeypatch.setenv("KVIC_FUND_DESCRIPTION_STALE_DAYS", "45")
+    monkeypatch.setenv("KVIC_FUND_SEARCH_MAX_RESULTS", "7")
 
     config = RuntimeConfig.from_env()
 
@@ -54,6 +57,9 @@ def test_runtime_config_reads_required_environment(monkeypatch) -> None:
     assert config.hermes_agent_id == "runpod-pod-1"
     assert config.kvic_api_key == "public-kvic-key"
     assert config.kvic_sync_interval_seconds == 86400
+    assert config.kvic_fund_description_batch_limit == 25
+    assert config.kvic_fund_description_stale_days == 45
+    assert config.kvic_fund_search_max_results == 7
 
 
 def test_runtime_config_requires_job_specific_fields(monkeypatch) -> None:
@@ -196,6 +202,18 @@ def test_runtime_config_accepts_sync_kvic_funds_with_daily_interval(monkeypatch,
 
     config.validate_for_job("sync-kvic-funds")
     assert config.kvic_sync_interval_seconds == 86400
+
+
+def test_runtime_config_bounds_kvic_fund_description_search_controls(monkeypatch) -> None:
+    monkeypatch.setenv("KVIC_FUND_DESCRIPTION_BATCH_LIMIT", "999")
+    monkeypatch.setenv("KVIC_FUND_DESCRIPTION_STALE_DAYS", "0")
+    monkeypatch.setenv("KVIC_FUND_SEARCH_MAX_RESULTS", "99")
+
+    config = RuntimeConfig.from_env()
+
+    assert config.kvic_fund_description_batch_limit == 100
+    assert config.kvic_fund_description_stale_days == 1
+    assert config.kvic_fund_search_max_results == 10
 
 
 def test_runtime_config_bounds_sminfo_batch_limit_to_site_safe_range(monkeypatch) -> None:

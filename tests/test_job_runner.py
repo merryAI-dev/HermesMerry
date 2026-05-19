@@ -34,6 +34,7 @@ def _runtime(tmp_path, store: FakeStructuredStore | None = None) -> RuntimeAdapt
         wiki_store=SQLiteWikiStore(root=tmp_path),
         gmail_source=None,
         kvic_client=object(),
+        web_search_client=object(),
     )
 
 
@@ -288,6 +289,9 @@ def test_run_sync_kvic_funds_routes_to_pipeline(monkeypatch, tmp_path) -> None:
         structured_store_backend="sqlite",
         kvic_api_key="public-key",
         kvic_sync_interval_seconds=86400,
+        kvic_fund_description_batch_limit=25,
+        kvic_fund_description_stale_days=45,
+        kvic_fund_search_max_results=7,
     )
 
     result = run_job("sync-kvic-funds", runtime=runtime, config=config)
@@ -296,7 +300,11 @@ def test_run_sync_kvic_funds_routes_to_pipeline(monkeypatch, tmp_path) -> None:
     assert result["fund_count"] == 2
     assert seen["client"] is runtime.kvic_client
     assert seen["review_queue"] is runtime.review_queue
+    assert seen["search_client"] is runtime.web_search_client
     assert seen["sync_interval_seconds"] == 86400
+    assert seen["fund_description_batch_limit"] == 25
+    assert seen["fund_description_stale_days"] == 45
+    assert seen["fund_search_max_results"] == 7
 
 
 def test_run_weekly_summary_includes_failures_reviews_and_resolution_events(tmp_path) -> None:

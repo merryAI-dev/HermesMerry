@@ -16,6 +16,10 @@ _SMINFO_BATCH_LIMIT_MAX = 20
 _OUTREACH_DRAFT_BATCH_LIMIT_MIN = 1
 _OUTREACH_DRAFT_BATCH_LIMIT_MAX = 20
 _KVIC_SYNC_INTERVAL_SECONDS_MIN = 86400
+_KVIC_FUND_DESCRIPTION_BATCH_LIMIT_MIN = 1
+_KVIC_FUND_DESCRIPTION_BATCH_LIMIT_MAX = 100
+_KVIC_FUND_SEARCH_MAX_RESULTS_MIN = 1
+_KVIC_FUND_SEARCH_MAX_RESULTS_MAX = 10
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,6 +65,9 @@ class RuntimeConfig:
     kvic_api_key: str = ""
     kvic_sync_interval_seconds: int = 86400
     kvic_request_timeout_seconds: int = 15
+    kvic_fund_description_batch_limit: int = 50
+    kvic_fund_description_stale_days: int = 30
+    kvic_fund_search_max_results: int = 5
 
     @classmethod
     def from_env(cls) -> RuntimeConfig:
@@ -120,6 +127,22 @@ class RuntimeConfig:
             kvic_request_timeout_seconds=max(
                 1,
                 _parse_int(os.getenv("KVIC_REQUEST_TIMEOUT_SECONDS", ""), default=15),
+            ),
+            kvic_fund_description_batch_limit=_parse_bounded_int(
+                os.getenv("KVIC_FUND_DESCRIPTION_BATCH_LIMIT", ""),
+                default=50,
+                minimum=_KVIC_FUND_DESCRIPTION_BATCH_LIMIT_MIN,
+                maximum=_KVIC_FUND_DESCRIPTION_BATCH_LIMIT_MAX,
+            ),
+            kvic_fund_description_stale_days=max(
+                1,
+                _parse_int(os.getenv("KVIC_FUND_DESCRIPTION_STALE_DAYS", ""), default=30),
+            ),
+            kvic_fund_search_max_results=_parse_bounded_int(
+                os.getenv("KVIC_FUND_SEARCH_MAX_RESULTS", ""),
+                default=5,
+                minimum=_KVIC_FUND_SEARCH_MAX_RESULTS_MIN,
+                maximum=_KVIC_FUND_SEARCH_MAX_RESULTS_MAX,
             ),
         )
 
@@ -227,6 +250,9 @@ class RuntimeConfig:
             "KVIC_API_KEY": self.kvic_api_key,
             "KVIC_SYNC_INTERVAL_SECONDS": str(self.kvic_sync_interval_seconds),
             "KVIC_REQUEST_TIMEOUT_SECONDS": str(self.kvic_request_timeout_seconds),
+            "KVIC_FUND_DESCRIPTION_BATCH_LIMIT": str(self.kvic_fund_description_batch_limit),
+            "KVIC_FUND_DESCRIPTION_STALE_DAYS": str(self.kvic_fund_description_stale_days),
+            "KVIC_FUND_SEARCH_MAX_RESULTS": str(self.kvic_fund_search_max_results),
         }[name]
 
 

@@ -16,6 +16,7 @@ from merry_runtime.adapters.local_files import LocalFileObjectStore
 from merry_runtime.adapters.sminfo_playwright import SminfoPlaywrightClient
 from merry_runtime.adapters.slack import SlackNotifier
 from merry_runtime.adapters.sqlite_store import SQLiteStructuredStore
+from merry_runtime.adapters.web_search import DuckDuckGoSearchClient
 from merry_runtime.job_runner import RuntimeAdapters
 from merry_runtime.runtime_config import RuntimeConfig, RuntimeConfigError
 from merry_runtime.wiki_store import SQLiteWikiStore
@@ -79,6 +80,7 @@ def build_runtime(
             if config.kvic_api_key
             else None
         ),
+        web_search_client=DuckDuckGoSearchClient(timeout_seconds=config.kvic_request_timeout_seconds),
     )
 
 

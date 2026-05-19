@@ -44,6 +44,9 @@ Cloud Run is optional and belongs to `docs/runbooks/staging-canary.md`.
 - `HERMES_AGENT_ID=runpod-hermes-staging`
 - `KVIC_API_KEY`
 - `KVIC_SYNC_INTERVAL_SECONDS=86400`
+- `KVIC_FUND_DESCRIPTION_BATCH_LIMIT=50`
+- `KVIC_FUND_DESCRIPTION_STALE_DAYS=30`
+- `KVIC_FUND_SEARCH_MAX_RESULTS=5`
 - `CRAWL_SHEET_TAB=Crawl Sources`
 - `CRAWL_TARGETS_JSON=[{"url":"https://thevc.kr/","source_kind":"thevc_investment_ma","max_cards":20}]`
 - `AGENT_LOOP_JOBS=sync-kvic-funds,crawl-sources,draft-outreach-emails,enrich-sminfo,backup-export`
@@ -139,6 +142,9 @@ HERMES_AGENT_ID: runpod-hermes-staging
 KVIC_API_KEY: Runpod secret or public KVIC fund-status API key
 KVIC_SYNC_INTERVAL_SECONDS: 86400
 KVIC_REQUEST_TIMEOUT_SECONDS: 15
+KVIC_FUND_DESCRIPTION_BATCH_LIMIT: 50
+KVIC_FUND_DESCRIPTION_STALE_DAYS: 30
+KVIC_FUND_SEARCH_MAX_RESULTS: 5
 CRAWL_SHEET_TAB: Crawl Sources
 CRAWL_TARGETS_JSON: [{"url":"https://thevc.kr/","source_kind":"thevc_investment_ma","max_cards":20}]
 AGENT_LOOP_JOBS: sync-kvic-funds,crawl-sources,draft-outreach-emails,enrich-sminfo,backup-export
@@ -226,6 +232,7 @@ Decision Log
 AC Settings
 Exploration Queue
 Investor DB
+Fund DB
 Run Log
 SQLite Backup
 Wiki Backup
@@ -236,7 +243,7 @@ Backup Manifest
 tabs. Each `backup-export` run rewrites them as the latest snapshot, then clears
 stale tail rows only after the new snapshot has been written.
 
-`Investor DB` is also agent-owned. `sync-kvic-funds` rewrites it from SQLite
+`Investor DB` and `Fund DB` are also agent-owned. `sync-kvic-funds` rewrites them from SQLite
 `kvic_investor_managers` so humans can inspect investment managers, active fund
 counts, representative fund names, active amount/commitment, fund fields, and
 profile tags without opening SQLite.
@@ -258,11 +265,39 @@ view:
 수집시각
 ```
 
+`Fund DB` is the fund-by-fund view. It is backed by `kvic_funds`,
+`kvic_fund_types`, and `kvic_fund_descriptions`; Hermes enriches it with bounded
+public web search results so humans can quickly see what each fund appears to
+focus on without treating the web summary as a source of truth. If web search
+does not return matching evidence, Hermes writes a conservative KVIC-field
+summary and leaves the source URL empty with `설명 상태` set to `no_result`.
+
+```text
+펀드명
+운용사
+펀드종류
+출자분야
+결성연도
+만기일
+운영상태
+펀드규모(억원)
+약정액(억원)
+펀드 설명
+설명 근거 제목
+설명 근거 URL
+설명 상태
+검색어
+수집시각
+```
+
 Runpod staging should delegate the refresh to Hermes every day:
 
 ```text
 AGENT_LOOP_JOBS=sync-kvic-funds,crawl-sources,draft-outreach-emails,enrich-sminfo,backup-export
 KVIC_SYNC_INTERVAL_SECONDS=86400
+KVIC_FUND_DESCRIPTION_BATCH_LIMIT=50
+KVIC_FUND_DESCRIPTION_STALE_DAYS=30
+KVIC_FUND_SEARCH_MAX_RESULTS=5
 ```
 
 Seed the `Crawl Sources` tab with at least:

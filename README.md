@@ -81,6 +81,9 @@ SLACK_BOT_TOKEN=xoxb-...
 KVIC_API_KEY=public-kvic-api-key
 KVIC_SYNC_INTERVAL_SECONDS=86400
 KVIC_REQUEST_TIMEOUT_SECONDS=15
+KVIC_FUND_DESCRIPTION_BATCH_LIMIT=50
+KVIC_FUND_DESCRIPTION_STALE_DAYS=30
+KVIC_FUND_SEARCH_MAX_RESULTS=5
 WIKI_ROOT=/home/hermes/hermes/wiki
 HERMES_AGENT_ID=runpod-hermes-staging
 CRAWL_SHEET_TAB=Crawl Sources
@@ -128,8 +131,14 @@ to the direct Gmail API client. `GMAIL_USER_ID` only applies to that direct
 fallback path.
 
 `sync-kvic-funds` reads the KVIC public fund-status API, stores
-`kvic_fund_types`, `kvic_funds`, and `kvic_investor_managers` in SQLite, then
-rewrites the `Investor DB` Sheet tab as the human-facing investor/fund cockpit.
+`kvic_fund_types`, `kvic_funds`, `kvic_investor_managers`, and
+`kvic_fund_descriptions` in SQLite, then rewrites the `Investor DB` and
+`Fund DB` Sheet tabs as the human-facing investor/fund cockpit. Fund
+descriptions are evidence-backed web-search projections: Hermes searches the
+public web for each fund, stores the selected title/URL/snippet in SQLite, and
+keeps the search batch bounded through `KVIC_FUND_DESCRIPTION_BATCH_LIMIT`.
+When public search has no matching evidence, Hermes still writes a conservative
+KVIC-field summary and marks the description status as `no_result`.
 
 To set up the Apps Script gateway, create a Google Apps Script project, copy
 `apps_script/gmail_draft_gateway/Code.gs` and `appsscript.json`, set script
