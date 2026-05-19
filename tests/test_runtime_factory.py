@@ -3,6 +3,7 @@ from merry_runtime.adapters.gcs import GCSObjectStore
 from merry_runtime.adapters.gmail import GmailLabelSource
 from merry_runtime.adapters.google_sheets import GoogleSheetReviewQueue
 from merry_runtime.adapters.local_files import LocalFileObjectStore
+from merry_runtime.adapters.sminfo_playwright import SminfoPlaywrightClient
 from merry_runtime.adapters.sqlite_store import SQLiteStructuredStore
 from merry_runtime.adapters.slack import SlackNotifier
 from merry_runtime.runtime_config import RuntimeConfig
@@ -135,6 +136,35 @@ def test_runtime_factory_uses_sqlite_structured_store_without_bigquery_client(mo
     assert isinstance(runtime.structured_store, SQLiteStructuredStore)
     assert runtime.structured_store.db_path == tmp_path / "mother.db"
     assert "google.cloud.bigquery" not in imported_modules
+
+
+def test_runtime_factory_builds_sminfo_client_only_when_credentials_are_configured(monkeypatch, tmp_path) -> None:
+    def fake_build(service_name: str, version: str):
+        return {"service": service_name, "version": version}
+
+    def fake_import(name: str):
+        return {"googleapiclient.discovery": type("Discovery", (), {"build": staticmethod(fake_build)})}[name]
+
+    config = RuntimeConfig(
+        project_id="",
+        dataset_id="",
+        raw_bucket="",
+        review_sheet_id="sheet-1",
+        wiki_root=tmp_path / "wiki",
+        object_store_backend="local",
+        raw_root=tmp_path / "raw",
+        structured_store_backend="sqlite",
+        mother_db_path=tmp_path / "mother.db",
+        sminfo_user_id="user",
+        sminfo_password="password",
+        sminfo_min_interval_seconds=35,
+    )
+
+    runtime = build_runtime(config, import_module=fake_import)
+
+    assert isinstance(runtime.sminfo_client, SminfoPlaywrightClient)
+    assert runtime.sminfo_client.user_id == "user"
+    assert runtime.sminfo_client.min_interval_seconds == 35
 
 
 def test_runtime_factory_uses_sqlite_backup_runtime_without_google_clients(monkeypatch, tmp_path) -> None:

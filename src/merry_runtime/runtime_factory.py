@@ -11,6 +11,7 @@ from merry_runtime.adapters.gcs import GCSObjectStore
 from merry_runtime.adapters.gmail import GmailLabelSource
 from merry_runtime.adapters.google_sheets import GoogleSheetReviewQueue
 from merry_runtime.adapters.local_files import LocalFileObjectStore
+from merry_runtime.adapters.sminfo_playwright import SminfoPlaywrightClient
 from merry_runtime.adapters.slack import SlackNotifier
 from merry_runtime.adapters.sqlite_store import SQLiteStructuredStore
 from merry_runtime.job_runner import RuntimeAdapters
@@ -52,6 +53,15 @@ def build_runtime(
         notifier=notifier,
         wiki_store=SQLiteWikiStore(root=config.wiki_root),
         gmail_source=GmailLabelSource(service=gmail_service, user_id="me", label_id=config.gmail_label_id) if gmail_service else None,
+        sminfo_client=(
+            SminfoPlaywrightClient(
+                user_id=config.sminfo_user_id,
+                password=config.sminfo_password,
+                min_interval_seconds=config.sminfo_min_interval_seconds,
+            )
+            if config.sminfo_user_id and config.sminfo_password
+            else None
+        ),
     )
 
 

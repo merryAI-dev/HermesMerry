@@ -42,6 +42,17 @@ def test_mcp_server_enforces_schema_types_enums_lengths_and_extra_fields() -> No
         slack_server.call_tool("send_slack_summary", {"summary": "x" * 3001})
 
 
+def test_mcp_server_enforces_integer_bounds_for_sminfo_enrichment() -> None:
+    server = MerryMCPServer(handlers={"enrich_sminfo_candidates": lambda payload: {"ok": True}})
+
+    with pytest.raises(MCPPayloadError, match="must be integer"):
+        server.call_tool("enrich_sminfo_candidates", {"max_items": "20"})
+    with pytest.raises(MCPPayloadError, match="too small"):
+        server.call_tool("enrich_sminfo_candidates", {"max_items": 0})
+    with pytest.raises(MCPPayloadError, match="too large"):
+        server.call_tool("enrich_sminfo_candidates", {"max_items": 21})
+
+
 def test_mcp_server_calls_registered_handler() -> None:
     seen_payloads = []
     server = MerryMCPServer(handlers={"record_review_feedback": lambda payload: seen_payloads.append(payload) or {"ok": True}})

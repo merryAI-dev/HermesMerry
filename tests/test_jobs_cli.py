@@ -204,6 +204,40 @@ def test_jobs_cli_runs_backup_export(monkeypatch, tmp_path, capsys) -> None:
     assert output["manifest_path"] == "backup/manifest.json"
 
 
+def test_jobs_cli_runs_enrich_sminfo(monkeypatch, tmp_path, capsys) -> None:
+    config = RuntimeConfig(
+        project_id="",
+        dataset_id="",
+        raw_bucket="",
+        review_sheet_id="sheet-1",
+        wiki_root=tmp_path / "wiki",
+        mother_db_path=tmp_path / "mother.db",
+        structured_store_backend="sqlite",
+        sminfo_user_id="user",
+        sminfo_password="password",
+    )
+    runtime = RuntimeAdapters(
+        object_store=FakeObjectStore(bucket="raw-bucket"),
+        structured_store=FakeStructuredStore(),
+        review_queue=FakeReviewQueue(),
+        wiki_store=SQLiteWikiStore(root=tmp_path / "wiki"),
+    )
+
+    monkeypatch.setattr("merry_runtime.jobs.RuntimeConfig.from_env", lambda: config)
+    monkeypatch.setattr("merry_runtime.jobs.build_runtime", lambda config: runtime)
+    monkeypatch.setattr(
+        "merry_runtime.jobs.run_job",
+        lambda job_name, **kwargs: {"job_name": job_name, "processed_count": 1, "matched_count": 1},
+    )
+
+    exit_code = main(["run", "enrich-sminfo"])
+
+    output = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert output["job_name"] == "enrich-sminfo"
+    assert output["matched_count"] == 1
+
+
 def test_jobs_cli_persists_unexpected_job_failure_after_runtime_creation(monkeypatch, tmp_path, capsys) -> None:
     config = RuntimeConfig(
         project_id="project-1",

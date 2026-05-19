@@ -64,10 +64,18 @@ class MerryMCPServer:
         field_type = field_schema.get("type")
         if field_type == "string" and not isinstance(value, str):
             raise MCPPayloadError(f"{name}.{field} must be string")
+        if field_type == "integer" and (not isinstance(value, int) or isinstance(value, bool)):
+            raise MCPPayloadError(f"{name}.{field} must be integer")
         if field_type == "object" and not isinstance(value, dict):
             raise MCPPayloadError(f"{name}.{field} must be object")
         if field_type == "array" and not isinstance(value, list):
             raise MCPPayloadError(f"{name}.{field} must be array")
+        minimum = field_schema.get("minimum")
+        if minimum is not None and isinstance(value, int) and not isinstance(value, bool) and value < int(minimum):
+            raise MCPPayloadError(f"{name}.{field} is too small: {value} < {minimum}")
+        maximum = field_schema.get("maximum")
+        if maximum is not None and isinstance(value, int) and not isinstance(value, bool) and value > int(maximum):
+            raise MCPPayloadError(f"{name}.{field} is too large: {value} > {maximum}")
         max_items = field_schema.get("maxItems")
         if max_items is not None and isinstance(value, list) and len(value) > int(max_items):
             raise MCPPayloadError(f"{name}.{field} has too many items: {len(value)} > {max_items}")

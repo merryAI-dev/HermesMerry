@@ -122,8 +122,28 @@ def test_dockerfile_uses_runpod_entrypoint_before_jobs_cli() -> None:
     dockerfile = (REPO_ROOT / "Dockerfile").read_text()
 
     assert "COPY scripts/runpod_entrypoint.sh /usr/local/bin/runpod-entrypoint" in dockerfile
+    assert "ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright" in dockerfile
+    assert "python -m playwright install --with-deps chromium" in dockerfile
+    assert "chown -R hermes:hermes /ms-playwright" in dockerfile
     assert 'ENTRYPOINT ["runpod-entrypoint", "python3", "-m", "merry_runtime.jobs"]' in dockerfile
     assert 'CMD ["loop"]' in dockerfile
+
+
+def test_runtime_requirements_include_playwright_for_sminfo_browser_adapter() -> None:
+    pyproject = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text())
+
+    assert "playwright==1.60.0" in pyproject["project"]["dependencies"]
+    assert "playwright==1.60.0" in (REPO_ROOT / "requirements.in").read_text().splitlines()
+    assert _lock_has_hash_locked_requirement(REPO_ROOT / "requirements.lock", "playwright", "1.60.0")
+
+
+def test_runpod_env_documents_sminfo_enrichment_controls() -> None:
+    env_example = (REPO_ROOT / "configs" / "runpod.env.example").read_text()
+
+    assert "SMINFO_USER_ID=" in env_example
+    assert "SMINFO_PASSWORD=" in env_example
+    assert "SMINFO_MIN_INTERVAL_SECONDS=35" in env_example
+    assert "SMINFO_BATCH_LIMIT=20" in env_example
 
 
 def test_ghcr_build_script_pushes_linux_amd64_staging_image() -> None:

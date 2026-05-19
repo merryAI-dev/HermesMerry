@@ -13,6 +13,7 @@ def test_bigquery_schema_contains_required_mother_tables() -> None:
         "reviews",
         "ac_scoring_coefficients",
         "agent_runs",
+        "sminfo_company_profiles",
     }.issubset(BIGQUERY_TABLES.keys())
 
 
@@ -89,4 +90,32 @@ def test_ac_scoring_coefficients_schema_covers_priority_model_fields() -> None:
         "model_version",
         "corpus_hash",
         "updated_at",
+    }.issubset(fields)
+
+
+def test_sminfo_company_profiles_schema_captures_government_enrichment() -> None:
+    fields = table_field_names("sminfo_company_profiles")
+
+    assert {
+        "profile_id",
+        "requested_company",
+        "match_status",
+        "matched_company",
+        "representative",
+        "company_type",
+        "established_at",
+        "road_address",
+        "homepage",
+        "main_products",
+        "standard_industry",
+        "info_updated_at",
+        "latest_financial_year",
+        "revenue_krw_thousand",
+        "operating_income_krw_thousand",
+        "net_income_krw_thousand",
+        "total_assets_krw_thousand",
+        "sminfo_url",
+        "raw_json",
+        "error_message",
+        "collected_at",
     }.issubset(fields)

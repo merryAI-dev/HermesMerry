@@ -12,6 +12,11 @@ def test_runtime_config_reads_required_environment(monkeypatch) -> None:
     monkeypatch.setenv("GMAIL_LABEL_ID", "Label_123")
     monkeypatch.setenv("AC_ID", "ac_climate")
     monkeypatch.setenv("WIKI_ROOT", "/tmp/wiki")
+    monkeypatch.setenv("SMINFO_USER_ID", "sminfo-user")
+    monkeypatch.setenv("SMINFO_PASSWORD", "sminfo-password")
+    monkeypatch.setenv("SMINFO_MIN_INTERVAL_SECONDS", "35")
+    monkeypatch.setenv("SMINFO_BATCH_LIMIT", "20")
+    monkeypatch.setenv("SMINFO_STALE_DAYS", "30")
 
     config = RuntimeConfig.from_env()
 
@@ -28,6 +33,11 @@ def test_runtime_config_reads_required_environment(monkeypatch) -> None:
     assert str(config.mother_db_path) == "/workspace/hermes/mother.db"
     assert str(config.backup_root) == "/workspace/hermes/backups"
     assert config.bigquery_write_mode == "merge"
+    assert config.sminfo_user_id == "sminfo-user"
+    assert config.sminfo_password == "sminfo-password"
+    assert config.sminfo_min_interval_seconds == 35
+    assert config.sminfo_batch_limit == 20
+    assert config.sminfo_stale_days == 30
 
 
 def test_runtime_config_requires_job_specific_fields(monkeypatch) -> None:
@@ -106,6 +116,28 @@ def test_runtime_config_accepts_crawl_sources_with_configured_targets(monkeypatc
 
     config.validate_for_job("crawl-sources", has_inline_sources=False)
     assert config.crawl_targets_json.startswith("[")
+
+
+def test_runtime_config_requires_sminfo_credentials_and_review_sheet(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("STRUCTURED_STORE_BACKEND", "sqlite")
+    monkeypatch.setenv("MOTHER_DB_PATH", str(tmp_path / "mother.db"))
+
+    config = RuntimeConfig.from_env()
+
+    with pytest.raises(RuntimeConfigError) as error:
+        config.validate_for_job("enrich-sminfo")
+
+    assert "REVIEW_SHEET_ID" in str(error.value)
+    assert "SMINFO_USER_ID" in str(error.value)
+    assert "SMINFO_PASSWORD" in str(error.value)
+
+
+def test_runtime_config_bounds_sminfo_batch_limit_to_site_safe_range(monkeypatch) -> None:
+    monkeypatch.setenv("SMINFO_BATCH_LIMIT", "999")
+    assert RuntimeConfig.from_env().sminfo_batch_limit == 20
+
+    monkeypatch.setenv("SMINFO_BATCH_LIMIT", "0")
+    assert RuntimeConfig.from_env().sminfo_batch_limit == 1
 
 
 def test_runtime_config_reads_sqlite_structured_store_paths(monkeypatch, tmp_path) -> None:

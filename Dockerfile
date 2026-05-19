@@ -2,6 +2,7 @@ FROM python:3.12-slim@sha256:bf73779de6dbd030f3d189eeeb246286965832761ace318c151
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
 WORKDIR /app
 
@@ -9,6 +10,7 @@ RUN useradd --create-home --shell /usr/sbin/nologin hermes
 
 COPY requirements.lock ./
 RUN pip install --no-cache-dir --require-hashes -r requirements.lock
+RUN python -m playwright install --with-deps chromium && chown -R hermes:hermes /ms-playwright
 
 COPY pyproject.toml README.md ./
 COPY src ./src

@@ -45,6 +45,21 @@ _TOOLS = {
             },
         },
     ),
+    "enrich_sminfo_candidates": MCPToolContract(
+        name="enrich_sminfo_candidates",
+        description="Enrich bounded Candidate Detail companies from the SMINFO government company profile site.",
+        side_effect_scope="sminfo_sheets_sqlite",
+        input_schema={
+            "type": "object",
+            "required": [],
+            "additionalProperties": False,
+            "properties": {
+                "max_items": {"type": "integer", "minimum": 1, "maximum": 20},
+                "company_names": {"type": "array", "items": {"type": "string"}, "maxItems": 20},
+                "reason": {"type": "string", "maxLength": 1000},
+            },
+        },
+    ),
     "upsert_entity_signal": MCPToolContract(
         name="upsert_entity_signal",
         description="Create or merge a Mother DB entity and attach evidence-backed signals.",

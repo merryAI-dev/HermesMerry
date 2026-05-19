@@ -5,6 +5,7 @@ def test_mcp_registry_exposes_only_domain_tools() -> None:
     assert set(allowed_tool_names()) == {
         "ingest_raw_source",
         "crawl_public_sources",
+        "enrich_sminfo_candidates",
         "upsert_entity_signal",
         "enqueue_candidate_card",
         "record_review_feedback",
@@ -24,3 +25,13 @@ def test_crawl_public_sources_tool_accepts_bounded_public_targets() -> None:
     assert tool.side_effect_scope == "public_web_sqlite_wiki"
     assert tool.input_schema["required"] == ["targets"]
     assert tool.input_schema["properties"]["targets"]["type"] == "array"
+
+
+def test_enrich_sminfo_candidates_tool_is_bounded_to_candidate_names() -> None:
+    tool = TOOL_REGISTRY["enrich_sminfo_candidates"]
+
+    assert tool.side_effect_scope == "sminfo_sheets_sqlite"
+    assert tool.input_schema["additionalProperties"] is False
+    assert tool.input_schema["properties"]["max_items"]["maximum"] == 20
+    assert tool.input_schema["properties"]["company_names"]["maxItems"] == 20
+    assert "url" not in tool.input_schema["properties"]

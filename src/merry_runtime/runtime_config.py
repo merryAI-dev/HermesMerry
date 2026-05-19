@@ -11,6 +11,8 @@ class RuntimeConfigError(ValueError):
 
 _BIGQUERY_WRITE_MODES = {"merge", "append"}
 _STRUCTURED_STORE_BACKENDS = {"sqlite", "bigquery"}
+_SMINFO_BATCH_LIMIT_MIN = 1
+_SMINFO_BATCH_LIMIT_MAX = 20
 
 
 @dataclass(frozen=True, slots=True)
@@ -41,6 +43,11 @@ class RuntimeConfig:
     )
     agent_loop_interval_seconds: int = 3600
     agent_loop_max_cycles: int = 0
+    sminfo_user_id: str = ""
+    sminfo_password: str = ""
+    sminfo_min_interval_seconds: int = 35
+    sminfo_batch_limit: int = 20
+    sminfo_stale_days: int = 30
 
     @classmethod
     def from_env(cls) -> RuntimeConfig:
@@ -64,6 +71,19 @@ class RuntimeConfig:
             agent_loop_jobs=_parse_jobs(os.getenv("AGENT_LOOP_JOBS", "")),
             agent_loop_interval_seconds=_parse_int(os.getenv("AGENT_LOOP_INTERVAL_SECONDS", ""), default=3600),
             agent_loop_max_cycles=_parse_int(os.getenv("AGENT_LOOP_MAX_CYCLES", ""), default=0),
+            sminfo_user_id=os.getenv("SMINFO_USER_ID", ""),
+            sminfo_password=os.getenv("SMINFO_PASSWORD", ""),
+            sminfo_min_interval_seconds=max(
+                35,
+                _parse_int(os.getenv("SMINFO_MIN_INTERVAL_SECONDS", ""), default=35),
+            ),
+            sminfo_batch_limit=_parse_bounded_int(
+                os.getenv("SMINFO_BATCH_LIMIT", ""),
+                default=20,
+                minimum=_SMINFO_BATCH_LIMIT_MIN,
+                maximum=_SMINFO_BATCH_LIMIT_MAX,
+            ),
+            sminfo_stale_days=_parse_int(os.getenv("SMINFO_STALE_DAYS", ""), default=30),
         )
 
     def validate_for_job(self, job_name: str, *, has_inline_sources: bool = False) -> None:
@@ -96,6 +116,8 @@ class RuntimeConfig:
             required.append("SLACK_CHANNEL")
         elif job_name == "backup-export":
             required.extend(["MOTHER_DB_PATH", "BACKUP_ROOT"])
+        elif job_name == "enrich-sminfo":
+            required.extend(["REVIEW_SHEET_ID", "SMINFO_USER_ID", "SMINFO_PASSWORD"])
         elif job_name == "resolve-entities":
             pass
         else:
@@ -148,6 +170,8 @@ class RuntimeConfig:
             "CRAWL_SHEET_TAB": self.crawl_sheet_tab,
             "AC_ID": self.default_ac_id,
             "RAW_ROOT": str(self.raw_root),
+            "SMINFO_USER_ID": self.sminfo_user_id,
+            "SMINFO_PASSWORD": self.sminfo_password,
         }[name]
 
 
@@ -180,3 +204,8 @@ def _parse_int(value: str, *, default: int) -> int:
     if not value.strip():
         return default
     return int(value)
+
+
+def _parse_bounded_int(value: str, *, default: int, minimum: int, maximum: int) -> int:
+    parsed = _parse_int(value, default=default)
+    return min(max(parsed, minimum), maximum)

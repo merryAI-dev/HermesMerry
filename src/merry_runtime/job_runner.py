@@ -11,6 +11,7 @@ from merry_runtime.adapters.interfaces import Notifier, ObjectStore, ReviewQueue
 from merry_runtime.pipelines.backup_export import backup_export
 from merry_runtime.pipelines.calibrate_scores import calibrate_scores
 from merry_runtime.pipelines.crawl_sources import crawl_sources
+from merry_runtime.pipelines.enrich_sminfo import enrich_sminfo_candidates
 from merry_runtime.pipelines.ingest_ac_profiles import ingest_ac_profiles
 from merry_runtime.pipelines.ingest_sources import ingest_sources
 from merry_runtime.pipelines.resolve_entities import resolve_entities
@@ -33,6 +34,7 @@ class RuntimeAdapters:
     notifier: Notifier | None = None
     wiki_store: SQLiteWikiStore | None = None
     gmail_source: Any | None = None
+    sminfo_client: Any | None = None
 
 
 def run_job(
@@ -114,6 +116,19 @@ def run_job(
             backup_root=config.backup_root,
             wiki_root=config.wiki_root,
             review_queue=runtime.review_queue if config.review_sheet_id else None,
+        )
+        return {"job_name": job_name, **asdict(result)}
+
+    if job_name == "enrich-sminfo":
+        if runtime.sminfo_client is None:
+            raise JobRunError("enrich-sminfo requires a configured SMINFO client")
+        result = enrich_sminfo_candidates(
+            review_queue=runtime.review_queue,
+            structured_store=runtime.structured_store,
+            client=runtime.sminfo_client,
+            max_items=config.sminfo_batch_limit,
+            min_interval_seconds=config.sminfo_min_interval_seconds,
+            stale_days=config.sminfo_stale_days,
         )
         return {"job_name": job_name, **asdict(result)}
 
