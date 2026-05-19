@@ -153,6 +153,31 @@ def test_enrich_sminfo_candidates_skips_fresh_terminal_profiles() -> None:
     assert client.seen == []
 
 
+def test_enrich_sminfo_candidates_skips_header_placeholder_company_rows() -> None:
+    queue = FakeReviewQueue()
+    queue.seed_reviews(
+        "Candidate Detail",
+        [
+            {"company": "기업명", "homepage": ""},
+            {"company": "에이아이오", "representative": "권진형"},
+        ],
+    )
+    store = FakeStructuredStore()
+    client = FakeSminfoClient()
+
+    result = enrich_sminfo_candidates(
+        review_queue=queue,
+        structured_store=store,
+        client=client,
+        max_items=1,
+        min_interval_seconds=35,
+        run_id="run_sminfo_skip_placeholder",
+    )
+
+    assert result.processed_count == 1
+    assert client.seen[0][0] == "에이아이오"
+
+
 def test_enrich_sminfo_candidates_rechecks_stale_terminal_profiles() -> None:
     queue = FakeReviewQueue()
     queue.seed_reviews(

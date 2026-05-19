@@ -720,6 +720,78 @@ def test_google_sheet_review_queue_upserts_existing_row_by_key() -> None:
     assert service.values_obj.update_body["values"][0][9] == "AI workflow automation"  # type: ignore[index]
 
 
+def test_google_sheet_review_queue_skips_korean_display_label_row_when_reading_candidates() -> None:
+    service = FakeSheetsService()
+    service.sheet_titles.add("Candidate Detail")
+    headers = list(OPERATOR_CONSOLE_HEADERS["Candidate Detail"])
+    labels = [""] * len(headers)
+    labels[headers.index("company")] = "기업명"
+    labels[headers.index("representative")] = "대표자"
+    service.values_obj.get_responses.append(
+        {
+            "values": [
+                headers,
+                labels,
+                [
+                    "2026-05-19T00:00:00+00:00",
+                    "에이아이오",
+                    "에이아이오",
+                    "권진형",
+                    "https://the-aio.com/",
+                ],
+            ]
+        }
+    )
+    queue = GoogleSheetReviewQueue(service=service, spreadsheet_id="sheet_1")
+
+    rows = queue.read_pending_reviews(sheet_tab="Candidate Detail")
+
+    assert [row["company"] for row in rows] == ["에이아이오"]
+    assert rows[0]["representative"] == "권진형"
+
+
+def test_google_sheet_review_queue_rewrites_below_korean_display_label_row() -> None:
+    service = FakeSheetsService()
+    service.sheet_titles.add("Candidate Detail")
+    headers = list(OPERATOR_CONSOLE_HEADERS["Candidate Detail"])
+    labels = [""] * len(headers)
+    labels[headers.index("company")] = "기업명"
+    labels[headers.index("representative")] = "대표자"
+    existing_row = [
+        "2026-05-18T00:00:00+00:00",
+        "에이아이오",
+        "에이아이오",
+        "권진형",
+        "https://the-aio.com/",
+    ]
+    service.values_obj.get_responses.extend(
+        [
+            {"values": [headers, labels]},
+            {"values": [headers, labels, existing_row]},
+        ]
+    )
+    queue = GoogleSheetReviewQueue(service=service, spreadsheet_id="sheet_1")
+
+    queue.upsert_cards(
+        sheet_tab="Candidate Detail",
+        rows=[
+            {
+                "company": "에이아이오",
+                "homepage": "https://the-aio.com/",
+                "sminfo_status": "matched",
+                "sminfo_company": "(주)에이아이오",
+            }
+        ],
+        key_fields=("company", "homepage"),
+    )
+
+    assert service.values_obj.update_kwargs["range"] == "'Candidate Detail'!A1:AF3"
+    rewritten = service.values_obj.update_body["values"]  # type: ignore[index]
+    assert rewritten[1][headers.index("company")] == "기업명"
+    assert rewritten[2][headers.index("company")] == "에이아이오"
+    assert rewritten[2][headers.index("sminfo_company")] == "(주)에이아이오"
+
+
 def test_google_sheet_review_queue_migrates_candidate_detail_from_entity_id_schema() -> None:
     service = FakeSheetsService()
     service.sheet_titles.add("Candidate Detail")

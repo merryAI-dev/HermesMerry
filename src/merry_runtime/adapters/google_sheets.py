@@ -218,6 +218,67 @@ OPERATOR_CONSOLE_HEADERS: dict[str, tuple[str, ...]] = {
         "error_message",
     ),
 }
+OPERATOR_CONSOLE_LABELS: dict[str, dict[str, str]] = {
+    "Candidate Detail": {
+        "collected_at": "수집시각",
+        "company": "기업명",
+        "normalized_name": "정규화명",
+        "representative": "대표자",
+        "homepage": "홈페이지",
+        "contact_email": "연락처 이메일",
+        "region": "지역",
+        "industry": "산업",
+        "summary": "요약",
+        "business_model": "비즈니스모델",
+        "investment_round": "투자 단계",
+        "investment_amount": "투자 금액",
+        "investor": "투자자",
+        "latest_score": "최근 점수",
+        "priority_probability": "우선검토 확률",
+        "queue_type": "큐 유형",
+        "recommended_action": "추천 액션",
+        "status": "상태",
+        "wiki_path": "위키 경로",
+        "sminfo_status": "중기현황 상태",
+        "sminfo_company": "중기현황 기업명",
+        "sminfo_latest_financial_year": "최근 결산연도",
+        "sminfo_revenue_krw_thousand": "매출액(천원)",
+        "sminfo_operating_income_krw_thousand": "영업이익(천원)",
+        "sminfo_net_income_krw_thousand": "당기순이익(천원)",
+        "sminfo_total_assets_krw_thousand": "총자산(천원)",
+        "sminfo_shareholder_composition": "주주 구성",
+        "sminfo_largest_shareholder": "최대주주",
+        "sminfo_largest_shareholder_ratio_pct": "최대주주 지분율(%)",
+        "sminfo_error_message": "중기현황 오류",
+        "sminfo_profile_url": "중기현황 URL",
+        "sminfo_collected_at": "중기현황 수집시각",
+    },
+    "SMINFO Enrichment": {
+        "collected_at": "수집시각",
+        "requested_company": "요청 기업명",
+        "match_status": "매칭 상태",
+        "matched_company": "매칭 기업명",
+        "representative": "대표자",
+        "company_type": "기업형태",
+        "established_at": "설립일",
+        "road_address": "도로명주소",
+        "homepage": "홈페이지",
+        "main_products": "주생산품",
+        "standard_industry": "표준산업",
+        "info_updated_at": "정보수정일자",
+        "latest_financial_year": "최근 결산연도",
+        "revenue_krw_thousand": "매출액(천원)",
+        "operating_income_krw_thousand": "영업이익(천원)",
+        "net_income_krw_thousand": "당기순이익(천원)",
+        "total_assets_krw_thousand": "총자산(천원)",
+        "shareholder_composition": "주주 구성",
+        "largest_shareholder": "최대주주",
+        "largest_shareholder_ratio_pct": "최대주주 지분율(%)",
+        "shareholder_count": "주주 수",
+        "sminfo_url": "중기현황 URL",
+        "error_message": "오류",
+    },
+}
 SHEET_OWNED_UPDATE_FIELDS: dict[str, set[str]] = {
     "Candidate Detail": {"latest_score", "priority_probability", "status"},
 }
@@ -269,13 +330,14 @@ class GoogleSheetReviewQueue:
         ).execute()
         existing_values = existing_response.get("values", [])
         existing_row_count = len(existing_values)
+        preamble = _sheet_preamble(sheet_tab=sheet_tab, headers=headers, existing_values=existing_values)
         rewrite_projection = header_state.replaced_schema or _has_legacy_candidate_detail_rows(
             sheet_tab=sheet_tab,
             headers=headers,
             existing_values=existing_values,
         )
         if rewrite_projection:
-            existing_values = [list(headers)]
+            existing_values = [list(row) for row in preamble]
         if len(key_fields) > 1 or rewrite_projection:
             compacted_rows = _compact_sheet_rows(
                 sheet_tab=sheet_tab,
@@ -284,7 +346,7 @@ class GoogleSheetReviewQueue:
                 incoming_rows=deduped_rows,
                 key_fields=key_fields,
             )
-            rewritten_values = [list(headers), *[_row_values(row, headers) for row in compacted_rows]]
+            rewritten_values = [*preamble, *[_row_values(row, headers) for row in compacted_rows]]
             self.service.spreadsheets().values().update(
                 spreadsheetId=self.spreadsheet_id,
                 range=_sheet_range_rows(sheet_tab, headers, start_row=1, end_row=len(rewritten_values)),
@@ -304,7 +366,12 @@ class GoogleSheetReviewQueue:
                 ).execute()
             return len(deduped_rows)
 
-        existing_index = _existing_row_index(existing_values=existing_values, headers=headers, key_fields=key_fields)
+        existing_index = _existing_row_index(
+            sheet_tab=sheet_tab,
+            existing_values=existing_values,
+            headers=headers,
+            key_fields=key_fields,
+        )
 
         append_rows: list[dict[str, object]] = []
         for row in deduped_rows:
@@ -374,7 +441,10 @@ class GoogleSheetReviewQueue:
         if not values:
             return []
         headers = [str(header) for header in values[0]]
-        return [dict(zip(headers, [str(value) for value in row], strict=False)) for row in values[1:]]
+        return [
+            dict(zip(headers, [str(value) for value in row], strict=False))
+            for row in _data_value_rows(sheet_tab=sheet_tab, headers=tuple(headers), existing_values=values)
+        ]
 
     def _ensure_headers(self, *, sheet_tab: str) -> tuple[str, ...]:
         return self._ensure_headers_state(sheet_tab=sheet_tab).headers
@@ -384,7 +454,7 @@ class GoogleSheetReviewQueue:
         headers = _headers_for_tab(sheet_tab)
         response = self.service.spreadsheets().values().get(
             spreadsheetId=self.spreadsheet_id,
-            range=f"{_sheet_name(sheet_tab)}!1:1",
+            range=f"{_sheet_name(sheet_tab)}!1:2",
         ).execute()
         header_rows = response.get("values") or [[]]
         existing = [str(header) for header in header_rows[0]]
@@ -483,6 +553,81 @@ def _row_values(row: dict[str, object], headers: tuple[str, ...], *, escape_form
     return [_safe_cell_value(value) for value in values]
 
 
+def _sheet_preamble(
+    *,
+    sheet_tab: str,
+    headers: tuple[str, ...],
+    existing_values: list[list[object]],
+) -> list[list[object]]:
+    preamble: list[list[object]] = [list(headers)]
+    label_row = _existing_display_label_row(sheet_tab=sheet_tab, headers=headers, existing_values=existing_values)
+    if label_row is not None:
+        preamble.append(label_row)
+    return preamble
+
+
+def _data_value_rows(
+    *,
+    sheet_tab: str,
+    headers: tuple[str, ...],
+    existing_values: list[list[object]],
+) -> list[list[object]]:
+    data_rows: list[list[object]] = []
+    for values in existing_values[1:]:
+        if _is_display_label_row(sheet_tab=sheet_tab, headers=headers, values=values):
+            continue
+        data_rows.append(values)
+    return data_rows
+
+
+def _existing_display_label_row(
+    *,
+    sheet_tab: str,
+    headers: tuple[str, ...],
+    existing_values: list[list[object]],
+) -> list[object] | None:
+    if len(existing_values) < 2:
+        return None
+    values = existing_values[1]
+    if not _is_display_label_row(sheet_tab=sheet_tab, headers=headers, values=values):
+        return None
+    return _effective_display_label_row(sheet_tab=sheet_tab, headers=headers, existing=values)
+
+
+def _is_display_label_row(*, sheet_tab: str, headers: tuple[str, ...], values: list[object]) -> bool:
+    expected = _display_label_row(sheet_tab=sheet_tab, headers=headers)
+    if expected is None:
+        return False
+    matches = 0
+    for index, value in enumerate(values):
+        if index >= len(expected):
+            break
+        if str(value or "").strip() and str(value or "").strip() == expected[index]:
+            matches += 1
+    return matches > 0
+
+
+def _effective_display_label_row(
+    *,
+    sheet_tab: str,
+    headers: tuple[str, ...],
+    existing: list[object],
+) -> list[object]:
+    expected = _display_label_row(sheet_tab=sheet_tab, headers=headers) or [""] * len(headers)
+    effective: list[object] = []
+    for index, fallback in enumerate(expected):
+        value = existing[index] if index < len(existing) else ""
+        effective.append(value if not _is_blank(value) else fallback)
+    return effective
+
+
+def _display_label_row(*, sheet_tab: str, headers: tuple[str, ...]) -> list[str] | None:
+    labels = OPERATOR_CONSOLE_LABELS.get(sheet_tab)
+    if labels is None:
+        return None
+    return [labels.get(header, "") for header in headers]
+
+
 def _has_legacy_candidate_detail_rows(
     *,
     sheet_tab: str,
@@ -491,7 +636,7 @@ def _has_legacy_candidate_detail_rows(
 ) -> bool:
     if sheet_tab != "Candidate Detail" or not existing_values:
         return False
-    for values in existing_values[1:]:
+    for values in _data_value_rows(sheet_tab=sheet_tab, headers=headers, existing_values=existing_values):
         row = dict(zip(headers, values, strict=False))
         if _is_blank(row.get("company", "")):
             continue
@@ -505,6 +650,7 @@ def _has_legacy_candidate_detail_rows(
 
 def _existing_row_index(
     *,
+    sheet_tab: str,
     existing_values: list[list[object]],
     headers: tuple[str, ...],
     key_fields: tuple[str, ...],
@@ -513,6 +659,8 @@ def _existing_row_index(
         return {}
     row_index: dict[tuple[str, str], tuple[int, dict[str, object]]] = {}
     for sheet_row_number, values in enumerate(existing_values[1:], start=2):
+        if _is_display_label_row(sheet_tab=sheet_tab, headers=headers, values=values):
+            continue
         row = dict(zip(headers, values, strict=False))
         key = _row_key(row, key_fields=key_fields)
         if key and key not in row_index:
@@ -552,7 +700,7 @@ def _compact_sheet_rows(
     compacted: list[dict[str, object]] = []
     key_to_index: dict[tuple[str, str], int] = {}
 
-    for values in existing_values[1:]:
+    for values in _data_value_rows(sheet_tab=sheet_tab, headers=headers, existing_values=existing_values):
         row = _clean_known_bad_cells(dict(zip(headers, values, strict=False)))
         key = _first_existing_key(row=row, key_fields=key_fields, key_to_index=key_to_index)
         if key is None:

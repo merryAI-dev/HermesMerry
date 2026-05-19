@@ -12,6 +12,7 @@ from merry_runtime.ingestion.sminfo import SminfoProfile, sminfo_profile_row, sm
 
 _TERMINAL_SMINFO_STATUSES = {"matched", "not_found", "ambiguous"}
 _MAX_SMINFO_BATCH_SIZE = 20
+_PLACEHOLDER_COMPANY_NAMES = {"company", "기업명", "회사명", "업체명", "상호"}
 
 
 class SminfoClient(Protocol):
@@ -135,6 +136,8 @@ def _candidate_rows(
         candidate = {str(key): str(value) for key, value in row.items()}
         company = _candidate_company(candidate)
         if not company:
+            continue
+        if company.strip().casefold() in _PLACEHOLDER_COMPANY_NAMES:
             continue
         if allowed and company not in allowed:
             continue
