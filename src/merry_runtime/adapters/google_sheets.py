@@ -617,7 +617,7 @@ def _effective_display_label_row(
     effective: list[object] = []
     for index, fallback in enumerate(expected):
         value = existing[index] if index < len(existing) else ""
-        effective.append(value if not _is_blank(value) else fallback)
+        effective.append(fallback if fallback else value)
     return effective
 
 

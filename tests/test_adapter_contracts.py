@@ -757,6 +757,8 @@ def test_google_sheet_review_queue_rewrites_below_korean_display_label_row() -> 
     labels = [""] * len(headers)
     labels[headers.index("company")] = "기업명"
     labels[headers.index("representative")] = "대표자"
+    labels[headers.index("sminfo_status")] = "error"
+    labels[headers.index("sminfo_profile_url")] = "https://sminfo.mss.go.kr/gc/sf/GSF002R0.print"
     existing_row = [
         "2026-05-18T00:00:00+00:00",
         "에이아이오",
@@ -788,6 +790,8 @@ def test_google_sheet_review_queue_rewrites_below_korean_display_label_row() -> 
     assert service.values_obj.update_kwargs["range"] == "'Candidate Detail'!A1:AF3"
     rewritten = service.values_obj.update_body["values"]  # type: ignore[index]
     assert rewritten[1][headers.index("company")] == "기업명"
+    assert rewritten[1][headers.index("sminfo_status")] == "중기현황 상태"
+    assert rewritten[1][headers.index("sminfo_profile_url")] == "중기현황 URL"
     assert rewritten[2][headers.index("company")] == "에이아이오"
     assert rewritten[2][headers.index("sminfo_company")] == "(주)에이아이오"
 
