@@ -4,10 +4,10 @@ import base64
 import hashlib
 import json
 from dataclasses import asdict, dataclass
-from datetime import UTC, datetime
 from typing import Any
 
 from merry_runtime.adapters.interfaces import Notifier, ObjectStore, ReviewQueue, StructuredStore
+from merry_runtime.clock import now_kst
 from merry_runtime.pipelines.backup_export import backup_export
 from merry_runtime.pipelines.calibrate_scores import calibrate_scores
 from merry_runtime.pipelines.crawl_sources import crawl_sources
@@ -233,4 +233,4 @@ def _short_digest(*parts: str) -> str:
 
 
 def _now() -> str:
-    return datetime.now(UTC).isoformat()
+    return now_kst()

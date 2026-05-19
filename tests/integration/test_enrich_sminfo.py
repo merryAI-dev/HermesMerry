@@ -111,11 +111,13 @@ def test_enrich_sminfo_candidates_persists_profile_to_sqlite_projection_and_shee
     assert profile_row["requested_company"] == "에이아이오"
     assert profile_row["matched_company"] == "(주)에이아이오"
     assert profile_row["revenue_krw_thousand"] == "17851006"
+    assert profile_row["collected_at"].endswith("+09:00")
 
     [sheet_row] = queue.published["SMINFO Enrichment"]
     assert sheet_row["requested_company"] == "에이아이오"
     assert sheet_row["match_status"] == "matched"
     assert sheet_row["sminfo_url"].endswith("0007451769")
+    assert sheet_row["collected_at"].endswith("+09:00")
 
     [candidate_update] = queue.published["Candidate Detail"]
     assert candidate_update["company"] == "에이아이오"
@@ -128,6 +130,7 @@ def test_enrich_sminfo_candidates_persists_profile_to_sqlite_projection_and_shee
     assert candidate_update["sminfo_largest_shareholder"] == "권진형"
     assert candidate_update["sminfo_largest_shareholder_ratio_pct"] == "52.00"
     assert candidate_update["sminfo_profile_url"].endswith("0007451769")
+    assert candidate_update["sminfo_collected_at"].endswith("+09:00")
 
 
 def test_enrich_sminfo_candidates_drains_due_sqlite_queue_before_sheet_fallback() -> None:
@@ -163,7 +166,8 @@ def test_enrich_sminfo_candidates_drains_due_sqlite_queue_before_sheet_fallback(
     assert [item[0] for item in client.seen] == ["에이아이오"]
     [updated_task] = store.tables["sminfo_enrichment_queue"]
     assert updated_task["status"] == "matched"
-    assert updated_task["completed_at"]
+    assert updated_task["completed_at"].endswith("+09:00")
+    assert updated_task["updated_at"].endswith("+09:00")
     assert str(updated_task["last_profile_id"]).startswith("sminfo_")
     assert updated_task["last_error"] == ""
     [candidate_update] = queue.published["Candidate Detail"]
@@ -173,6 +177,8 @@ def test_enrich_sminfo_candidates_drains_due_sqlite_queue_before_sheet_fallback(
     assert queue_projection["task_id"] == task["task_id"]
     assert queue_projection["company"] == "에이아이오"
     assert queue_projection["status"] == "matched"
+    assert queue_projection["next_run_at"].endswith("+09:00")
+    assert queue_projection["updated_at"].endswith("+09:00")
 
 
 def test_enrich_sminfo_candidates_does_not_leave_queue_running_when_sheet_projection_fails() -> None:
@@ -239,6 +245,8 @@ def test_enrich_sminfo_candidates_retries_queue_task_after_browser_error() -> No
     assert updated_task["status"] == "retry"
     assert updated_task["attempt_count"] == 1
     assert updated_task["next_run_at"] > now
+    assert updated_task["next_run_at"].endswith("+09:00")
+    assert updated_task["updated_at"].endswith("+09:00")
     assert "RuntimeError: connection reset" in updated_task["last_error"]
 
 

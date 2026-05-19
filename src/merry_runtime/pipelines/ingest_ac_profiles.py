@@ -3,10 +3,10 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import asdict, dataclass
-from datetime import UTC, datetime
 from typing import Any
 
 from merry_runtime.adapters.interfaces import StructuredStore
+from merry_runtime.clock import now_kst
 from merry_runtime.ingestion.ac_profile_parser import parse_ac_hypothesis_report
 from merry_runtime.wiki_store import SQLiteWikiStore, WikiSource
 
@@ -100,4 +100,4 @@ def _checksum(value: str) -> str:
 
 
 def _now() -> str:
-    return datetime.now(UTC).isoformat()
+    return now_kst()

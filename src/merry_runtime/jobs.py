@@ -6,12 +6,12 @@ import json
 import sys
 import time
 from dataclasses import asdict
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Sequence
 
 from merry_mcp.registry import allowed_tool_names
 from merry_runtime.agent_loop import run_agent_loop
+from merry_runtime.clock import now_kst
 from merry_runtime.hermes_profile import validate_tool_lockdown
 from merry_runtime.job_runner import JobRunError, run_job
 from merry_runtime.runtime_config import RuntimeConfig, RuntimeConfigError
@@ -172,7 +172,7 @@ def _short_digest(*parts: str) -> str:
 
 
 def _now() -> str:
-    return datetime.now(UTC).isoformat()
+    return now_kst()
 
 
 if __name__ == "__main__":

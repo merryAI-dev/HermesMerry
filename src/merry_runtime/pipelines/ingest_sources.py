@@ -3,10 +3,10 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import asdict, dataclass
-from datetime import UTC, datetime
 from typing import Any
 
 from merry_runtime.adapters.interfaces import ObjectStore, StructuredStore
+from merry_runtime.clock import now_kst
 from merry_runtime.ingestion.parsers import (
     ParsedSource,
     parse_article,
@@ -130,4 +130,4 @@ def _stable_run_id(sources: list[dict[str, Any]]) -> str:
 
 
 def _now() -> str:
-    return datetime.now(UTC).isoformat()
+    return now_kst()

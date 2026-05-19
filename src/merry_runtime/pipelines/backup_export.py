@@ -6,11 +6,11 @@ import json
 import sqlite3
 import tarfile
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from merry_runtime.adapters.interfaces import ReviewQueue, StructuredStore
+from merry_runtime.clock import compact_kst_timestamp, now_kst
 from merry_runtime.schema import BIGQUERY_TABLES
 
 SQLITE_BACKUP_TAB = "SQLite Backup"
@@ -43,7 +43,7 @@ def backup_export(
     run_id: str | None = None,
 ) -> BackupExportResult:
     source_db_path = _sqlite_db_path(structured_store)
-    timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    timestamp = compact_kst_timestamp()
     run_id = run_id or f"backup_{timestamp}"
     export_root = backup_root / run_id
     csv_root = export_root / "csv"
@@ -77,7 +77,7 @@ def backup_export(
     relative_manifest_path = _relative(path=manifest_path, root=backup_root)
     manifest = {
         "run_id": run_id,
-        "created_at": datetime.now(UTC).isoformat(),
+        "created_at": now_kst(),
         "source_db_path": str(source_db_path),
         "wiki_root": str(wiki_root),
         "manifest_path": relative_manifest_path,

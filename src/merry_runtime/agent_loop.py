@@ -3,9 +3,9 @@ from __future__ import annotations
 import hashlib
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
 from typing import Any
 
+from merry_runtime.clock import now_kst
 from merry_runtime.job_runner import run_job
 
 
@@ -74,7 +74,7 @@ def _record_failed_job(*, runtime: Any, job_name: str, exc: Exception) -> None:
     structured_store = getattr(runtime, "structured_store", None)
     if structured_store is None:
         return
-    now = datetime.now(UTC).isoformat()
+    now = now_kst()
     run_id = f"run_failed_{_safe_job_name(job_name)}_{_short_digest(now, type(exc).__name__, str(exc))}"
     try:
         structured_store.upsert_rows(

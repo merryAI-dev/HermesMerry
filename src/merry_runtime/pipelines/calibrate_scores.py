@@ -3,11 +3,11 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from typing import Any
 
 from merry_runtime.adapters.interfaces import StructuredStore
 from merry_runtime.calibration import ReviewCalibrationExample, calibrate_priority_model, is_usable_decision
+from merry_runtime.clock import now_kst
 from merry_runtime.probabilistic_scoring import PriorityScoringModel
 
 
@@ -197,4 +197,4 @@ def _short_digest(*parts: str) -> str:
 
 
 def _now() -> str:
-    return datetime.now(UTC).isoformat()
+    return now_kst()

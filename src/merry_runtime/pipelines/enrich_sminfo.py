@@ -7,6 +7,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Callable, Protocol
 
 from merry_runtime.adapters.interfaces import ReviewQueue, StructuredStore
+from merry_runtime.clock import now_kst, now_kst_datetime
 from merry_runtime.ingestion.sminfo import SminfoProfile, sminfo_profile_row, sminfo_sheet_row
 from merry_runtime.ingestion.sminfo_queue import (
     RETRYABLE_QUEUE_STATUSES,
@@ -54,7 +55,7 @@ def enrich_sminfo_candidates(
     started_at = _now()
     run_id = run_id or f"run_sminfo_{_short_digest(started_at)}"
     bounded_max_items = min(max(max_items, 1), _MAX_SMINFO_BATCH_SIZE)
-    reference_time = datetime.now(UTC)
+    reference_time = now_kst_datetime()
     queue_has_rows = _has_sminfo_queue_rows(structured_store=structured_store) if use_queue else False
     queue_tasks = (
         _claim_due_queue_tasks(
@@ -314,7 +315,7 @@ def _queue_task_update(
     }
     if profile.match_status == "error":
         failed = attempt_count >= max_attempts
-        retry_time = _parse_timestamp(collected_at) or datetime.now(UTC)
+        retry_time = _parse_timestamp(collected_at) or now_kst_datetime()
         return {
             **updated,
             "status": "failed" if failed else "retry",
@@ -404,4 +405,4 @@ def _short_digest(*parts: str) -> str:
 
 
 def _now() -> str:
-    return datetime.now(UTC).isoformat()
+    return now_kst()

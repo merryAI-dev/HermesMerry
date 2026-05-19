@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import asdict, dataclass
-from datetime import UTC, datetime
 from typing import Any
 
 from merry_runtime.adapters.interfaces import ReviewQueue, StructuredStore
+from merry_runtime.clock import now_kst
 from merry_runtime.models import CandidateCard
 from merry_runtime.review_sync import ReviewValidationError, apply_review_to_card, parse_review_row
 
@@ -94,4 +94,4 @@ def _short_digest(*parts: str) -> str:
 
 
 def _now() -> str:
-    return datetime.now(UTC).isoformat()
+    return now_kst()

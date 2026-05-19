@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import sqlite3
-from dataclasses import dataclass
-from datetime import UTC, datetime
-from pathlib import Path
 import re
+from dataclasses import dataclass
+from pathlib import Path
 
+from merry_runtime.clock import now_kst
 from merry_runtime.models import ACProfile
 from merry_runtime.ontology import EdgeKind, NodeKind, StartupKnowledgeGraph, project_startup_wiki
 
@@ -446,4 +446,4 @@ Rules:
 
 
 def _now() -> str:
-    return datetime.now(UTC).isoformat()
+    return now_kst()

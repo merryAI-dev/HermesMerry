@@ -65,6 +65,7 @@ def test_crawl_sources_fetches_thevc_visible_investment_cards_into_mother_db(tmp
     candidate_detail = review_queue.published["Candidate Detail"][0]
     assert "entity_id" not in candidate_detail
     assert candidate_detail["collected_at"].startswith("20")
+    assert candidate_detail["collected_at"].endswith("+09:00")
     assert candidate_detail["company"] == "에이아이오"
     assert candidate_detail["summary"] == "공개 카드 -> 에이아이오"
     assert candidate_detail["business_model"] == "낸드컨트롤러 - 낸드플래시 시스템 반도체"
@@ -79,10 +80,15 @@ def test_crawl_sources_fetches_thevc_visible_investment_cards_into_mother_db(tmp
     assert sminfo_task["source_channel"] == "thevc_investment_ma"
     assert sminfo_task["source_url"] == "https://thevc.kr/aio"
     assert sminfo_task["status"] == "pending"
+    assert sminfo_task["next_run_at"].endswith("+09:00")
+    assert sminfo_task["created_at"].endswith("+09:00")
+    assert sminfo_task["updated_at"].endswith("+09:00")
     [queue_projection] = review_queue.published["SMINFO Queue"]
     assert queue_projection["task_id"] == sminfo_task["task_id"]
     assert queue_projection["company"] == "에이아이오"
     assert queue_projection["status"] == "pending"
+    assert queue_projection["next_run_at"].endswith("+09:00")
+    assert queue_projection["updated_at"].endswith("+09:00")
     assert any(row["job_name"] == "crawl-sources" for row in structured_store.tables["agent_runs"])
     assert (tmp_path / "wiki" / "entities").exists()
 

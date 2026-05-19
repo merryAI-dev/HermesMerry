@@ -91,6 +91,8 @@ def test_agent_loop_persists_failed_job_run_for_backup_visibility() -> None:
     assert result.failure_count == 1
     assert len(failed_rows) == 1
     assert "RuntimeError: crawl failed" in failed_rows[0]["error_message"]
+    assert failed_rows[0]["started_at"].endswith("+09:00")
+    assert failed_rows[0]["finished_at"].endswith("+09:00")
 
 
 def test_runtime_config_reads_agent_loop_environment(monkeypatch) -> None:

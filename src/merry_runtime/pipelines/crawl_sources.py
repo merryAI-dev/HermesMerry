@@ -7,6 +7,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, Callable
 
 from merry_runtime.adapters.interfaces import Notifier, ObjectStore, ReviewQueue, StructuredStore
+from merry_runtime.clock import now_kst, now_kst_datetime
 from merry_runtime.ingestion.sminfo_queue import build_sminfo_task, is_terminal_queue_status, sminfo_queue_sheet_row
 from merry_runtime.ingestion.platum import PLATUM_INVESTMENT_CHANNEL, extract_platum_portfolio_news_sources
 from merry_runtime.ingestion.thevc import THEVC_INVESTMENT_CHANNEL, extract_thevc_investment_sources
@@ -198,7 +199,7 @@ def _enqueue_sminfo_tasks(
             parameters={},
         )
     }
-    reference_time = _parse_timestamp(collected_at) or datetime.now(UTC)
+    reference_time = _parse_timestamp(collected_at) or now_kst_datetime()
     tasks: list[dict[str, object]] = []
     for parsed in parsed_sources:
         candidate = _sminfo_task_candidate(parsed=parsed, collected_at=collected_at)
@@ -411,4 +412,4 @@ def _stable_run_id(targets: list[dict[str, Any]]) -> str:
 
 
 def _now() -> str:
-    return datetime.now(UTC).isoformat()
+    return now_kst()
