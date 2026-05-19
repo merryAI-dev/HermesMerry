@@ -66,8 +66,7 @@ class SminfoPlaywrightClient:
                 raw_payload={"search_results": [result.__dict__ for result in results]},
             )
 
-        _click_search_result(page, decision.result.result_index)
-        page.wait_for_load_state("networkidle", timeout=self.timeout_ms)
+        _click_search_result(page, decision.result.result_index, timeout_ms=self.timeout_ms)
         tables = _extract_tables(page)
         return parse_sminfo_profile_tables(requested_company=company_name, sminfo_url=page.url, tables=tables)
 
@@ -145,7 +144,7 @@ def _extract_search_results(page: Any) -> list[SminfoSearchResult]:
     ]
 
 
-def _click_search_result(page: Any, result_index: int) -> None:
+def _click_search_result(page: Any, result_index: int, *, timeout_ms: int) -> None:
     clicked = page.evaluate(
         """
         (resultIndex) => {
@@ -164,6 +163,8 @@ def _click_search_result(page: Any, result_index: int) -> None:
     )
     if not clicked:
         raise RuntimeError(f"SMINFO search result row {result_index} is not clickable")
+    page.wait_for_url("**/IEI001R0.do**", timeout=timeout_ms)
+    page.wait_for_load_state("networkidle", timeout=timeout_ms)
 
 
 def _extract_tables(page: Any) -> list[dict[str, object]]:

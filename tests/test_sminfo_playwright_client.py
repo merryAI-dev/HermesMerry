@@ -1,4 +1,4 @@
-from merry_runtime.adapters.sminfo_playwright import SminfoPlaywrightClient
+from merry_runtime.adapters.sminfo_playwright import SminfoPlaywrightClient, _click_search_result
 
 
 class _FakeLocator:
@@ -52,6 +52,23 @@ class _RetryingClient(SminfoPlaywrightClient):
         return None
 
 
+class _SearchResultClickPage:
+    def __init__(self) -> None:
+        self.evaluated_args: list[object] = []
+        self.waited_urls: list[tuple[str, int]] = []
+        self.waited_load_states: list[tuple[str, int]] = []
+
+    def evaluate(self, _script: str, arg: object) -> bool:
+        self.evaluated_args.append(arg)
+        return True
+
+    def wait_for_url(self, pattern: str, *, timeout: int) -> None:
+        self.waited_urls.append((pattern, timeout))
+
+    def wait_for_load_state(self, state: str, *, timeout: int) -> None:
+        self.waited_load_states.append((state, timeout))
+
+
 def test_sminfo_playwright_client_rate_limits_between_lookup_attempts() -> None:
     slept: list[float] = []
     times = iter([100.0, 110.0])
@@ -79,3 +96,13 @@ def test_sminfo_playwright_client_retries_connection_reset_once_before_returning
     assert page.goto_calls == 2
     assert slept == [3.0]
     assert profile.match_status == "not_found"
+
+
+def test_click_search_result_waits_for_detail_report_navigation() -> None:
+    page = _SearchResultClickPage()
+
+    _click_search_result(page, result_index=1, timeout_ms=45000)
+
+    assert page.evaluated_args == [1]
+    assert page.waited_urls == [("**/IEI001R0.do**", 45000)]
+    assert page.waited_load_states == [("networkidle", 45000)]
