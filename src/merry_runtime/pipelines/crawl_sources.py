@@ -90,7 +90,12 @@ def crawl_sources(
             run_id=f"{run_id}_ingest",
         )
         if review_queue is not None:
-            _publish_sheet_projection(review_queue=review_queue, sources=sources, collected_at=started_at)
+            _publish_sheet_projection(
+                review_queue=review_queue,
+                structured_store=structured_store,
+                sources=sources,
+                collected_at=started_at,
+            )
         enqueued_sminfo_tasks = _enqueue_sminfo_tasks(
             structured_store=structured_store,
             sources=sources,
@@ -163,7 +168,13 @@ def _truthy(value: Any, *, default: bool) -> bool:
     return str(value).strip().casefold() not in {"0", "false", "no", "n", "off", "disabled"}
 
 
-def _publish_sheet_projection(*, review_queue: ReviewQueue, sources: list[dict[str, str]], collected_at: str) -> None:
+def _publish_sheet_projection(
+    *,
+    review_queue: ReviewQueue,
+    structured_store: StructuredStore,
+    sources: list[dict[str, str]],
+    collected_at: str,
+) -> None:
     parsed_sources = [_parse_projection_source(source) for source in sources]
     review_queue.upsert_cards(
         sheet_tab="Evidence",
@@ -180,9 +191,13 @@ def _publish_sheet_projection(*, review_queue: ReviewQueue, sources: list[dict[s
     candidate_detail_sources = [parsed for parsed in parsed_sources if parsed.raw_source.channel == THEVC_INVESTMENT_CHANNEL]
     if not candidate_detail_sources:
         return
+    kvic_profiles = _load_kvic_investor_profiles(structured_store)
     review_queue.upsert_cards(
         sheet_tab="Candidate Detail",
-        rows=[_candidate_detail_row(parsed, collected_at=collected_at) for parsed in candidate_detail_sources],
+        rows=[
+            _candidate_detail_row(parsed, collected_at=collected_at, kvic_profiles=kvic_profiles)
+            for parsed in candidate_detail_sources
+        ],
         key_fields=("company", "homepage"),
     )
 
@@ -315,9 +330,15 @@ def _portfolio_news_row(parsed: ParsedSource, *, collected_at: str) -> dict[str,
     }
 
 
-def _candidate_detail_row(parsed: ParsedSource, *, collected_at: str) -> dict[str, object]:
+def _candidate_detail_row(
+    parsed: ParsedSource,
+    *,
+    collected_at: str,
+    kvic_profiles: list[dict[str, Any]] | None = None,
+) -> dict[str, object]:
     signal = parsed.signals[0]
     fields = _payload_fields(parsed.raw_text)
+    kvic_context = _kvic_investor_context(str(fields.get("investor", "")), kvic_profiles or [])
     return {
         "collected_at": collected_at,
         "company": parsed.entity.name,
@@ -338,7 +359,84 @@ def _candidate_detail_row(parsed: ParsedSource, *, collected_at: str) -> dict[st
         "recommended_action": "score_candidates",
         "status": "crawled",
         "wiki_path": f"wiki/entities/{parsed.entity.name}.md",
+        **kvic_context,
     }
+
+
+def _load_kvic_investor_profiles(structured_store: StructuredStore) -> list[dict[str, Any]]:
+    try:
+        return [
+            dict(row)
+            for row in structured_store.query_rows(
+                sql="select * from kvic_investor_managers",
+                parameters={},
+            )
+        ]
+    except Exception:
+        return []
+
+
+def _kvic_investor_context(investor_text: str, profiles: list[dict[str, Any]]) -> dict[str, object]:
+    empty = {
+        "kvic_matched_investors": "",
+        "kvic_active_fund_count": "",
+        "kvic_active_amount_eok": "",
+        "kvic_fund_fields": "",
+        "kvic_representative_funds": "",
+        "kvic_profile_tags": "",
+        "kvic_next_expiry_at": "",
+    }
+    if not investor_text.strip() or not profiles:
+        return empty
+
+    investor_tokens = [_normalize_investor_name(token) for token in _split_investors(investor_text)]
+    matched = [
+        profile
+        for profile in profiles
+        if _normalize_investor_name(str(profile.get("manager_name") or "")) in investor_tokens
+    ]
+    if not matched:
+        return empty
+
+    return {
+        "kvic_matched_investors": ", ".join(str(profile.get("manager_name") or "") for profile in matched),
+        "kvic_active_fund_count": sum(int(profile.get("active_fund_count") or 0) for profile in matched),
+        "kvic_active_amount_eok": round(sum(float(profile.get("active_amount_eok") or 0.0) for profile in matched), 4),
+        "kvic_fund_fields": _join_unique(profile.get("fund_fields") for profile in matched),
+        "kvic_representative_funds": _join_unique(profile.get("representative_funds") for profile in matched),
+        "kvic_profile_tags": _join_unique(profile.get("profile_tags") for profile in matched),
+        "kvic_next_expiry_at": min(
+            (str(profile.get("next_expiry_at") or "") for profile in matched if profile.get("next_expiry_at")),
+            default="",
+        ),
+    }
+
+
+def _split_investors(value: str) -> list[str]:
+    normalized = value.replace("/", ",").replace("·", ",").replace(";", ",")
+    return [part.strip() for part in normalized.split(",") if part.strip()]
+
+
+def _normalize_investor_name(value: str) -> str:
+    return (
+        value.casefold()
+        .replace(" ", "")
+        .replace("(주)", "")
+        .replace("㈜", "")
+        .replace("주식회사", "")
+        .replace("유한회사", "")
+    )
+
+
+def _join_unique(values: object) -> str:
+    seen: list[str] = []
+    for value in values:
+        items = value if isinstance(value, (list, tuple)) else [value]
+        for item in items:
+            item_text = str(item).strip()
+            if item_text and item_text not in seen:
+                seen.append(item_text)
+    return ", ".join(seen)
 
 
 def _payload_fields(raw_text: str) -> dict[str, str]:

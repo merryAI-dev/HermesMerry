@@ -271,6 +271,40 @@ def test_jobs_cli_runs_draft_outreach_emails(monkeypatch, tmp_path, capsys) -> N
     assert output["drafted_count"] == 1
 
 
+def test_jobs_cli_runs_sync_kvic_funds(monkeypatch, tmp_path, capsys) -> None:
+    config = RuntimeConfig(
+        project_id="",
+        dataset_id="",
+        raw_bucket="",
+        review_sheet_id="sheet-1",
+        wiki_root=tmp_path / "wiki",
+        mother_db_path=tmp_path / "mother.db",
+        structured_store_backend="sqlite",
+        kvic_api_key="public-kvic-key",
+    )
+    runtime = RuntimeAdapters(
+        object_store=FakeObjectStore(bucket="raw-bucket"),
+        structured_store=FakeStructuredStore(),
+        review_queue=FakeReviewQueue(),
+        wiki_store=SQLiteWikiStore(root=tmp_path / "wiki"),
+        kvic_client=object(),
+    )
+
+    monkeypatch.setattr("merry_runtime.jobs.RuntimeConfig.from_env", lambda: config)
+    monkeypatch.setattr("merry_runtime.jobs.build_runtime", lambda config: runtime)
+    monkeypatch.setattr(
+        "merry_runtime.jobs.run_job",
+        lambda job_name, **kwargs: {"job_name": job_name, "fund_count": 2, "manager_count": 1},
+    )
+
+    exit_code = main(["run", "sync-kvic-funds"])
+
+    output = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert output["job_name"] == "sync-kvic-funds"
+    assert output["manager_count"] == 1
+
+
 def test_jobs_cli_persists_unexpected_job_failure_after_runtime_creation(monkeypatch, tmp_path, capsys) -> None:
     config = RuntimeConfig(
         project_id="project-1",

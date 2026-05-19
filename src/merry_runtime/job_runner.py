@@ -17,6 +17,7 @@ from merry_runtime.pipelines.ingest_ac_profiles import ingest_ac_profiles
 from merry_runtime.pipelines.ingest_sources import ingest_sources
 from merry_runtime.pipelines.resolve_entities import resolve_entities
 from merry_runtime.pipelines.score_candidates import score_candidates
+from merry_runtime.pipelines.sync_kvic_funds import sync_kvic_funds
 from merry_runtime.pipelines.sync_review_sheet import sync_review_sheet
 from merry_runtime.pipelines.weekly_summary import build_weekly_summary
 from merry_runtime.runtime_config import RuntimeConfig
@@ -37,6 +38,7 @@ class RuntimeAdapters:
     gmail_source: Any | None = None
     sminfo_client: Any | None = None
     email_draft_client: Any | None = None
+    kvic_client: Any | None = None
 
 
 def run_job(
@@ -144,6 +146,17 @@ def run_job(
             structured_store=runtime.structured_store,
             draft_client=runtime.email_draft_client,
             max_items=config.outreach_draft_batch_limit,
+        )
+        return {"job_name": job_name, **asdict(result)}
+
+    if job_name == "sync-kvic-funds":
+        if runtime.kvic_client is None:
+            raise JobRunError("sync-kvic-funds requires a configured KVIC client")
+        result = sync_kvic_funds(
+            structured_store=runtime.structured_store,
+            client=runtime.kvic_client,
+            review_queue=runtime.review_queue if config.review_sheet_id else None,
+            sync_interval_seconds=config.kvic_sync_interval_seconds,
         )
         return {"job_name": job_name, **asdict(result)}
 

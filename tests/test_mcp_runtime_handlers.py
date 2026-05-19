@@ -6,6 +6,7 @@ from merry_runtime.job_runner import RuntimeAdapters
 from merry_runtime.pipelines.crawl_sources import CrawlResult
 from merry_runtime.pipelines.draft_outreach_emails import OutreachDraftResult
 from merry_runtime.pipelines.enrich_sminfo import SminfoEnrichmentResult
+from merry_runtime.pipelines.sync_kvic_funds import KVICSyncResult
 from merry_runtime.runtime_config import RuntimeConfig
 
 
@@ -122,6 +123,49 @@ def test_runtime_handlers_wire_draft_outreach_emails_to_pipeline(tmp_path) -> No
     assert seen_payloads[0]["draft_client"] is runtime.email_draft_client
 
 
+def test_runtime_handlers_wire_sync_kvic_funds_to_pipeline(tmp_path) -> None:
+    runtime = RuntimeAdapters(
+        object_store=FakeObjectStore(bucket="raw-bucket"),
+        structured_store=FakeStructuredStore(),
+        review_queue=FakeReviewQueue(),
+        kvic_client=object(),
+    )
+    config = RuntimeConfig(
+        project_id="",
+        dataset_id="",
+        raw_bucket="",
+        review_sheet_id="sheet-1",
+        wiki_root=tmp_path,
+        kvic_api_key="public-key",
+        kvic_sync_interval_seconds=86400,
+    )
+    seen_payloads = []
+
+    def fake_sync_kvic_funds(**kwargs):
+        seen_payloads.append(kwargs)
+        return KVICSyncResult(
+            run_id="run_kvic_tool",
+            status="success",
+            fund_type_count=1,
+            fund_count=2,
+            manager_count=1,
+        )
+
+    handlers = build_runtime_handlers(
+        runtime=runtime,
+        config=config,
+        sync_kvic_funds_fn=fake_sync_kvic_funds,
+    )
+
+    result = handlers["sync_kvic_funds"]({"force": True})
+
+    assert result["job_name"] == "sync-kvic-funds"
+    assert result["manager_count"] == 1
+    assert seen_payloads[0]["client"] is runtime.kvic_client
+    assert seen_payloads[0]["review_queue"] is runtime.review_queue
+    assert seen_payloads[0]["sync_interval_seconds"] == 0
+
+
 def test_runtime_handlers_require_configured_sminfo_client_for_enrichment(tmp_path) -> None:
     runtime = RuntimeAdapters(
         object_store=FakeObjectStore(bucket="raw-bucket"),
@@ -148,3 +192,17 @@ def test_runtime_handlers_require_configured_email_draft_client(tmp_path) -> Non
 
     with pytest.raises(RuntimeError, match="Email draft client is not configured"):
         handlers["draft_outreach_emails"]({"max_items": 1})
+
+
+def test_runtime_handlers_require_configured_kvic_client(tmp_path) -> None:
+    runtime = RuntimeAdapters(
+        object_store=FakeObjectStore(bucket="raw-bucket"),
+        structured_store=FakeStructuredStore(),
+        review_queue=FakeReviewQueue(),
+    )
+    config = RuntimeConfig(project_id="", dataset_id="", raw_bucket="", review_sheet_id="sheet-1", wiki_root=tmp_path)
+
+    handlers = build_runtime_handlers(runtime=runtime, config=config)
+
+    with pytest.raises(RuntimeError, match="KVIC client is not configured"):
+        handlers["sync_kvic_funds"]({})

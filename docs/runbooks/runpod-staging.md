@@ -42,9 +42,11 @@ Cloud Run is optional and belongs to `docs/runbooks/staging-canary.md`.
 - `GOOGLE_APPLICATION_CREDENTIALS_JSON`
 - `WIKI_ROOT=/home/hermes/hermes/wiki`
 - `HERMES_AGENT_ID=runpod-hermes-staging`
+- `KVIC_API_KEY`
+- `KVIC_SYNC_INTERVAL_SECONDS=86400`
 - `CRAWL_SHEET_TAB=Crawl Sources`
 - `CRAWL_TARGETS_JSON=[{"url":"https://thevc.kr/","source_kind":"thevc_investment_ma","max_cards":20}]`
-- `AGENT_LOOP_JOBS=crawl-sources,draft-outreach-emails,enrich-sminfo,backup-export`
+- `AGENT_LOOP_JOBS=sync-kvic-funds,crawl-sources,draft-outreach-emails,enrich-sminfo,backup-export`
 - `AGENT_LOOP_INTERVAL_SECONDS=3600`
 - `AGENT_LOOP_MAX_CYCLES=0` for the always-on SQLite loop that repeats every 1 hour
 
@@ -134,12 +136,22 @@ OBJECT_STORE_BACKEND: local
 RAW_ROOT: /home/hermes/hermes/raw
 BACKUP_ROOT: /home/hermes/hermes/backups
 HERMES_AGENT_ID: runpod-hermes-staging
+KVIC_API_KEY: Runpod secret or public KVIC fund-status API key
+KVIC_SYNC_INTERVAL_SECONDS: 86400
+KVIC_REQUEST_TIMEOUT_SECONDS: 15
 CRAWL_SHEET_TAB: Crawl Sources
 CRAWL_TARGETS_JSON: [{"url":"https://thevc.kr/","source_kind":"thevc_investment_ma","max_cards":20}]
-AGENT_LOOP_JOBS: crawl-sources,draft-outreach-emails,enrich-sminfo,backup-export
+AGENT_LOOP_JOBS: sync-kvic-funds,crawl-sources,draft-outreach-emails,enrich-sminfo,backup-export
 AGENT_LOOP_INTERVAL_SECONDS: 3600
 AGENT_LOOP_MAX_CYCLES: 0
 ```
+
+`sync-kvic-funds` may run inside the hourly loop, but it enforces
+`KVIC_SYNC_INTERVAL_SECONDS=86400` internally. Fresh snapshots are skipped, so
+KVIC is called effectively every day while `agent_runs` still records that the
+job was checked.
+Keep it before `crawl-sources` so new The VC rows can immediately attach KVIC
+investor profile fields into `Candidate Detail`.
 
 For outreach drafts, prefer the Apps Script gateway:
 
@@ -213,6 +225,7 @@ Evidence
 Decision Log
 AC Settings
 Exploration Queue
+Investor DB
 Run Log
 SQLite Backup
 Wiki Backup
@@ -222,6 +235,11 @@ Backup Manifest
 `SQLite Backup`, `Wiki Backup`, and `Backup Manifest` are agent-owned backup
 tabs. Each `backup-export` run rewrites them as the latest snapshot, then clears
 stale tail rows only after the new snapshot has been written.
+
+`Investor DB` is also agent-owned. `sync-kvic-funds` rewrites it from SQLite
+`kvic_investor_managers` so humans can inspect investment managers, active fund
+counts, representative fund names, active amount/commitment, fund fields, and
+profile tags without opening SQLite.
 
 Seed the `Crawl Sources` tab with at least:
 

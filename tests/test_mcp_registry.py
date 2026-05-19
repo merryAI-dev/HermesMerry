@@ -7,6 +7,7 @@ def test_mcp_registry_exposes_only_domain_tools() -> None:
         "crawl_public_sources",
         "enrich_sminfo_candidates",
         "draft_outreach_emails",
+        "sync_kvic_funds",
         "upsert_entity_signal",
         "enqueue_candidate_card",
         "record_review_feedback",
@@ -46,3 +47,12 @@ def test_draft_outreach_emails_tool_only_creates_bounded_drafts_from_existing_ca
     assert tool.input_schema["properties"]["max_items"]["maximum"] == 20
     assert tool.input_schema["properties"]["company_names"]["maxItems"] == 20
     assert "body" not in tool.input_schema["properties"]
+
+
+def test_sync_kvic_funds_tool_exposes_daily_investor_db_refresh() -> None:
+    tool = TOOL_REGISTRY["sync_kvic_funds"]
+
+    assert tool.side_effect_scope == "kvic_sqlite_sheets"
+    assert tool.input_schema["required"] == []
+    assert tool.input_schema["additionalProperties"] is False
+    assert tool.input_schema["properties"]["force"]["type"] == "boolean"

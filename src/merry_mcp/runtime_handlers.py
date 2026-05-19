@@ -8,6 +8,7 @@ from merry_runtime.job_runner import RuntimeAdapters
 from merry_runtime.pipelines.crawl_sources import CrawlResult, crawl_sources
 from merry_runtime.pipelines.draft_outreach_emails import OutreachDraftResult, draft_outreach_emails
 from merry_runtime.pipelines.enrich_sminfo import SminfoEnrichmentResult, enrich_sminfo_candidates
+from merry_runtime.pipelines.sync_kvic_funds import KVICSyncResult, sync_kvic_funds
 from merry_runtime.runtime_config import RuntimeConfig
 
 
@@ -18,6 +19,7 @@ def build_runtime_handlers(
     crawl_sources_fn: Callable[..., CrawlResult] = crawl_sources,
     enrich_sminfo_candidates_fn: Callable[..., SminfoEnrichmentResult] = enrich_sminfo_candidates,
     draft_outreach_emails_fn: Callable[..., OutreachDraftResult] = draft_outreach_emails,
+    sync_kvic_funds_fn: Callable[..., KVICSyncResult] = sync_kvic_funds,
 ) -> dict[str, Callable[[dict[str, Any]], dict[str, object]]]:
     return {
         "crawl_public_sources": lambda payload: _crawl_public_sources(
@@ -37,6 +39,12 @@ def build_runtime_handlers(
             runtime=runtime,
             config=config,
             draft_outreach_emails_fn=draft_outreach_emails_fn,
+        ),
+        "sync_kvic_funds": lambda payload: _sync_kvic_funds(
+            payload,
+            runtime=runtime,
+            config=config,
+            sync_kvic_funds_fn=sync_kvic_funds_fn,
         ),
     }
 
@@ -96,3 +104,21 @@ def _draft_outreach_emails(
         company_names=[str(name) for name in payload.get("company_names", [])],
     )
     return {"job_name": "draft-outreach-emails", **asdict(result)}
+
+
+def _sync_kvic_funds(
+    payload: dict[str, Any],
+    *,
+    runtime: RuntimeAdapters,
+    config: RuntimeConfig,
+    sync_kvic_funds_fn: Callable[..., KVICSyncResult],
+) -> dict[str, object]:
+    if runtime.kvic_client is None:
+        raise RuntimeError("KVIC client is not configured")
+    result = sync_kvic_funds_fn(
+        structured_store=runtime.structured_store,
+        client=runtime.kvic_client,
+        review_queue=runtime.review_queue if config.review_sheet_id else None,
+        sync_interval_seconds=0 if bool(payload.get("force")) else config.kvic_sync_interval_seconds,
+    )
+    return {"job_name": "sync-kvic-funds", **asdict(result)}

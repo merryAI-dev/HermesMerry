@@ -11,6 +11,7 @@ from merry_runtime.adapters.gcs import GCSObjectStore
 from merry_runtime.adapters.apps_script import AppsScriptDraftClient
 from merry_runtime.adapters.gmail import GmailDraftClient, GmailLabelSource
 from merry_runtime.adapters.google_sheets import GoogleSheetReviewQueue
+from merry_runtime.adapters.kvic import KVICClient
 from merry_runtime.adapters.local_files import LocalFileObjectStore
 from merry_runtime.adapters.sminfo_playwright import SminfoPlaywrightClient
 from merry_runtime.adapters.slack import SlackNotifier
@@ -71,6 +72,11 @@ def build_runtime(
                 min_interval_seconds=config.sminfo_min_interval_seconds,
             )
             if config.sminfo_user_id and config.sminfo_password
+            else None
+        ),
+        kvic_client=(
+            KVICClient(api_key=config.kvic_api_key, timeout_seconds=config.kvic_request_timeout_seconds)
+            if config.kvic_api_key
             else None
         ),
     )

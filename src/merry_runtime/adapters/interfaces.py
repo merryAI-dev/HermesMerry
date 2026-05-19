@@ -29,3 +29,9 @@ class Notifier(Protocol):
 
 class EmailDraftClient(Protocol):
     def create_draft(self, *, to: str, subject: str, body_text: str) -> str: ...
+
+
+class KVICDataClient(Protocol):
+    def fetch_fund_types(self, *, b_type: str = "0", output_format: str = "1") -> dict[str, object]: ...
+
+    def fetch_funds(self, *, fund_type: str = "00", output_format: str = "1") -> dict[str, object]: ...

@@ -139,6 +139,60 @@ def test_crawl_sources_does_not_republish_existing_sheet_projection_rows(tmp_pat
     assert len(structured_store.tables["sminfo_enrichment_queue"]) == 1
 
 
+def test_crawl_sources_enriches_candidate_detail_with_kvic_investor_profile(tmp_path) -> None:
+    object_store = FakeObjectStore(bucket="raw-bucket")
+    structured_store = FakeStructuredStore()
+    structured_store.upsert_rows(
+        table="kvic_investor_managers",
+        rows=[
+            {
+                "manager_id": "kvic_mgr_d3",
+                "manager_name": "디쓰리쥬빌리파트너스",
+                "active_fund_count": 3,
+                "total_fund_count": 3,
+                "active_amount_eok": 743.5,
+                "active_commitment_eok": 480.0,
+                "fund_fields": ["미래환경산업", "소셜임팩트"],
+                "representative_funds": ["디쓰리 미래환경 ECO 벤처투자조합", "디쓰리 임팩트 벤처투자조합 제2호"],
+                "profile_tags": ["climate_environment", "impact"],
+                "next_expiry_at": "2026-08-16",
+                "latest_expiry_at": "2029-08-25",
+                "collected_at": "2026-05-19T16:00:00+09:00",
+            }
+        ],
+        key_fields=("manager_id",),
+    )
+    review_queue = FakeReviewQueue()
+
+    result = crawl_sources(
+        targets=[{"url": "https://thevc.kr/", "source_kind": "thevc_investment_ma"}],
+        object_store=object_store,
+        structured_store=structured_store,
+        review_queue=review_queue,
+        fetch_url=lambda url: """
+            <tr>
+              <td><time datetime="2026-05-15T05:14:25.919Z">2026-05-15</time><button>보도자료</button></td>
+              <td><span>그린테크</span><span>탄소저감</span><div>농업 탄소 데이터 플랫폼</div></td>
+              <td><div>투자대상분야</div><div>클린테크</div></td>
+              <td><div>투자단계</div><div>Seed</div></td>
+              <td><div>투자금액</div><button>로그인 필요</button></td>
+              <td><div>투자자</div><span>디쓰리쥬빌리파트너스</span></td>
+              <td><a href="/green-tech">프로필 확인</a></td>
+            </tr>
+        """,
+    )
+
+    assert result.crawled_source_count == 1
+    [candidate_detail] = review_queue.published["Candidate Detail"]
+    assert candidate_detail["investor"] == "디쓰리쥬빌리파트너스"
+    assert candidate_detail["kvic_matched_investors"] == "디쓰리쥬빌리파트너스"
+    assert candidate_detail["kvic_active_fund_count"] == 3
+    assert candidate_detail["kvic_active_amount_eok"] == 743.5
+    assert candidate_detail["kvic_fund_fields"] == "미래환경산업, 소셜임팩트"
+    assert candidate_detail["kvic_representative_funds"] == "디쓰리 미래환경 ECO 벤처투자조합, 디쓰리 임팩트 벤처투자조합 제2호"
+    assert candidate_detail["kvic_profile_tags"] == "climate_environment, impact"
+
+
 def test_crawl_sources_enqueues_thevc_sminfo_tasks_without_sheet_projection(tmp_path) -> None:
     object_store = FakeObjectStore(bucket="raw-bucket")
     structured_store = FakeStructuredStore()

@@ -15,6 +15,7 @@ _SMINFO_BATCH_LIMIT_MIN = 1
 _SMINFO_BATCH_LIMIT_MAX = 20
 _OUTREACH_DRAFT_BATCH_LIMIT_MIN = 1
 _OUTREACH_DRAFT_BATCH_LIMIT_MAX = 20
+_KVIC_SYNC_INTERVAL_SECONDS_MIN = 86400
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,6 +58,9 @@ class RuntimeConfig:
     sminfo_batch_limit: int = 20
     sminfo_stale_days: int = 30
     outreach_draft_batch_limit: int = 10
+    kvic_api_key: str = ""
+    kvic_sync_interval_seconds: int = 86400
+    kvic_request_timeout_seconds: int = 15
 
     @classmethod
     def from_env(cls) -> RuntimeConfig:
@@ -108,6 +112,15 @@ class RuntimeConfig:
                 minimum=_OUTREACH_DRAFT_BATCH_LIMIT_MIN,
                 maximum=_OUTREACH_DRAFT_BATCH_LIMIT_MAX,
             ),
+            kvic_api_key=os.getenv("KVIC_API_KEY", ""),
+            kvic_sync_interval_seconds=max(
+                _KVIC_SYNC_INTERVAL_SECONDS_MIN,
+                _parse_int(os.getenv("KVIC_SYNC_INTERVAL_SECONDS", ""), default=86400),
+            ),
+            kvic_request_timeout_seconds=max(
+                1,
+                _parse_int(os.getenv("KVIC_REQUEST_TIMEOUT_SECONDS", ""), default=15),
+            ),
         )
 
     def validate_for_job(self, job_name: str, *, has_inline_sources: bool = False) -> None:
@@ -148,6 +161,8 @@ class RuntimeConfig:
                 required.append("APPS_SCRIPT_DRAFT_SECRET")
             if self.apps_script_draft_secret:
                 required.append("APPS_SCRIPT_DRAFT_WEBHOOK_URL")
+        elif job_name == "sync-kvic-funds":
+            required.append("KVIC_API_KEY")
         elif job_name == "resolve-entities":
             pass
         else:
@@ -209,6 +224,9 @@ class RuntimeConfig:
             "SMINFO_USER_ID": self.sminfo_user_id,
             "SMINFO_PASSWORD": self.sminfo_password,
             "OUTREACH_DRAFT_BATCH_LIMIT": str(self.outreach_draft_batch_limit),
+            "KVIC_API_KEY": self.kvic_api_key,
+            "KVIC_SYNC_INTERVAL_SECONDS": str(self.kvic_sync_interval_seconds),
+            "KVIC_REQUEST_TIMEOUT_SECONDS": str(self.kvic_request_timeout_seconds),
         }[name]
 
 

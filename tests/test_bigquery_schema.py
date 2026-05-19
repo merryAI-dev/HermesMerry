@@ -16,6 +16,10 @@ def test_bigquery_schema_contains_required_mother_tables() -> None:
         "sminfo_company_profiles",
         "sminfo_enrichment_queue",
         "outreach_email_drafts",
+        "kvic_fund_types",
+        "kvic_funds",
+        "kvic_investor_managers",
+        "kvic_sync_state",
     }.issubset(BIGQUERY_TABLES.keys())
 
 
@@ -168,3 +172,38 @@ def test_outreach_email_drafts_schema_captures_gmail_draft_state() -> None:
         "drafted_at",
         "error_message",
     }.issubset(fields)
+
+
+def test_kvic_schema_captures_investor_fund_mother_db() -> None:
+    fund_fields = table_field_names("kvic_funds")
+    manager_fields = table_field_names("kvic_investor_managers")
+    state_fields = table_field_names("kvic_sync_state")
+
+    assert {
+        "fund_id",
+        "fund_type_code",
+        "fund_year",
+        "field_name",
+        "manager_name",
+        "association_name",
+        "expires_at",
+        "amount_raw",
+        "commitment_raw",
+        "amount_eok",
+        "commitment_eok",
+        "is_active",
+        "raw_json",
+        "collected_at",
+    }.issubset(fund_fields)
+    assert {
+        "manager_id",
+        "manager_name",
+        "total_fund_count",
+        "active_fund_count",
+        "active_amount_eok",
+        "fund_fields",
+        "representative_funds",
+        "profile_tags",
+        "next_expiry_at",
+    }.issubset(manager_fields)
+    assert {"state_key", "latest_success_at", "status", "fund_count", "manager_count", "updated_at"}.issubset(state_fields)

@@ -3,6 +3,7 @@ from merry_runtime.adapters.gcs import GCSObjectStore
 from merry_runtime.adapters.apps_script import AppsScriptDraftClient
 from merry_runtime.adapters.gmail import GmailDraftClient, GmailLabelSource
 from merry_runtime.adapters.google_sheets import GoogleSheetReviewQueue
+from merry_runtime.adapters.kvic import KVICClient
 from merry_runtime.adapters.local_files import LocalFileObjectStore
 from merry_runtime.adapters.sminfo_playwright import SminfoPlaywrightClient
 from merry_runtime.adapters.sqlite_store import SQLiteStructuredStore
@@ -275,6 +276,27 @@ def test_runtime_factory_builds_sminfo_client_only_when_credentials_are_configur
     assert isinstance(runtime.sminfo_client, SminfoPlaywrightClient)
     assert runtime.sminfo_client.user_id == "user"
     assert runtime.sminfo_client.min_interval_seconds == 35
+
+
+def test_runtime_factory_builds_kvic_client_from_public_api_key(monkeypatch, tmp_path) -> None:
+    config = RuntimeConfig(
+        project_id="",
+        dataset_id="",
+        raw_bucket="",
+        wiki_root=tmp_path / "wiki",
+        object_store_backend="local",
+        raw_root=tmp_path / "raw",
+        structured_store_backend="sqlite",
+        mother_db_path=tmp_path / "mother.db",
+        kvic_api_key="public-kvic-key",
+        kvic_request_timeout_seconds=7,
+    )
+
+    runtime = build_runtime(config, import_module=lambda name: (_ for _ in ()).throw(AssertionError(name)))
+
+    assert isinstance(runtime.kvic_client, KVICClient)
+    assert runtime.kvic_client.api_key == "public-kvic-key"
+    assert runtime.kvic_client.timeout_seconds == 7
 
 
 def test_runtime_factory_uses_sqlite_backup_runtime_without_google_clients(monkeypatch, tmp_path) -> None:

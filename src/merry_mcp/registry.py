@@ -75,6 +75,20 @@ _TOOLS = {
             },
         },
     ),
+    "sync_kvic_funds": MCPToolContract(
+        name="sync_kvic_funds",
+        description="Refresh the KVIC public investor/fund snapshot into SQLite and the Investor DB Sheet tab.",
+        side_effect_scope="kvic_sqlite_sheets",
+        input_schema={
+            "type": "object",
+            "required": [],
+            "additionalProperties": False,
+            "properties": {
+                "force": {"type": "boolean"},
+                "reason": {"type": "string", "maxLength": 1000},
+            },
+        },
+    ),
     "upsert_entity_signal": MCPToolContract(
         name="upsert_entity_signal",
         description="Create or merge a Mother DB entity and attach evidence-backed signals.",

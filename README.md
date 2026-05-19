@@ -78,17 +78,23 @@ APPS_SCRIPT_DRAFT_SECRET=runpod-secret-hermes-draft-gateway
 APPS_SCRIPT_DRAFT_TIMEOUT_SECONDS=10
 SLACK_CHANNEL=C123
 SLACK_BOT_TOKEN=xoxb-...
+KVIC_API_KEY=public-kvic-api-key
+KVIC_SYNC_INTERVAL_SECONDS=86400
+KVIC_REQUEST_TIMEOUT_SECONDS=15
 WIKI_ROOT=/home/hermes/hermes/wiki
 HERMES_AGENT_ID=runpod-hermes-staging
 CRAWL_SHEET_TAB=Crawl Sources
 CRAWL_TARGETS_JSON=[{"url":"https://thevc.kr/","source_kind":"thevc_investment_ma","max_cards":20}]
-AGENT_LOOP_JOBS=crawl-sources,draft-outreach-emails,enrich-sminfo,backup-export
+AGENT_LOOP_JOBS=sync-kvic-funds,crawl-sources,draft-outreach-emails,enrich-sminfo,backup-export
 AGENT_LOOP_INTERVAL_SECONDS=3600
 AGENT_LOOP_MAX_CYCLES=0
 ```
 
 `AGENT_LOOP_INTERVAL_SECONDS=3600` with `AGENT_LOOP_MAX_CYCLES=0` means the
 Hermes agent stays alive and repeats the configured jobs every 1 hour.
+`sync-kvic-funds` is safe to keep in that hourly loop because it enforces
+`KVIC_SYNC_INTERVAL_SECONDS=86400`; it refreshes the KVIC investor/fund snapshot
+every day and otherwise records a skipped run without calling KVIC again.
 
 Supported job commands:
 
@@ -102,6 +108,7 @@ python3 -m merry_runtime.jobs run sync-review-sheet --ac-id ac_climate
 python3 -m merry_runtime.jobs run backup-export
 python3 -m merry_runtime.jobs run weekly-summary
 python3 -m merry_runtime.jobs run draft-outreach-emails
+python3 -m merry_runtime.jobs run sync-kvic-funds
 ```
 
 Without `--sources-file` or `--sources-json`, `crawl-sources` reads URL targets
@@ -119,6 +126,10 @@ Sheet tab. It does not send email. If `APPS_SCRIPT_DRAFT_WEBHOOK_URL` and
 Script gateway in `apps_script/gmail_draft_gateway/`. Otherwise it falls back
 to the direct Gmail API client. `GMAIL_USER_ID` only applies to that direct
 fallback path.
+
+`sync-kvic-funds` reads the KVIC public fund-status API, stores
+`kvic_fund_types`, `kvic_funds`, and `kvic_investor_managers` in SQLite, then
+rewrites the `Investor DB` Sheet tab as the human-facing investor/fund cockpit.
 
 To set up the Apps Script gateway, create a Google Apps Script project, copy
 `apps_script/gmail_draft_gateway/Code.gs` and `appsscript.json`, set script
@@ -172,7 +183,8 @@ See `docs/SAFETY.md` for the explicit guardrail checklist.
 ## Next Implementation Steps
 
 1. Put THE VC and other allowed public crawl targets in the `Crawl Sources` Sheet tab.
-2. Run the SQLite-first Runpod loop with `crawl-sources` enabled and verify Mother DB/Wiki accumulation.
-3. Rewire `score-candidates` from AC-specific tabs to `Review Queue`.
-4. Wire Sheet decisions back into SQLite feedback/calibration.
-5. Add optional BigQuery export only after billing and IAM are intentionally enabled.
+2. Run the SQLite-first Runpod loop with `crawl-sources` and `sync-kvic-funds` enabled and verify Mother DB/Wiki accumulation.
+3. Use `Investor DB` to connect The VC investor mentions to KVIC fund mandates.
+4. Rewire `score-candidates` from AC-specific tabs to `Review Queue`.
+5. Wire Sheet decisions back into SQLite feedback/calibration.
+6. Add optional BigQuery export only after billing and IAM are intentionally enabled.

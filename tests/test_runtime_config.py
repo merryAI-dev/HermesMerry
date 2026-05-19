@@ -23,6 +23,8 @@ def test_runtime_config_reads_required_environment(monkeypatch) -> None:
     monkeypatch.setenv("SMINFO_BATCH_LIMIT", "20")
     monkeypatch.setenv("SMINFO_STALE_DAYS", "30")
     monkeypatch.setenv("HERMES_AGENT_ID", "runpod-pod-1")
+    monkeypatch.setenv("KVIC_API_KEY", "public-kvic-key")
+    monkeypatch.setenv("KVIC_SYNC_INTERVAL_SECONDS", "86400")
 
     config = RuntimeConfig.from_env()
 
@@ -50,6 +52,8 @@ def test_runtime_config_reads_required_environment(monkeypatch) -> None:
     assert config.sminfo_batch_limit == 20
     assert config.sminfo_stale_days == 30
     assert config.hermes_agent_id == "runpod-pod-1"
+    assert config.kvic_api_key == "public-kvic-key"
+    assert config.kvic_sync_interval_seconds == 86400
 
 
 def test_runtime_config_requires_job_specific_fields(monkeypatch) -> None:
@@ -168,6 +172,30 @@ def test_runtime_config_requires_apps_script_secret_when_gateway_url_is_configur
         config.validate_for_job("draft-outreach-emails")
 
     assert "APPS_SCRIPT_DRAFT_SECRET" in str(error.value)
+
+
+def test_runtime_config_requires_kvic_api_key_for_sync_kvic_funds(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("STRUCTURED_STORE_BACKEND", "sqlite")
+    monkeypatch.setenv("MOTHER_DB_PATH", str(tmp_path / "mother.db"))
+
+    config = RuntimeConfig.from_env()
+
+    with pytest.raises(RuntimeConfigError) as error:
+        config.validate_for_job("sync-kvic-funds")
+
+    assert "KVIC_API_KEY" in str(error.value)
+
+
+def test_runtime_config_accepts_sync_kvic_funds_with_daily_interval(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("STRUCTURED_STORE_BACKEND", "sqlite")
+    monkeypatch.setenv("MOTHER_DB_PATH", str(tmp_path / "mother.db"))
+    monkeypatch.setenv("KVIC_API_KEY", "public-kvic-key")
+    monkeypatch.setenv("KVIC_SYNC_INTERVAL_SECONDS", "3600")
+
+    config = RuntimeConfig.from_env()
+
+    config.validate_for_job("sync-kvic-funds")
+    assert config.kvic_sync_interval_seconds == 86400
 
 
 def test_runtime_config_bounds_sminfo_batch_limit_to_site_safe_range(monkeypatch) -> None:

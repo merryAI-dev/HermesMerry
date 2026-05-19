@@ -7,6 +7,7 @@ from merry_runtime.job_runner import JobRunError, RuntimeAdapters, run_job
 from merry_runtime.pipelines.draft_outreach_emails import OutreachDraftResult
 from merry_runtime.pipelines.enrich_sminfo import SminfoEnrichmentResult
 from merry_runtime.pipelines.crawl_sources import CrawlResult
+from merry_runtime.pipelines.sync_kvic_funds import KVICSyncResult
 from merry_runtime.runtime_config import RuntimeConfig
 from merry_runtime.wiki_store import SQLiteWikiStore
 
@@ -32,6 +33,7 @@ def _runtime(tmp_path, store: FakeStructuredStore | None = None) -> RuntimeAdapt
         notifier=FakeNotifier(),
         wiki_store=SQLiteWikiStore(root=tmp_path),
         gmail_source=None,
+        kvic_client=object(),
     )
 
 
@@ -260,6 +262,41 @@ def test_run_weekly_summary_posts_slack_counts(tmp_path) -> None:
     assert run_row["input_count"] == 1
     assert run_row["output_count"] == 1
     assert run_row["error_message"] == ""
+
+
+def test_run_sync_kvic_funds_routes_to_pipeline(monkeypatch, tmp_path) -> None:
+    runtime = _runtime(tmp_path)
+    seen: dict[str, object] = {}
+
+    def fake_sync_kvic_funds(**kwargs):
+        seen.update(kwargs)
+        return KVICSyncResult(
+            run_id="run_kvic_test",
+            status="success",
+            fund_type_count=1,
+            fund_count=2,
+            manager_count=1,
+        )
+
+    monkeypatch.setattr("merry_runtime.job_runner.sync_kvic_funds", fake_sync_kvic_funds)
+    config = RuntimeConfig(
+        project_id="",
+        dataset_id="",
+        raw_bucket="",
+        review_sheet_id="sheet-1",
+        wiki_root=tmp_path,
+        structured_store_backend="sqlite",
+        kvic_api_key="public-key",
+        kvic_sync_interval_seconds=86400,
+    )
+
+    result = run_job("sync-kvic-funds", runtime=runtime, config=config)
+
+    assert result["job_name"] == "sync-kvic-funds"
+    assert result["fund_count"] == 2
+    assert seen["client"] is runtime.kvic_client
+    assert seen["review_queue"] is runtime.review_queue
+    assert seen["sync_interval_seconds"] == 86400
 
 
 def test_run_weekly_summary_includes_failures_reviews_and_resolution_events(tmp_path) -> None:

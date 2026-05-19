@@ -48,6 +48,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             "backup-export",
             "enrich-sminfo",
             "draft-outreach-emails",
+            "sync-kvic-funds",
         ],
     )
     run_parser.add_argument("--sources-json", default="", help="Inline JSON source list for ingestion jobs.")
