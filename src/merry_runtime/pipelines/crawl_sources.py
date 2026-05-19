@@ -3,10 +3,11 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, Callable
 
 from merry_runtime.adapters.interfaces import Notifier, ObjectStore, ReviewQueue, StructuredStore
+from merry_runtime.ingestion.sminfo_queue import build_sminfo_task, is_terminal_queue_status, sminfo_queue_sheet_row
 from merry_runtime.ingestion.platum import PLATUM_INVESTMENT_CHANNEL, extract_platum_portfolio_news_sources
 from merry_runtime.ingestion.thevc import THEVC_INVESTMENT_CHANNEL, extract_thevc_investment_sources
 from merry_runtime.ingestion.parsers import ParsedSource, parse_platum_portfolio_news, parse_thevc_investment_card
@@ -25,6 +26,7 @@ class CrawlResult:
     ingested_entity_count: int
     ingested_signal_count: int
     notified_count: int = 0
+    enqueued_sminfo_task_count: int = 0
 
 
 def crawl_sources(
@@ -37,6 +39,7 @@ def crawl_sources(
     slack_channel: str = "",
     wiki_store: SQLiteWikiStore | None = None,
     fetch_url: Callable[[str], str] = fetch_url_text,
+    sminfo_stale_days: int = 30,
     run_id: str | None = None,
 ) -> CrawlResult:
     started_at = _now()
@@ -76,6 +79,7 @@ def crawl_sources(
 
     ingest_result = None
     notified_count = 0
+    enqueued_sminfo_tasks: list[dict[str, object]] = []
     if sources:
         ingest_result = ingest_sources(
             sources=sources,
@@ -86,6 +90,14 @@ def crawl_sources(
         )
         if review_queue is not None:
             _publish_sheet_projection(review_queue=review_queue, sources=sources, collected_at=started_at)
+        enqueued_sminfo_tasks = _enqueue_sminfo_tasks(
+            structured_store=structured_store,
+            sources=sources,
+            collected_at=started_at,
+            stale_days=sminfo_stale_days,
+        )
+        if review_queue is not None and enqueued_sminfo_tasks:
+            _publish_sminfo_queue_projection(review_queue=review_queue, tasks=enqueued_sminfo_tasks)
         if portfolio_news_sources and notifier is not None and slack_channel:
             notified_count = _notify_portfolio_news(
                 notifier=notifier,
@@ -101,6 +113,7 @@ def crawl_sources(
         ingested_entity_count=ingest_result.entity_count if ingest_result else 0,
         ingested_signal_count=ingest_result.signal_count if ingest_result else 0,
         notified_count=notified_count,
+        enqueued_sminfo_task_count=len(enqueued_sminfo_tasks),
     )
     structured_store.upsert_rows(
         table="agent_runs",
@@ -162,6 +175,90 @@ def _publish_sheet_projection(*, review_queue: ReviewQueue, sources: list[dict[s
         rows=[_candidate_detail_row(parsed, collected_at=collected_at) for parsed in candidate_detail_sources],
         key_fields=("company", "homepage"),
     )
+
+
+def _enqueue_sminfo_tasks(
+    *,
+    structured_store: StructuredStore,
+    sources: list[dict[str, str]],
+    collected_at: str,
+    stale_days: int,
+) -> list[dict[str, object]]:
+    parsed_sources = [
+        _parse_projection_source(source)
+        for source in sources
+        if source.get("channel") == THEVC_INVESTMENT_CHANNEL
+    ]
+    if not parsed_sources:
+        return []
+    existing_tasks = {
+        str(row.get("task_id") or ""): row
+        for row in structured_store.query_rows(
+            sql="SELECT * FROM sminfo_enrichment_queue",
+            parameters={},
+        )
+    }
+    reference_time = _parse_timestamp(collected_at) or datetime.now(UTC)
+    tasks: list[dict[str, object]] = []
+    for parsed in parsed_sources:
+        candidate = _sminfo_task_candidate(parsed=parsed, collected_at=collected_at)
+        task = build_sminfo_task(
+            candidate,
+            source_channel=THEVC_INVESTMENT_CHANNEL,
+            now=collected_at,
+        )
+        existing = _matching_existing_sminfo_task(existing_tasks=existing_tasks, task=task)
+        if existing:
+            task["task_id"] = existing.get("task_id") or task["task_id"]
+        if existing and _has_fresh_terminal_queue_status(existing, stale_days=stale_days, reference_time=reference_time):
+            continue
+        if existing and str(existing.get("status") or "") in {"retry", "running", "failed"}:
+            continue
+        if existing:
+            task["created_at"] = existing.get("created_at") or task["created_at"]
+        tasks.append(task)
+    if not tasks:
+        return []
+    structured_store.upsert_rows(
+        table="sminfo_enrichment_queue",
+        rows=tasks,
+        key_fields=("task_id",),
+    )
+    return tasks
+
+
+def _matching_existing_sminfo_task(
+    *,
+    existing_tasks: dict[str, dict[str, Any]],
+    task: dict[str, object],
+) -> dict[str, Any] | None:
+    direct = existing_tasks.get(str(task.get("task_id") or ""))
+    if direct:
+        return direct
+    normalized_name = str(task.get("normalized_name") or task.get("company") or "")
+    source_channel = str(task.get("source_channel") or "")
+    for existing in existing_tasks.values():
+        existing_name = str(existing.get("normalized_name") or existing.get("company") or "")
+        if existing_name == normalized_name and str(existing.get("source_channel") or "") == source_channel:
+            return existing
+    return None
+
+
+def _publish_sminfo_queue_projection(*, review_queue: ReviewQueue, tasks: list[dict[str, object]]) -> None:
+    review_queue.upsert_cards(
+        sheet_tab="SMINFO Queue",
+        rows=[sminfo_queue_sheet_row(task) for task in tasks],
+        key_fields=("task_id",),
+    )
+
+
+def _sminfo_task_candidate(*, parsed: ParsedSource, collected_at: str) -> dict[str, object]:
+    candidate = _candidate_detail_row(parsed, collected_at=collected_at)
+    fields = _payload_fields(parsed.raw_text)
+    return {
+        **candidate,
+        "source_url": fields.get("source uri") or parsed.raw_source.uri,
+    }
 
 
 def _parse_projection_source(source: dict[str, str]) -> ParsedSource:
@@ -242,6 +339,31 @@ def _payload_fields(raw_text: str) -> dict[str, str]:
         key, value = line.split(":", 1)
         fields[key.strip().casefold()] = value.strip()
     return fields
+
+
+def _has_fresh_terminal_queue_status(
+    task: dict[str, Any],
+    *,
+    stale_days: int,
+    reference_time: datetime,
+) -> bool:
+    if not is_terminal_queue_status(str(task.get("status") or "")):
+        return False
+    timestamp = _parse_timestamp(str(task.get("completed_at") or task.get("updated_at") or ""))
+    if timestamp is None:
+        return False
+    if timestamp.tzinfo is None:
+        timestamp = timestamp.replace(tzinfo=UTC)
+    return reference_time - timestamp < timedelta(days=max(stale_days, 0))
+
+
+def _parse_timestamp(value: str) -> datetime | None:
+    if not value.strip():
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
 
 
 def _watchlist_for_target(target: dict[str, Any]) -> tuple[PortfolioKeyword, ...]:

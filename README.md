@@ -74,9 +74,10 @@ GMAIL_LABEL_ID=Label_123
 SLACK_CHANNEL=C123
 SLACK_BOT_TOKEN=xoxb-...
 WIKI_ROOT=/home/hermes/hermes/wiki
+HERMES_AGENT_ID=runpod-hermes-staging
 CRAWL_SHEET_TAB=Crawl Sources
 CRAWL_TARGETS_JSON=[{"url":"https://thevc.kr/","source_kind":"thevc_investment_ma","max_cards":20}]
-AGENT_LOOP_JOBS=crawl-sources,resolve-entities,backup-export
+AGENT_LOOP_JOBS=crawl-sources,enrich-sminfo,backup-export
 AGENT_LOOP_INTERVAL_SECONDS=3600
 AGENT_LOOP_MAX_CYCLES=0
 ```

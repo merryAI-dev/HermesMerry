@@ -57,6 +57,59 @@ class SQLiteStructuredStore:
             rows = connection.execute(translated_sql, parameters).fetchall()
         return [self._deserialize_row(table=table, row=row) for row in rows]
 
+    def lease_sminfo_tasks(
+        self,
+        *,
+        max_items: int,
+        reference_time: str,
+        agent_id: str,
+        leased_at: str,
+    ) -> list[dict[str, object]]:
+        with sqlite3.connect(self.db_path, isolation_level=None) as connection:
+            connection.row_factory = sqlite3.Row
+            connection.execute("PRAGMA journal_mode=WAL")
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                rows = connection.execute(
+                    """
+                    select * from sminfo_enrichment_queue
+                    where status in ('pending', 'retry')
+                      and next_run_at <= ?
+                    order by priority asc, created_at asc
+                    limit ?
+                    """,
+                    (reference_time, max(max_items, 0)),
+                ).fetchall()
+                task_ids = [str(row["task_id"]) for row in rows]
+                if not task_ids:
+                    connection.execute("COMMIT")
+                    return []
+                placeholders = ", ".join("?" for _ in task_ids)
+                connection.execute(
+                    f"""
+                    update sminfo_enrichment_queue
+                    set status = 'running',
+                        locked_at = ?,
+                        locked_by = ?,
+                        updated_at = ?
+                    where task_id in ({placeholders})
+                    """,
+                    (leased_at, agent_id, leased_at, *task_ids),
+                )
+                leased_rows = connection.execute(
+                    f"""
+                    select * from sminfo_enrichment_queue
+                    where task_id in ({placeholders})
+                    order by priority asc, created_at asc
+                    """,
+                    task_ids,
+                ).fetchall()
+                connection.execute("COMMIT")
+            except Exception:
+                connection.execute("ROLLBACK")
+                raise
+        return [self._deserialize_row(table="sminfo_enrichment_queue", row=row) for row in leased_rows]
+
     def _initialize_schema(self) -> None:
         with sqlite3.connect(self.db_path) as connection:
             connection.execute("PRAGMA journal_mode=WAL")

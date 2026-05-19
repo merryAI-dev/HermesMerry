@@ -43,6 +43,7 @@ class RuntimeConfig:
     )
     agent_loop_interval_seconds: int = 3600
     agent_loop_max_cycles: int = 0
+    hermes_agent_id: str = "hermes-agent"
     sminfo_user_id: str = ""
     sminfo_password: str = ""
     sminfo_min_interval_seconds: int = 35
@@ -71,6 +72,7 @@ class RuntimeConfig:
             agent_loop_jobs=_parse_jobs(os.getenv("AGENT_LOOP_JOBS", "")),
             agent_loop_interval_seconds=_parse_int(os.getenv("AGENT_LOOP_INTERVAL_SECONDS", ""), default=3600),
             agent_loop_max_cycles=_parse_int(os.getenv("AGENT_LOOP_MAX_CYCLES", ""), default=0),
+            hermes_agent_id=_parse_agent_id(),
             sminfo_user_id=os.getenv("SMINFO_USER_ID", ""),
             sminfo_password=os.getenv("SMINFO_PASSWORD", ""),
             sminfo_min_interval_seconds=max(
@@ -170,6 +172,7 @@ class RuntimeConfig:
             "CRAWL_SHEET_TAB": self.crawl_sheet_tab,
             "AC_ID": self.default_ac_id,
             "RAW_ROOT": str(self.raw_root),
+            "HERMES_AGENT_ID": self.hermes_agent_id,
             "SMINFO_USER_ID": self.sminfo_user_id,
             "SMINFO_PASSWORD": self.sminfo_password,
         }[name]
@@ -198,6 +201,14 @@ def _parse_structured_store_backend(value: str) -> str:
     if not value.strip():
         return "sqlite"
     return value.strip().lower()
+
+
+def _parse_agent_id() -> str:
+    for name in ("HERMES_AGENT_ID", "RUNPOD_POD_ID", "HOSTNAME"):
+        value = os.getenv(name, "").strip()
+        if value:
+            return value
+    return "hermes-agent"
 
 
 def _parse_int(value: str, *, default: int) -> int:

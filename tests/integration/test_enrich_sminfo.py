@@ -2,6 +2,7 @@ from datetime import UTC, datetime, timedelta
 
 from merry_runtime.adapters.fakes import FakeReviewQueue, FakeStructuredStore
 from merry_runtime.ingestion.sminfo import SminfoProfile
+from merry_runtime.ingestion.sminfo_queue import build_sminfo_task
 from merry_runtime.pipelines.enrich_sminfo import enrich_sminfo_candidates
 
 
@@ -38,6 +39,38 @@ class FakeSminfoClient:
 
     def close(self) -> None:
         self.closed = True
+
+
+class StoreCheckingSminfoClient(FakeSminfoClient):
+    def __init__(self, store: FakeStructuredStore, task_id: str) -> None:
+        super().__init__()
+        self.store = store
+        self.task_id = task_id
+
+    def lookup_company(self, *, company_name: str, candidate: dict[str, str]) -> SminfoProfile:
+        [task] = [row for row in self.store.tables["sminfo_enrichment_queue"] if row["task_id"] == self.task_id]
+        assert task["status"] == "running"
+        assert task["locked_by"] == "agent-test"
+        assert task["locked_at"]
+        return super().lookup_company(company_name=company_name, candidate=candidate)
+
+
+class FailingSminfoClient:
+    def __init__(self) -> None:
+        self.closed = False
+
+    def lookup_company(self, *, company_name: str, candidate: dict[str, str]) -> SminfoProfile:
+        raise RuntimeError("connection reset")
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class FailingSheetProjectionQueue(FakeReviewQueue):
+    def upsert_cards(self, *, sheet_tab: str, rows: list[dict[str, object]], key_fields: tuple[str, ...]) -> int:
+        if sheet_tab == "SMINFO Enrichment":
+            raise RuntimeError("sheet projection failed")
+        return super().upsert_cards(sheet_tab=sheet_tab, rows=rows, key_fields=key_fields)
 
 
 def test_enrich_sminfo_candidates_persists_profile_to_sqlite_projection_and_sheet() -> None:
@@ -95,6 +128,205 @@ def test_enrich_sminfo_candidates_persists_profile_to_sqlite_projection_and_shee
     assert candidate_update["sminfo_largest_shareholder"] == "권진형"
     assert candidate_update["sminfo_largest_shareholder_ratio_pct"] == "52.00"
     assert candidate_update["sminfo_profile_url"].endswith("0007451769")
+
+
+def test_enrich_sminfo_candidates_drains_due_sqlite_queue_before_sheet_fallback() -> None:
+    queue = FakeReviewQueue()
+    queue.seed_reviews("Candidate Detail", [{"company": "시트후보"}])
+    store = FakeStructuredStore()
+    now = datetime.now(UTC).isoformat()
+    task = build_sminfo_task(
+        {
+            "company": "에이아이오",
+            "normalized_name": "에이아이오",
+            "representative": "권진형",
+            "homepage": "https://the-aio.com/",
+            "source_url": "https://thevc.kr/aio",
+        },
+        source_channel="thevc_investment_ma",
+        now=now,
+    )
+    store.upsert_rows(table="sminfo_enrichment_queue", rows=[task], key_fields=("task_id",))
+    client = StoreCheckingSminfoClient(store, str(task["task_id"]))
+
+    result = enrich_sminfo_candidates(
+        review_queue=queue,
+        structured_store=store,
+        client=client,
+        max_items=1,
+        min_interval_seconds=35,
+        agent_id="agent-test",
+        run_id="run_sminfo_queue",
+    )
+
+    assert result.processed_count == 1
+    assert [item[0] for item in client.seen] == ["에이아이오"]
+    [updated_task] = store.tables["sminfo_enrichment_queue"]
+    assert updated_task["status"] == "matched"
+    assert updated_task["completed_at"]
+    assert str(updated_task["last_profile_id"]).startswith("sminfo_")
+    assert updated_task["last_error"] == ""
+    [candidate_update] = queue.published["Candidate Detail"]
+    assert candidate_update["company"] == "에이아이오"
+    assert candidate_update["sminfo_revenue_krw_thousand"] == "17851006"
+    [queue_projection] = queue.published["SMINFO Queue"]
+    assert queue_projection["task_id"] == task["task_id"]
+    assert queue_projection["company"] == "에이아이오"
+    assert queue_projection["status"] == "matched"
+
+
+def test_enrich_sminfo_candidates_does_not_leave_queue_running_when_sheet_projection_fails() -> None:
+    queue = FailingSheetProjectionQueue()
+    store = FakeStructuredStore()
+    now = datetime.now(UTC).isoformat()
+    task = build_sminfo_task(
+        {
+            "company": "에이아이오",
+            "normalized_name": "에이아이오",
+            "representative": "권진형",
+            "homepage": "https://the-aio.com/",
+            "source_url": "https://thevc.kr/aio",
+        },
+        source_channel="thevc_investment_ma",
+        now=now,
+    )
+    store.upsert_rows(table="sminfo_enrichment_queue", rows=[task], key_fields=("task_id",))
+
+    try:
+        enrich_sminfo_candidates(
+            review_queue=queue,
+            structured_store=store,
+            client=FakeSminfoClient(),
+            max_items=1,
+            min_interval_seconds=35,
+            agent_id="agent-test",
+            run_id="run_sminfo_sheet_failure",
+        )
+    except RuntimeError as exc:
+        assert "sheet projection failed" in str(exc)
+    else:
+        raise AssertionError("expected Sheet projection failure")
+
+    [updated_task] = store.tables["sminfo_enrichment_queue"]
+    assert updated_task["status"] == "matched"
+    assert updated_task["locked_by"] == ""
+    assert updated_task["completed_at"]
+
+
+def test_enrich_sminfo_candidates_retries_queue_task_after_browser_error() -> None:
+    queue = FakeReviewQueue()
+    store = FakeStructuredStore()
+    now = datetime.now(UTC).isoformat()
+    task = build_sminfo_task(
+        {"company": "에이아이오", "normalized_name": "에이아이오"},
+        source_channel="thevc_investment_ma",
+        now=now,
+    )
+    store.upsert_rows(table="sminfo_enrichment_queue", rows=[task], key_fields=("task_id",))
+
+    result = enrich_sminfo_candidates(
+        review_queue=queue,
+        structured_store=store,
+        client=FailingSminfoClient(),
+        max_items=1,
+        min_interval_seconds=35,
+        agent_id="agent-test",
+        run_id="run_sminfo_queue_retry",
+    )
+
+    assert result.error_count == 1
+    [updated_task] = store.tables["sminfo_enrichment_queue"]
+    assert updated_task["status"] == "retry"
+    assert updated_task["attempt_count"] == 1
+    assert updated_task["next_run_at"] > now
+    assert "RuntimeError: connection reset" in updated_task["last_error"]
+
+
+def test_enrich_sminfo_candidates_does_not_use_sheet_fallback_when_queue_has_no_due_tasks() -> None:
+    queue = FakeReviewQueue()
+    queue.seed_reviews("Candidate Detail", [{"company": "시트후보"}])
+    store = FakeStructuredStore()
+    future = (datetime.now(UTC) + timedelta(days=1)).isoformat()
+    task = build_sminfo_task(
+        {"company": "에이아이오", "normalized_name": "에이아이오"},
+        source_channel="thevc_investment_ma",
+        now=future,
+    )
+    task["status"] = "retry"
+    store.upsert_rows(table="sminfo_enrichment_queue", rows=[task], key_fields=("task_id",))
+    client = FakeSminfoClient()
+
+    result = enrich_sminfo_candidates(
+        review_queue=queue,
+        structured_store=store,
+        client=client,
+        max_items=1,
+        min_interval_seconds=35,
+        agent_id="agent-test",
+        run_id="run_sminfo_queue_no_due",
+    )
+
+    assert result.processed_count == 0
+    assert client.seen == []
+
+
+def test_enrich_sminfo_candidates_does_not_use_company_names_to_bypass_queue_backoff() -> None:
+    queue = FakeReviewQueue()
+    queue.seed_reviews("Candidate Detail", [{"company": "에이아이오"}])
+    store = FakeStructuredStore()
+    future = (datetime.now(UTC) + timedelta(days=1)).isoformat()
+    task = build_sminfo_task(
+        {"company": "에이아이오", "normalized_name": "에이아이오"},
+        source_channel="thevc_investment_ma",
+        now=future,
+    )
+    task["status"] = "retry"
+    store.upsert_rows(table="sminfo_enrichment_queue", rows=[task], key_fields=("task_id",))
+    client = FakeSminfoClient()
+
+    result = enrich_sminfo_candidates(
+        review_queue=queue,
+        structured_store=store,
+        client=client,
+        max_items=1,
+        min_interval_seconds=35,
+        company_names=["에이아이오"],
+        agent_id="agent-test",
+        run_id="run_sminfo_company_names_no_bypass",
+    )
+
+    assert result.processed_count == 0
+    assert client.seen == []
+
+
+def test_enrich_sminfo_candidates_marks_queue_task_failed_after_max_attempts() -> None:
+    queue = FakeReviewQueue()
+    store = FakeStructuredStore()
+    now = datetime.now(UTC).isoformat()
+    task = build_sminfo_task(
+        {"company": "에이아이오", "normalized_name": "에이아이오"},
+        source_channel="thevc_investment_ma",
+        now=now,
+    )
+    task["attempt_count"] = 4
+    task["max_attempts"] = 5
+    store.upsert_rows(table="sminfo_enrichment_queue", rows=[task], key_fields=("task_id",))
+
+    result = enrich_sminfo_candidates(
+        review_queue=queue,
+        structured_store=store,
+        client=FailingSminfoClient(),
+        max_items=1,
+        min_interval_seconds=35,
+        agent_id="agent-test",
+        run_id="run_sminfo_queue_failed",
+    )
+
+    assert result.error_count == 1
+    [updated_task] = store.tables["sminfo_enrichment_queue"]
+    assert updated_task["status"] == "failed"
+    assert updated_task["attempt_count"] == 5
+    assert updated_task["completed_at"]
 
 
 def test_enrich_sminfo_candidates_respects_rate_limit_between_multiple_candidates() -> None:

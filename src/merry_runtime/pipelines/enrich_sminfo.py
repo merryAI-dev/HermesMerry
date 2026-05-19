@@ -8,6 +8,12 @@ from typing import Callable, Protocol
 
 from merry_runtime.adapters.interfaces import ReviewQueue, StructuredStore
 from merry_runtime.ingestion.sminfo import SminfoProfile, sminfo_profile_row, sminfo_sheet_row
+from merry_runtime.ingestion.sminfo_queue import (
+    RETRYABLE_QUEUE_STATUSES,
+    next_retry_at,
+    queue_status_for_profile,
+    sminfo_queue_sheet_row,
+)
 
 
 _TERMINAL_SMINFO_STATUSES = {"matched", "not_found", "ambiguous"}
@@ -39,19 +45,40 @@ def enrich_sminfo_candidates(
     min_interval_seconds: int,
     stale_days: int = 30,
     company_names: list[str] | None = None,
+    agent_id: str = "hermes-agent",
+    use_queue: bool = True,
+    retry_base_seconds: int = 3600,
     sleep_fn: Callable[[int], None] = time.sleep,
     run_id: str | None = None,
 ) -> SminfoEnrichmentResult:
     started_at = _now()
     run_id = run_id or f"run_sminfo_{_short_digest(started_at)}"
     bounded_max_items = min(max(max_items, 1), _MAX_SMINFO_BATCH_SIZE)
-    candidates = _candidate_rows(
-        rows=review_queue.read_pending_reviews(sheet_tab="Candidate Detail"),
-        company_names=company_names or [],
-        max_items=bounded_max_items,
-        stale_days=stale_days,
-        reference_time=datetime.now(UTC),
+    reference_time = datetime.now(UTC)
+    queue_has_rows = _has_sminfo_queue_rows(structured_store=structured_store) if use_queue else False
+    queue_tasks = (
+        _claim_due_queue_tasks(
+            structured_store=structured_store,
+            max_items=bounded_max_items,
+            reference_time=reference_time,
+            agent_id=agent_id,
+            leased_at=started_at,
+        )
+        if use_queue and not company_names
+        else []
     )
+    if queue_tasks:
+        candidates = [_candidate_from_queue_task(task) for task in queue_tasks]
+    elif queue_has_rows:
+        candidates = []
+    else:
+        candidates = _candidate_rows(
+            rows=review_queue.read_pending_reviews(sheet_tab="Candidate Detail"),
+            company_names=company_names or [],
+            max_items=bounded_max_items,
+            stale_days=stale_days,
+            reference_time=reference_time,
+        )
     profiles: list[SminfoProfile] = []
 
     try:
@@ -84,6 +111,23 @@ def enrich_sminfo_candidates(
         rows=structured_rows,
         key_fields=("profile_id",),
     )
+    queue_update_rows: list[dict[str, object]] = []
+    if queue_tasks:
+        queue_update_rows = [
+            _queue_task_update(
+                task=task,
+                profile=profile,
+                profile_id=_profile_id(profile),
+                collected_at=collected_at,
+                retry_base_seconds=retry_base_seconds,
+            )
+            for task, profile in zip(queue_tasks, profiles, strict=False)
+        ]
+        structured_store.upsert_rows(
+            table="sminfo_enrichment_queue",
+            rows=queue_update_rows,
+            key_fields=("task_id",),
+        )
     review_queue.upsert_cards(
         sheet_tab="SMINFO Enrichment",
         rows=[sminfo_sheet_row(profile=profile, collected_at=collected_at) for profile in profiles],
@@ -94,6 +138,12 @@ def enrich_sminfo_candidates(
         rows=[_candidate_detail_update(candidate=candidate, profile=profile, collected_at=collected_at) for candidate, profile in zip(candidates, profiles, strict=False)],
         key_fields=("company", "homepage"),
     )
+    if queue_update_rows:
+        review_queue.upsert_cards(
+            sheet_tab="SMINFO Queue",
+            rows=[sminfo_queue_sheet_row(task) for task in queue_update_rows],
+            key_fields=("task_id",),
+        )
     result = SminfoEnrichmentResult(
         run_id=run_id,
         candidate_count=len(candidates),
@@ -147,6 +197,153 @@ def _candidate_rows(
         if len(candidates) >= max_items:
             break
     return candidates
+
+
+def _has_sminfo_queue_rows(*, structured_store: StructuredStore) -> bool:
+    return bool(
+        structured_store.query_rows(
+            sql="SELECT * FROM sminfo_enrichment_queue",
+            parameters={},
+        )
+    )
+
+
+def _claim_due_queue_tasks(
+    *,
+    structured_store: StructuredStore,
+    max_items: int,
+    reference_time: datetime,
+    agent_id: str,
+    leased_at: str,
+) -> list[dict[str, object]]:
+    lease = getattr(structured_store, "lease_sminfo_tasks", None)
+    if callable(lease):
+        return list(
+            lease(
+                max_items=max_items,
+                reference_time=reference_time.isoformat(),
+                agent_id=agent_id,
+                leased_at=leased_at,
+            )
+        )
+    tasks = _due_queue_tasks(
+        structured_store=structured_store,
+        max_items=max_items,
+        reference_time=reference_time,
+    )
+    if tasks:
+        _lease_queue_tasks(
+            structured_store=structured_store,
+            tasks=tasks,
+            agent_id=agent_id,
+            leased_at=leased_at,
+        )
+    return tasks
+
+
+def _due_queue_tasks(
+    *,
+    structured_store: StructuredStore,
+    max_items: int,
+    reference_time: datetime,
+) -> list[dict[str, object]]:
+    rows = structured_store.query_rows(
+        sql="SELECT * FROM sminfo_enrichment_queue",
+        parameters={},
+    )
+    due_rows: list[dict[str, object]] = []
+    for row in rows:
+        status = str(row.get("status") or "")
+        if status not in RETRYABLE_QUEUE_STATUSES:
+            continue
+        next_run_at = _parse_timestamp(str(row.get("next_run_at") or ""))
+        if next_run_at is None:
+            continue
+        if next_run_at.tzinfo is None:
+            next_run_at = next_run_at.replace(tzinfo=UTC)
+        if next_run_at <= reference_time:
+            due_rows.append(row)
+    return sorted(due_rows, key=_queue_sort_key)[:max_items]
+
+
+def _lease_queue_tasks(
+    *,
+    structured_store: StructuredStore,
+    tasks: list[dict[str, object]],
+    agent_id: str,
+    leased_at: str,
+) -> None:
+    leased_tasks = [
+        {
+            **task,
+            "status": "running",
+            "locked_at": leased_at,
+            "locked_by": agent_id,
+            "updated_at": leased_at,
+        }
+        for task in tasks
+    ]
+    structured_store.upsert_rows(
+        table="sminfo_enrichment_queue",
+        rows=leased_tasks,
+        key_fields=("task_id",),
+    )
+
+
+def _candidate_from_queue_task(task: dict[str, object]) -> dict[str, str]:
+    return {str(key): "" if value is None else str(value) for key, value in task.items()}
+
+
+def _queue_task_update(
+    *,
+    task: dict[str, object],
+    profile: SminfoProfile,
+    profile_id: str,
+    collected_at: str,
+    retry_base_seconds: int,
+) -> dict[str, object]:
+    attempt_count = _int_value(task.get("attempt_count")) + 1
+    max_attempts = max(_int_value(task.get("max_attempts")), 1)
+    updated = {
+        **task,
+        "attempt_count": attempt_count,
+        "locked_at": "",
+        "locked_by": "",
+        "last_profile_id": profile_id,
+        "updated_at": collected_at,
+    }
+    if profile.match_status == "error":
+        failed = attempt_count >= max_attempts
+        retry_time = _parse_timestamp(collected_at) or datetime.now(UTC)
+        return {
+            **updated,
+            "status": "failed" if failed else "retry",
+            "next_run_at": collected_at if failed else next_retry_at(
+                attempt_count=attempt_count,
+                now=retry_time,
+                base_seconds=retry_base_seconds,
+            ),
+            "last_error": profile.error_message,
+            "completed_at": collected_at if failed else "",
+        }
+    return {
+        **updated,
+        "status": queue_status_for_profile(profile),
+        "next_run_at": collected_at,
+        "last_error": profile.error_message,
+        "completed_at": collected_at,
+    }
+
+
+def _queue_sort_key(task: dict[str, object]) -> tuple[int, str]:
+    return (_int_value(task.get("priority"), default=100), str(task.get("created_at") or ""))
+
+
+def _int_value(value: object, *, default: int = 0) -> int:
+    try:
+        return int(str(value))
+    except (TypeError, ValueError):
+        return default
 
 
 def _candidate_company(candidate: dict[str, str]) -> str:

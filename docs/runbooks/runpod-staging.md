@@ -39,9 +39,10 @@ Cloud Run is optional and belongs to `docs/runbooks/staging-canary.md`.
 - `SLACK_BOT_TOKEN`
 - `GOOGLE_APPLICATION_CREDENTIALS_JSON`
 - `WIKI_ROOT=/home/hermes/hermes/wiki`
+- `HERMES_AGENT_ID=runpod-hermes-staging`
 - `CRAWL_SHEET_TAB=Crawl Sources`
 - `CRAWL_TARGETS_JSON=[{"url":"https://thevc.kr/","source_kind":"thevc_investment_ma","max_cards":20}]`
-- `AGENT_LOOP_JOBS=crawl-sources,resolve-entities,backup-export`
+- `AGENT_LOOP_JOBS=crawl-sources,enrich-sminfo,backup-export`
 - `AGENT_LOOP_INTERVAL_SECONDS=3600`
 - `AGENT_LOOP_MAX_CYCLES=0` for the always-on SQLite loop that repeats every 1 hour
 
@@ -130,9 +131,10 @@ MOTHER_DB_PATH: /home/hermes/hermes/mother.db
 OBJECT_STORE_BACKEND: local
 RAW_ROOT: /home/hermes/hermes/raw
 BACKUP_ROOT: /home/hermes/hermes/backups
+HERMES_AGENT_ID: runpod-hermes-staging
 CRAWL_SHEET_TAB: Crawl Sources
 CRAWL_TARGETS_JSON: [{"url":"https://thevc.kr/","source_kind":"thevc_investment_ma","max_cards":20}]
-AGENT_LOOP_JOBS: crawl-sources,resolve-entities,backup-export
+AGENT_LOOP_JOBS: crawl-sources,enrich-sminfo,backup-export
 AGENT_LOOP_INTERVAL_SECONDS: 3600
 AGENT_LOOP_MAX_CYCLES: 0
 ```

@@ -17,6 +17,7 @@ def test_runtime_config_reads_required_environment(monkeypatch) -> None:
     monkeypatch.setenv("SMINFO_MIN_INTERVAL_SECONDS", "35")
     monkeypatch.setenv("SMINFO_BATCH_LIMIT", "20")
     monkeypatch.setenv("SMINFO_STALE_DAYS", "30")
+    monkeypatch.setenv("HERMES_AGENT_ID", "runpod-pod-1")
 
     config = RuntimeConfig.from_env()
 
@@ -38,6 +39,7 @@ def test_runtime_config_reads_required_environment(monkeypatch) -> None:
     assert config.sminfo_min_interval_seconds == 35
     assert config.sminfo_batch_limit == 20
     assert config.sminfo_stale_days == 30
+    assert config.hermes_agent_id == "runpod-pod-1"
 
 
 def test_runtime_config_requires_job_specific_fields(monkeypatch) -> None:
