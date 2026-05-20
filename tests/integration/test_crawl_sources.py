@@ -506,6 +506,55 @@ def test_crawl_sources_sends_slack_for_new_platum_portfolio_news_only(tmp_path) 
     assert "https://platum.kr/archives/286764" in notifier.messages[0]["text"]
 
 
+def test_crawl_sources_does_not_slack_platum_news_already_in_sheet_when_db_is_empty(tmp_path) -> None:
+    object_store = FakeObjectStore(bucket="raw-bucket")
+    structured_store = FakeStructuredStore()
+    review_queue = FakeReviewQueue()
+    review_queue.seed_reviews(
+        "Portfolio News",
+        [
+            {
+                "company": "비저너리",
+                "url": "https://platum.kr/archives/286764",
+                "title": "비저너리, 카이스트청년창업투자지주로부터 시드 투자 유치",
+            }
+        ],
+    )
+    notifier = FakeNotifier()
+    html = """
+        <div class="gb-grid-column gb-query-loop-item">
+          <a class="gb-container-link" href="https://platum.kr/archives/286764"></a>
+          <h3 class="gb-headline">비저너리, 카이스트청년창업투자지주로부터 시드 투자 유치</h3>
+          <p class="gb-headline excerpt">공간 지능 데이터 소프트웨어 스타트업 비저너리가 총 8억 원 규모의 시드 투자를 유치했다.</p>
+          <time class="entry-date published" datetime="2026-05-13T12:39:15+09:00">2026.05.13</time>
+        </div>
+    """
+
+    result = crawl_sources(
+        targets=[
+            {
+                "url": "https://platum.kr/archives/category/investment",
+                "source_kind": "platum_investment_news",
+                "portfolio_companies": ["(주)비저너리"],
+            }
+        ],
+        object_store=object_store,
+        structured_store=structured_store,
+        review_queue=review_queue,
+        notifier=notifier,
+        slack_channel="C123",
+        fetch_url=lambda url: html,
+        run_id="run_existing_sheet_news_empty_db",
+    )
+
+    assert result.crawled_source_count == 1
+    assert result.notified_count == 0
+    assert len(notifier.messages) == 0
+    assert len(structured_store.tables["raw_sources"]) == 1
+    assert structured_store.tables["raw_sources"][0]["channel"] == "platum_investment_news"
+    assert review_queue.published["Portfolio News"][0]["url"] == "https://platum.kr/archives/286764"
+
+
 def test_crawl_sources_accepts_platum_investment_alias_from_runtime_env(tmp_path) -> None:
     object_store = FakeObjectStore(bucket="raw-bucket")
     structured_store = FakeStructuredStore()

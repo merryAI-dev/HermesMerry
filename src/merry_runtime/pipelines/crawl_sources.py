@@ -46,6 +46,7 @@ def crawl_sources(
     started_at = _now()
     run_id = run_id or _stable_run_id(targets)
     active_targets = [_normalize_target(target) for target in targets if _is_active_target(target)]
+    existing_portfolio_news_urls = _existing_portfolio_news_urls(review_queue=review_queue)
 
     sources: list[dict[str, str]] = []
     portfolio_news_sources: list[dict[str, str]] = []
@@ -74,7 +75,11 @@ def crawl_sources(
                 if not _is_existing_platum_news_source(source=source, structured_store=structured_store)
             ]
             sources.extend(new_sources)
-            portfolio_news_sources.extend(new_sources)
+            portfolio_news_sources.extend(
+                source
+                for source in new_sources
+                if not _is_existing_portfolio_news_sheet_source(source=source, existing_urls=existing_portfolio_news_urls)
+            )
             continue
         raise ValueError(f"Unsupported crawl source_kind: {target['source_kind']}")
 
@@ -492,6 +497,19 @@ def _is_existing_platum_news_source(*, source: dict[str, str], structured_store:
         parameters={"url": url, "channel": PLATUM_INVESTMENT_CHANNEL},
     )
     return bool(existing_rows)
+
+
+def _existing_portfolio_news_urls(*, review_queue: ReviewQueue | None) -> set[str]:
+    if review_queue is None:
+        return set()
+    rows = review_queue.read_pending_reviews(sheet_tab="Portfolio News")
+    return {str(row.get("url") or "").strip() for row in rows if str(row.get("url") or "").strip()}
+
+
+def _is_existing_portfolio_news_sheet_source(*, source: dict[str, str], existing_urls: set[str]) -> bool:
+    fields = _payload_fields(str(source.get("payload") or ""))
+    url = fields.get("url", "").strip()
+    return bool(url and url in existing_urls)
 
 
 def _notify_portfolio_news(*, notifier: Notifier, slack_channel: str, sources: list[dict[str, str]]) -> int:
