@@ -173,6 +173,76 @@ def test_run_crawl_sources_falls_back_to_configured_targets_when_sheet_is_empty(
     assert seen_targets == [{"url": "https://thevc.kr/", "source_kind": "thevc_investment_ma"}]
 
 
+def test_run_crawl_sources_ignores_inactive_sheet_targets_and_uses_config_fallback(monkeypatch, tmp_path) -> None:
+    runtime = _runtime(tmp_path)
+    runtime.review_queue.seed_reviews(
+        "Crawl Sources",
+        [
+            {"url": "https://thevc.kr/", "source_kind": "thevc_investment_ma", "status": "disabled"},
+            {"url": "", "source_kind": "platum_investment_news", "status": "active"},
+        ],
+    )
+    seen_targets = []
+
+    def fake_crawl_sources(**kwargs):
+        seen_targets.extend(kwargs["targets"])
+        return CrawlResult(
+            run_id="run_crawl_env_after_inactive_sheet",
+            target_count=1,
+            crawled_source_count=1,
+            ingested_raw_source_count=1,
+            ingested_entity_count=1,
+            ingested_signal_count=1,
+        )
+
+    monkeypatch.setattr("merry_runtime.job_runner.crawl_sources", fake_crawl_sources)
+    config = RuntimeConfig(
+        project_id="project-1",
+        dataset_id="merry",
+        raw_bucket="raw-bucket",
+        review_sheet_id="sheet-1",
+        crawl_targets_json='[{"url":"https://platum.kr/archives/category/investment","source_kind":"platum_investment_news"}]',
+        wiki_root=tmp_path,
+    )
+
+    result = run_job("crawl-sources", runtime=runtime, config=config)
+
+    assert result["job_name"] == "crawl-sources"
+    assert seen_targets == [
+        {"url": "https://platum.kr/archives/category/investment", "source_kind": "platum_investment_news"}
+    ]
+
+
+def test_run_crawl_sources_passes_only_active_sheet_targets(monkeypatch, tmp_path) -> None:
+    runtime = _runtime(tmp_path)
+    runtime.review_queue.seed_reviews(
+        "Crawl Sources",
+        [
+            {"url": "https://thevc.kr/", "source_kind": "thevc_investment_ma", "status": "active"},
+            {"url": "https://platum.kr/archives/category/investment", "source_kind": "platum_investment_news", "status": "done"},
+        ],
+    )
+    seen_targets = []
+
+    def fake_crawl_sources(**kwargs):
+        seen_targets.extend(kwargs["targets"])
+        return CrawlResult(
+            run_id="run_crawl_active_sheet_only",
+            target_count=1,
+            crawled_source_count=1,
+            ingested_raw_source_count=1,
+            ingested_entity_count=1,
+            ingested_signal_count=1,
+        )
+
+    monkeypatch.setattr("merry_runtime.job_runner.crawl_sources", fake_crawl_sources)
+
+    result = run_job("crawl-sources", runtime=runtime, config=_config(tmp_path))
+
+    assert result["job_name"] == "crawl-sources"
+    assert seen_targets == [{"url": "https://thevc.kr/", "source_kind": "thevc_investment_ma", "status": "active"}]
+
+
 def test_run_ingest_ac_profiles_uses_sources_json_and_updates_wiki(tmp_path) -> None:
     runtime = _runtime(tmp_path)
     sources_json = json.dumps(

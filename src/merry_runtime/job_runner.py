@@ -208,12 +208,19 @@ def _crawl_targets_from_sheet(runtime: RuntimeAdapters, config: RuntimeConfig) -
     rows: list[dict[str, Any]] = []
     if config.review_sheet_id:
         rows = [dict(row) for row in runtime.review_queue.read_pending_reviews(sheet_tab=config.crawl_sheet_tab)]
-    active_rows = [row for row in rows if str(row.get("url") or "").strip()]
+    active_rows = [row for row in rows if _is_active_crawl_target(row)]
     if active_rows:
         return active_rows
     if config.crawl_targets_json.strip():
         return _sources_from_json(config.crawl_targets_json)
     return []
+
+
+def _is_active_crawl_target(row: dict[str, Any]) -> bool:
+    if not str(row.get("url") or "").strip():
+        return False
+    status = str(row.get("status") or "").strip().casefold()
+    return status not in {"done", "disabled", "skip", "skipped", "inactive"}
 
 
 def _gmail_message_to_text(message: dict[str, Any]) -> str:

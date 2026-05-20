@@ -239,6 +239,9 @@ OPERATOR_CONSOLE_HEADERS: dict[str, tuple[str, ...]] = {
     "Crawl Sources": (
         "url",
         "source_kind",
+        "max_cards",
+        "max_articles",
+        "portfolio_watchlist_path",
         "channel",
         "company",
         "region",

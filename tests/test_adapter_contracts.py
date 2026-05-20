@@ -1697,6 +1697,9 @@ def test_google_sheet_review_queue_supports_operator_console_tabs() -> None:
         "Crawl Sources": (
             "url",
             "source_kind",
+            "max_cards",
+            "max_articles",
+            "portfolio_watchlist_path",
             "channel",
             "company",
             "region",
