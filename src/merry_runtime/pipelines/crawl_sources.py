@@ -9,11 +9,16 @@ from typing import Any, Callable
 from merry_runtime.adapters.interfaces import Notifier, ObjectStore, ReviewQueue, StructuredStore
 from merry_runtime.clock import now_kst, now_kst_datetime
 from merry_runtime.ingestion.sminfo_queue import build_sminfo_task, is_terminal_queue_status, sminfo_queue_sheet_row
-from merry_runtime.ingestion.platum import PLATUM_INVESTMENT_CHANNEL, extract_platum_portfolio_news_sources
+from merry_runtime.ingestion.platum import (
+    PLATUM_INVESTMENT_CHANNEL,
+    extract_platum_portfolio_news_sources,
+    fetch_platum_facetwp_page,
+)
 from merry_runtime.ingestion.thevc import THEVC_INVESTMENT_CHANNEL, extract_thevc_investment_sources
 from merry_runtime.ingestion.parsers import ParsedSource, parse_platum_portfolio_news, parse_thevc_investment_card
 from merry_runtime.portfolio_watchlist import PortfolioKeyword, build_portfolio_watchlist, load_portfolio_watchlist
-from merry_runtime.ingestion.web_crawler import fetch_url as fetch_url_text
+from merry_runtime.ingestion.web_crawler import CrawlFetchError, fetch_url as fetch_url_text
+from merry_runtime.normalization import normalize_company_name
 from merry_runtime.pipelines.ingest_sources import ingest_sources
 from merry_runtime.wiki_store import SQLiteWikiStore
 
@@ -28,6 +33,12 @@ class CrawlResult:
     ingested_signal_count: int
     notified_count: int = 0
     enqueued_sminfo_task_count: int = 0
+    warning_count: int = 0
+
+
+_PLATUM_DEFAULT_MAX_ARTICLES_PER_PAGE = 24
+_PLATUM_DEFAULT_MAX_PAGES = 2
+_PLATUM_MAX_PAGES = 50
 
 
 def crawl_sources(
@@ -40,17 +51,19 @@ def crawl_sources(
     slack_channel: str = "",
     wiki_store: SQLiteWikiStore | None = None,
     fetch_url: Callable[[str], str] = fetch_url_text,
+    fetch_platum_page: Callable[[str, int], str] = fetch_platum_facetwp_page,
     sminfo_stale_days: int = 30,
     run_id: str | None = None,
 ) -> CrawlResult:
     started_at = _now()
     run_id = run_id or _stable_run_id(targets)
     active_targets = [_normalize_target(target) for target in targets if _is_active_target(target)]
-    existing_portfolio_news_urls = _existing_portfolio_news_urls(review_queue=review_queue)
+    existing_portfolio_news_keys = _existing_portfolio_news_keys(review_queue=review_queue)
 
     sources: list[dict[str, str]] = []
     sheet_projection_sources: list[dict[str, str]] = []
     portfolio_news_sources: list[dict[str, str]] = []
+    warnings: list[str] = []
     for target in active_targets:
         html = fetch_url(target["url"])
         if target["source_kind"] == THEVC_INVESTMENT_CHANNEL:
@@ -64,12 +77,12 @@ def crawl_sources(
             sheet_projection_sources.extend(extracted_sources)
             continue
         if target["source_kind"] == PLATUM_INVESTMENT_CHANNEL:
-            extracted_sources = extract_platum_portfolio_news_sources(
-                html,
-                source_url=target["url"],
-                watchlist=_watchlist_for_target(target),
-                max_articles=int(target.get("max_articles") or target.get("max_cards") or 20),
+            extracted_sources, target_warnings = _extract_platum_sources_from_pages(
+                first_page_html=html,
+                target=target,
+                fetch_platum_page=fetch_platum_page,
             )
+            warnings.extend(target_warnings)
             new_sources = [
                 source
                 for source in extracted_sources
@@ -79,7 +92,7 @@ def crawl_sources(
             new_sheet_sources = [
                 source
                 for source in new_sources
-                if not _is_existing_portfolio_news_sheet_source(source=source, existing_urls=existing_portfolio_news_urls)
+                if not _is_existing_portfolio_news_sheet_source(source=source, existing_keys=existing_portfolio_news_keys)
             ]
             sheet_projection_sources.extend(new_sheet_sources)
             portfolio_news_sources.extend(new_sheet_sources)
@@ -128,6 +141,7 @@ def crawl_sources(
         ingested_signal_count=ingest_result.signal_count if ingest_result else 0,
         notified_count=notified_count,
         enqueued_sminfo_task_count=len(enqueued_sminfo_tasks),
+        warning_count=len(warnings),
     )
     structured_store.upsert_rows(
         table="agent_runs",
@@ -140,7 +154,7 @@ def crawl_sources(
                 "finished_at": _now(),
                 "input_count": len(active_targets),
                 "output_count": len(sources),
-                "error_message": "",
+                "error_message": _join_warnings(warnings),
             }
         ],
         key_fields=("run_id",),
@@ -154,6 +168,68 @@ def _normalize_target(target: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("crawl target requires url")
     source_kind = _canonical_source_kind(str(target.get("source_kind") or target.get("channel") or THEVC_INVESTMENT_CHANNEL).strip())
     return {**target, "url": url, "source_kind": source_kind}
+
+
+def _extract_platum_sources_from_pages(
+    *,
+    first_page_html: str,
+    target: dict[str, Any],
+    fetch_platum_page: Callable[[str, int], str],
+) -> tuple[list[dict[str, str]], list[str]]:
+    watchlist = _watchlist_for_target(target)
+    max_articles = _target_positive_int(
+        target.get("max_articles") or target.get("max_cards"),
+        default=_PLATUM_DEFAULT_MAX_ARTICLES_PER_PAGE,
+    )
+    max_pages = _target_positive_int(
+        target.get("max_pages"),
+        default=_PLATUM_DEFAULT_MAX_PAGES,
+        maximum=_PLATUM_MAX_PAGES,
+    )
+    extracted_sources: list[dict[str, str]] = []
+    warnings: list[str] = []
+    seen_keys: set[tuple[str, str]] = set()
+    page_htmls = [first_page_html]
+    for page in range(2, max_pages + 1):
+        try:
+            page_htmls.append(fetch_platum_page(target["url"], page))
+        except CrawlFetchError as exc:
+            warnings.append(f"Platum pagination failed for {target['url']} page {page}: {exc}")
+            break
+    for page_html in page_htmls:
+        page_sources = extract_platum_portfolio_news_sources(
+            page_html,
+            source_url=target["url"],
+            watchlist=watchlist,
+            max_articles=max_articles,
+        )
+        for source in page_sources:
+            fields = _payload_fields(str(source.get("payload") or ""))
+            url = fields.get("url", "")
+            company = fields.get("company", "")
+            key = (url, company)
+            if url and key in seen_keys:
+                continue
+            if url:
+                seen_keys.add(key)
+            extracted_sources.append(source)
+    return extracted_sources, warnings
+
+
+def _target_positive_int(value: Any, *, default: int, maximum: int | None = None) -> int:
+    try:
+        parsed = int(str(value).strip())
+    except (TypeError, ValueError):
+        return default
+    if parsed <= 0:
+        return default
+    if maximum is not None:
+        return min(parsed, maximum)
+    return parsed
+
+
+def _join_warnings(warnings: list[str], *, max_length: int = 1000) -> str:
+    return "; ".join(warnings)[:max_length]
 
 
 def _canonical_source_kind(source_kind: str) -> str:
@@ -495,24 +571,67 @@ def _is_existing_platum_news_source(*, source: dict[str, str], structured_store:
     url = fields.get("url", "")
     if not url:
         return False
+    company = fields.get("company", "").strip()
     existing_rows = structured_store.query_rows(
         sql="select * from raw_sources where url=@url and channel=@channel",
         parameters={"url": url, "channel": PLATUM_INVESTMENT_CHANNEL},
     )
-    return bool(existing_rows)
+    if not existing_rows or not company:
+        return bool(existing_rows)
+    expected_normalized = normalize_company_name(company)
+    for row in existing_rows:
+        source_id = str(row.get("source_id") or "")
+        if _raw_source_has_company(source_id=source_id, normalized_company=expected_normalized, structured_store=structured_store):
+            return True
+    return False
 
 
-def _existing_portfolio_news_urls(*, review_queue: ReviewQueue | None) -> set[str]:
+def _raw_source_has_company(
+    *,
+    source_id: str,
+    normalized_company: str,
+    structured_store: StructuredStore,
+) -> bool:
+    if not source_id:
+        return False
+    signals = structured_store.query_rows(
+        sql="select * from signals where source_id=@source_id",
+        parameters={"source_id": source_id},
+    )
+    for signal in signals:
+        entity_id = str(signal.get("entity_id") or "")
+        if not entity_id:
+            continue
+        entities = structured_store.query_rows(
+            sql="select * from mother_entities where entity_id=@entity_id",
+            parameters={"entity_id": entity_id},
+        )
+        for entity in entities:
+            existing_normalized = str(entity.get("normalized_name") or "") or normalize_company_name(
+                str(entity.get("name") or "")
+            )
+            if existing_normalized == normalized_company:
+                return True
+    return False
+
+
+def _existing_portfolio_news_keys(*, review_queue: ReviewQueue | None) -> set[tuple[str, str]]:
     if review_queue is None:
         return set()
     rows = review_queue.read_pending_reviews(sheet_tab="Portfolio News")
-    return {str(row.get("url") or "").strip() for row in rows if str(row.get("url") or "").strip()}
+    return {
+        (url, company)
+        for row in rows
+        if (url := str(row.get("url") or "").strip())
+        for company in [str(row.get("company") or "").strip()]
+    }
 
 
-def _is_existing_portfolio_news_sheet_source(*, source: dict[str, str], existing_urls: set[str]) -> bool:
+def _is_existing_portfolio_news_sheet_source(*, source: dict[str, str], existing_keys: set[tuple[str, str]]) -> bool:
     fields = _payload_fields(str(source.get("payload") or ""))
     url = fields.get("url", "").strip()
-    return bool(url and url in existing_urls)
+    company = fields.get("company", "").strip()
+    return bool(url and ((url, company) in existing_keys or (url, "") in existing_keys))
 
 
 def _notify_portfolio_news(*, notifier: Notifier, slack_channel: str, sources: list[dict[str, str]]) -> int:

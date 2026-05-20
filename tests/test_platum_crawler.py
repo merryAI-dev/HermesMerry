@@ -1,4 +1,6 @@
-from merry_runtime.ingestion.platum import extract_platum_portfolio_news_sources
+import json
+
+from merry_runtime.ingestion.platum import extract_platum_portfolio_news_sources, template_from_facetwp_response
 from merry_runtime.portfolio_watchlist import build_portfolio_watchlist
 
 
@@ -34,3 +36,20 @@ def test_extract_platum_portfolio_news_sources_matches_watchlist_companies_only(
     assert "URL: https://platum.kr/archives/286764" in payload
     assert "Published: 2026-05-13T12:39:15+09:00" in payload
     assert "삶 클리닉" not in payload
+
+
+def test_template_from_facetwp_response_handles_bom_json() -> None:
+    response = "\ufeff" + json.dumps(
+        {
+            "template": """
+                <div class="gb-grid-column gb-query-loop-item">
+                  <a class="gb-container-link" href="https://platum.kr/archives/286100"></a>
+                  <h3 class="gb-headline">공감만세, 지역 관광 투자 유치</h3>
+                  <p class="gb-headline excerpt">공정여행 스타트업 공감만세가 신규 투자를 유치했다.</p>
+                </div>
+            """,
+            "settings": {"pager": {"page": 2}},
+        }
+    )
+
+    assert "공감만세" in template_from_facetwp_response(response)

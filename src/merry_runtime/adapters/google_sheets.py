@@ -241,6 +241,7 @@ OPERATOR_CONSOLE_HEADERS: dict[str, tuple[str, ...]] = {
         "source_kind",
         "max_cards",
         "max_articles",
+        "max_pages",
         "portfolio_watchlist_path",
         "channel",
         "company",
@@ -363,6 +364,7 @@ KNOWN_BAD_HOMEPAGE_DOMAINS = {
 SIMPLE_SHEET_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 REPLACE_ROWS_BATCH_SIZE = 500
 LOSSLESS_REPLACE_TABS = {"SQLite Backup", "Wiki Backup", "Backup Manifest"}
+READ_TIME_HEADER_MIGRATION_TABS = {"Crawl Sources"}
 
 
 @dataclass(slots=True)
@@ -503,8 +505,12 @@ class GoogleSheetReviewQueue:
         return len(rows)
 
     def read_pending_reviews(self, *, sheet_tab: str) -> list[dict[str, str]]:
-        self._ensure_sheet_tab(sheet_tab=sheet_tab)
-        headers = _headers_for_tab(sheet_tab)
+        if sheet_tab in READ_TIME_HEADER_MIGRATION_TABS:
+            header_state = self._ensure_headers_state(sheet_tab=sheet_tab)
+            headers = header_state.headers
+        else:
+            self._ensure_sheet_tab(sheet_tab=sheet_tab)
+            headers = _headers_for_tab(sheet_tab)
         response = self.service.spreadsheets().values().get(
             spreadsheetId=self.spreadsheet_id,
             range=_sheet_range(sheet_tab, headers),

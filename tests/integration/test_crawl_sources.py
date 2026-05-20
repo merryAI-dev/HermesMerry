@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 
 from merry_runtime.adapters.fakes import FakeNotifier, FakeObjectStore, FakeReviewQueue, FakeStructuredStore
 from merry_runtime.ingestion.sminfo_queue import build_sminfo_task
+from merry_runtime.ingestion.web_crawler import CrawlFetchError
 from merry_runtime.pipelines.crawl_sources import crawl_sources
 from merry_runtime.wiki_store import SQLiteWikiStore
 
@@ -553,6 +554,286 @@ def test_crawl_sources_does_not_slack_platum_news_already_in_sheet_when_db_is_em
     assert len(structured_store.tables["raw_sources"]) == 1
     assert structured_store.tables["raw_sources"][0]["channel"] == "platum_investment_news"
     assert review_queue.published["Portfolio News"] == []
+
+
+def test_crawl_sources_publishes_same_platum_url_for_new_company(tmp_path) -> None:
+    object_store = FakeObjectStore(bucket="raw-bucket")
+    structured_store = FakeStructuredStore()
+    review_queue = FakeReviewQueue()
+    review_queue.seed_reviews(
+        "Portfolio News",
+        [
+            {
+                "company": "공감만세",
+                "url": "https://platum.kr/archives/286555",
+                "title": "공감만세와 리소리우스, 임팩트 투자 유치",
+            }
+        ],
+    )
+    html = """
+        <div class="gb-grid-column gb-query-loop-item">
+          <a class="gb-container-link" href="https://platum.kr/archives/286555"></a>
+          <h3 class="gb-headline">공감만세와 리소리우스, 임팩트 투자 유치</h3>
+          <p class="gb-headline excerpt">공감만세와 리소리우스가 후속 투자를 유치했다.</p>
+        </div>
+    """
+
+    result = crawl_sources(
+        targets=[
+            {
+                "url": "https://platum.kr/archives/category/investment",
+                "source_kind": "platum_investment_news",
+                "portfolio_companies": ["공감만세(주)", "(주)리소리우스"],
+                "max_pages": 1,
+            }
+        ],
+        object_store=object_store,
+        structured_store=structured_store,
+        review_queue=review_queue,
+        fetch_url=lambda url: html,
+        run_id="run_platum_existing_url_new_company",
+    )
+
+    assert result.crawled_source_count == 2
+    assert [row["company"] for row in review_queue.published["Portfolio News"]] == ["리소리우스"]
+
+
+def test_crawl_sources_does_not_drop_new_company_when_platum_url_exists_in_db(tmp_path) -> None:
+    object_store = FakeObjectStore(bucket="raw-bucket")
+    structured_store = FakeStructuredStore()
+    structured_store.upsert_rows(
+        table="raw_sources",
+        rows=[
+            {
+                "source_id": "src_existing",
+                "channel": "platum_investment_news",
+                "url": "https://platum.kr/archives/286555",
+            }
+        ],
+        key_fields=("source_id",),
+    )
+    structured_store.upsert_rows(
+        table="signals",
+        rows=[
+            {
+                "signal_id": "sig_existing",
+                "source_id": "src_existing",
+                "entity_id": "ent_gong",
+            }
+        ],
+        key_fields=("signal_id",),
+    )
+    structured_store.upsert_rows(
+        table="mother_entities",
+        rows=[
+            {
+                "entity_id": "ent_gong",
+                "name": "공감만세",
+                "normalized_name": "공감만세",
+            }
+        ],
+        key_fields=("entity_id",),
+    )
+    review_queue = FakeReviewQueue()
+    html = """
+        <div class="gb-grid-column gb-query-loop-item">
+          <a class="gb-container-link" href="https://platum.kr/archives/286555"></a>
+          <h3 class="gb-headline">공감만세와 리소리우스, 임팩트 투자 유치</h3>
+          <p class="gb-headline excerpt">공감만세와 리소리우스가 후속 투자를 유치했다.</p>
+        </div>
+    """
+
+    result = crawl_sources(
+        targets=[
+            {
+                "url": "https://platum.kr/archives/category/investment",
+                "source_kind": "platum_investment_news",
+                "portfolio_companies": ["공감만세(주)", "(주)리소리우스"],
+                "max_pages": 1,
+            }
+        ],
+        object_store=object_store,
+        structured_store=structured_store,
+        review_queue=review_queue,
+        fetch_url=lambda url: html,
+        run_id="run_platum_existing_db_url_new_company",
+    )
+
+    assert result.crawled_source_count == 1
+    assert review_queue.published["Portfolio News"][0]["company"] == "리소리우스"
+
+
+def test_crawl_sources_fetches_platum_facetwp_pages_when_configured(tmp_path) -> None:
+    object_store = FakeObjectStore(bucket="raw-bucket")
+    structured_store = FakeStructuredStore()
+    review_queue = FakeReviewQueue()
+    notifier = FakeNotifier()
+    first_page_html = """
+        <div class="gb-grid-column gb-query-loop-item">
+          <a class="gb-container-link" href="https://platum.kr/archives/286770"></a>
+          <h3 class="gb-headline">삶 클리닉, AI엔젤클럽으로부터 시드 투자 유치</h3>
+          <p class="gb-headline excerpt">AI 기반 정신건강 데이터 플랫폼 삶 클리닉이 투자를 유치했다.</p>
+        </div>
+    """
+    second_page_html = """
+        <div class="gb-grid-column gb-query-loop-item">
+          <a class="gb-container-link" href="https://platum.kr/archives/286100"></a>
+          <h3 class="gb-headline">공감만세, 지역 관광 투자 유치</h3>
+          <p class="gb-headline excerpt">공정여행 스타트업 공감만세가 신규 투자를 유치했다.</p>
+          <time class="entry-date published" datetime="2026-05-01T09:00:00+09:00">2026.05.01</time>
+        </div>
+    """
+
+    result = crawl_sources(
+        targets=[
+            {
+                "url": "https://platum.kr/archives/category/investment",
+                "source_kind": "platum_investment_news",
+                "portfolio_companies": ["공감만세(주)"],
+                "max_pages": 2,
+            }
+        ],
+        object_store=object_store,
+        structured_store=structured_store,
+        review_queue=review_queue,
+        notifier=notifier,
+        slack_channel="C123",
+        fetch_url=lambda url: first_page_html,
+        fetch_platum_page=lambda url, page: second_page_html,
+        run_id="run_platum_facetwp_pages",
+    )
+
+    assert result.crawled_source_count == 1
+    assert result.notified_count == 1
+    assert review_queue.published["Portfolio News"][0]["company"] == "공감만세"
+    assert review_queue.published["Portfolio News"][0]["url"] == "https://platum.kr/archives/286100"
+    assert "공감만세" in notifier.messages[0]["text"]
+
+
+def test_crawl_sources_uses_platum_pagination_by_default(tmp_path) -> None:
+    object_store = FakeObjectStore(bucket="raw-bucket")
+    structured_store = FakeStructuredStore()
+    review_queue = FakeReviewQueue()
+    first_page_html = """
+        <div class="gb-grid-column gb-query-loop-item">
+          <a class="gb-container-link" href="https://platum.kr/archives/286770"></a>
+          <h3 class="gb-headline">삶 클리닉, AI엔젤클럽으로부터 시드 투자 유치</h3>
+          <p class="gb-headline excerpt">AI 기반 정신건강 데이터 플랫폼 삶 클리닉이 투자를 유치했다.</p>
+        </div>
+    """
+    second_page_html = """
+        <div class="gb-grid-column gb-query-loop-item">
+          <a class="gb-container-link" href="https://platum.kr/archives/286100"></a>
+          <h3 class="gb-headline">공감만세, 지역 관광 투자 유치</h3>
+          <p class="gb-headline excerpt">공정여행 스타트업 공감만세가 신규 투자를 유치했다.</p>
+        </div>
+    """
+
+    result = crawl_sources(
+        targets=[
+            {
+                "url": "https://platum.kr/archives/category/investment",
+                "source_kind": "platum_investment_news",
+                "portfolio_companies": ["공감만세(주)"],
+            }
+        ],
+        object_store=object_store,
+        structured_store=structured_store,
+        review_queue=review_queue,
+        fetch_url=lambda url: first_page_html,
+        fetch_platum_page=lambda url, page: second_page_html,
+        run_id="run_platum_default_pages",
+    )
+
+    assert result.crawled_source_count == 1
+    assert review_queue.published["Portfolio News"][0]["company"] == "공감만세"
+
+
+def test_crawl_sources_clamps_platum_max_pages_from_sheet(tmp_path) -> None:
+    object_store = FakeObjectStore(bucket="raw-bucket")
+    structured_store = FakeStructuredStore()
+    page_calls: list[int] = []
+
+    def fetch_platum_page(url: str, page: int) -> str:
+        page_calls.append(page)
+        return ""
+
+    crawl_sources(
+        targets=[
+            {
+                "url": "https://platum.kr/archives/category/investment",
+                "source_kind": "platum_investment_news",
+                "portfolio_companies": ["공감만세(주)"],
+                "max_pages": 5000,
+            }
+        ],
+        object_store=object_store,
+        structured_store=structured_store,
+        fetch_url=lambda url: "",
+        fetch_platum_page=fetch_platum_page,
+        run_id="run_platum_clamped_pages",
+    )
+
+    assert page_calls == list(range(2, 51))
+
+
+def test_crawl_sources_preserves_multiple_portfolio_matches_for_same_platum_url(tmp_path) -> None:
+    object_store = FakeObjectStore(bucket="raw-bucket")
+    structured_store = FakeStructuredStore()
+    review_queue = FakeReviewQueue()
+    html = """
+        <div class="gb-grid-column gb-query-loop-item">
+          <a class="gb-container-link" href="https://platum.kr/archives/286555"></a>
+          <h3 class="gb-headline">공감만세와 리소리우스, 임팩트 투자 유치</h3>
+          <p class="gb-headline excerpt">공감만세와 리소리우스가 후속 투자를 유치했다.</p>
+        </div>
+    """
+
+    result = crawl_sources(
+        targets=[
+            {
+                "url": "https://platum.kr/archives/category/investment",
+                "source_kind": "platum_investment_news",
+                "portfolio_companies": ["공감만세(주)", "(주)리소리우스"],
+                "max_pages": 1,
+            }
+        ],
+        object_store=object_store,
+        structured_store=structured_store,
+        review_queue=review_queue,
+        fetch_url=lambda url: html,
+        run_id="run_platum_multi_company",
+    )
+
+    assert result.crawled_source_count == 2
+    assert [row["company"] for row in review_queue.published["Portfolio News"]] == ["공감만세", "리소리우스"]
+
+
+def test_crawl_sources_records_platum_pagination_fetch_warnings(tmp_path) -> None:
+    object_store = FakeObjectStore(bucket="raw-bucket")
+    structured_store = FakeStructuredStore()
+
+    def fetch_platum_page(url: str, page: int) -> str:
+        raise CrawlFetchError("blocked")
+
+    result = crawl_sources(
+        targets=[
+            {
+                "url": "https://platum.kr/archives/category/investment",
+                "source_kind": "platum_investment_news",
+                "portfolio_companies": ["공감만세(주)"],
+                "max_pages": 2,
+            }
+        ],
+        object_store=object_store,
+        structured_store=structured_store,
+        fetch_url=lambda url: "",
+        fetch_platum_page=fetch_platum_page,
+        run_id="run_platum_page_warning",
+    )
+
+    assert result.warning_count == 1
+    assert "Platum pagination failed" in structured_store.tables["agent_runs"][0]["error_message"]
 
 
 def test_crawl_sources_accepts_platum_investment_alias_from_runtime_env(tmp_path) -> None:

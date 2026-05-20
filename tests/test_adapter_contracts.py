@@ -590,6 +590,46 @@ def test_google_sheet_review_queue_appends_new_columns_to_existing_headers_witho
     assert service.values_obj.append_body["values"][0][-1] == "hello@merry.ai"  # type: ignore[index]
 
 
+def test_google_sheet_review_queue_migrates_operator_headers_when_reading() -> None:
+    service = FakeSheetsService()
+    legacy_headers = [
+        "url",
+        "source_kind",
+        "max_cards",
+        "max_articles",
+        "portfolio_watchlist_path",
+        "status",
+    ]
+    migrated_headers = legacy_headers + [
+        header for header in OPERATOR_CONSOLE_HEADERS["Crawl Sources"] if header not in legacy_headers
+    ]
+    service.values_obj.get_responses.extend(
+        [
+            {"values": [legacy_headers]},
+            {
+                "values": [
+                    migrated_headers,
+                    [
+                        "https://platum.kr/archives/category/investment",
+                        "platum_investment_news",
+                        "",
+                        "24",
+                        "configs/portfolio_watchlist.txt",
+                        "active",
+                    ],
+                ]
+            },
+        ]
+    )
+    queue = GoogleSheetReviewQueue(service=service, spreadsheet_id="sheet_1")
+
+    rows = queue.read_pending_reviews(sheet_tab="Crawl Sources")
+
+    assert service.values_obj.update_body == {"values": [migrated_headers]}
+    assert rows[0]["url"] == "https://platum.kr/archives/category/investment"
+    assert rows[0]["max_articles"] == "24"
+
+
 def test_google_sheet_review_queue_creates_missing_tab_before_headers() -> None:
     service = FakeSheetsService()
     service.values_obj.get_responses.append({"values": []})
@@ -797,27 +837,27 @@ def test_google_sheet_review_queue_skips_korean_display_label_row_when_reading_c
     labels = [""] * len(headers)
     labels[headers.index("company")] = "기업명"
     labels[headers.index("representative")] = "대표자"
-    service.values_obj.get_responses.append(
-        {
-            "values": [
-                headers,
-                labels,
-                [
-                    "2026-05-19T00:00:00+00:00",
-                    "에이아이오",
-                    "에이아이오",
-                    "권진형",
-                    "https://the-aio.com/",
-                ],
-            ]
-        }
-    )
+    sheet_values = {
+        "values": [
+            headers,
+            labels,
+            [
+                "2026-05-19T00:00:00+00:00",
+                "에이아이오",
+                "에이아이오",
+                "권진형",
+                "https://the-aio.com/",
+            ],
+        ]
+    }
+    service.values_obj.get_responses.append(sheet_values)
     queue = GoogleSheetReviewQueue(service=service, spreadsheet_id="sheet_1")
 
     rows = queue.read_pending_reviews(sheet_tab="Candidate Detail")
 
     assert [row["company"] for row in rows] == ["에이아이오"]
     assert rows[0]["representative"] == "권진형"
+    assert not hasattr(service.values_obj, "update_body")
 
 
 def test_google_sheet_review_queue_rewrites_below_korean_display_label_row() -> None:
@@ -1699,6 +1739,7 @@ def test_google_sheet_review_queue_supports_operator_console_tabs() -> None:
             "source_kind",
             "max_cards",
             "max_articles",
+            "max_pages",
             "portfolio_watchlist_path",
             "channel",
             "company",
