@@ -552,7 +552,7 @@ def test_crawl_sources_does_not_slack_platum_news_already_in_sheet_when_db_is_em
     assert len(notifier.messages) == 0
     assert len(structured_store.tables["raw_sources"]) == 1
     assert structured_store.tables["raw_sources"][0]["channel"] == "platum_investment_news"
-    assert review_queue.published["Portfolio News"][0]["url"] == "https://platum.kr/archives/286764"
+    assert review_queue.published["Portfolio News"] == []
 
 
 def test_crawl_sources_accepts_platum_investment_alias_from_runtime_env(tmp_path) -> None:

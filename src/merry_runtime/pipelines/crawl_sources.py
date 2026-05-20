@@ -49,18 +49,19 @@ def crawl_sources(
     existing_portfolio_news_urls = _existing_portfolio_news_urls(review_queue=review_queue)
 
     sources: list[dict[str, str]] = []
+    sheet_projection_sources: list[dict[str, str]] = []
     portfolio_news_sources: list[dict[str, str]] = []
     for target in active_targets:
         html = fetch_url(target["url"])
         if target["source_kind"] == THEVC_INVESTMENT_CHANNEL:
-            sources.extend(
-                extract_thevc_investment_sources(
-                    html,
-                    source_url=target["url"],
-                    max_cards=int(target.get("max_cards") or 20),
-                    fetch_detail_url=fetch_url if _truthy(target.get("detail_enrichment"), default=True) else None,
-                )
+            extracted_sources = extract_thevc_investment_sources(
+                html,
+                source_url=target["url"],
+                max_cards=int(target.get("max_cards") or 20),
+                fetch_detail_url=fetch_url if _truthy(target.get("detail_enrichment"), default=True) else None,
             )
+            sources.extend(extracted_sources)
+            sheet_projection_sources.extend(extracted_sources)
             continue
         if target["source_kind"] == PLATUM_INVESTMENT_CHANNEL:
             extracted_sources = extract_platum_portfolio_news_sources(
@@ -75,11 +76,13 @@ def crawl_sources(
                 if not _is_existing_platum_news_source(source=source, structured_store=structured_store)
             ]
             sources.extend(new_sources)
-            portfolio_news_sources.extend(
+            new_sheet_sources = [
                 source
                 for source in new_sources
                 if not _is_existing_portfolio_news_sheet_source(source=source, existing_urls=existing_portfolio_news_urls)
-            )
+            ]
+            sheet_projection_sources.extend(new_sheet_sources)
+            portfolio_news_sources.extend(new_sheet_sources)
             continue
         raise ValueError(f"Unsupported crawl source_kind: {target['source_kind']}")
 
@@ -98,7 +101,7 @@ def crawl_sources(
             _publish_sheet_projection(
                 review_queue=review_queue,
                 structured_store=structured_store,
-                sources=sources,
+                sources=sheet_projection_sources,
                 collected_at=started_at,
             )
         enqueued_sminfo_tasks = _enqueue_sminfo_tasks(
