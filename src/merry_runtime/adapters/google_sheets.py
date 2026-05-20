@@ -408,14 +408,21 @@ class GoogleSheetReviewQueue:
             range=_sheet_range(sheet_tab, headers),
         ).execute()
         existing_values = existing_response.get("values", [])
+        existing_values = _remap_existing_values(
+            sheet_tab=sheet_tab,
+            headers=headers,
+            previous_headers=header_state.previous_headers,
+            existing_values=existing_values,
+        )
         existing_row_count = len(existing_values)
         preamble = _sheet_preamble(sheet_tab=sheet_tab, headers=headers, existing_values=existing_values)
-        rewrite_projection = header_state.replaced_schema or _has_legacy_candidate_detail_rows(
+        rewrite_from_scratch = header_state.replaced_schema or _has_legacy_candidate_detail_rows(
             sheet_tab=sheet_tab,
             headers=headers,
             existing_values=existing_values,
         )
-        if rewrite_projection:
+        rewrite_projection = rewrite_from_scratch or header_state.reordered_schema
+        if rewrite_from_scratch:
             existing_values = [list(row) for row in preamble]
         if len(key_fields) > 1 or rewrite_projection:
             compacted_rows = _compact_sheet_rows(
@@ -549,14 +556,24 @@ class GoogleSheetReviewQueue:
         effective_headers = _effective_headers(sheet_tab=sheet_tab, existing=existing, canonical=list(headers))
         replaced_schema = bool(existing) and _replaces_candidate_detail_schema(sheet_tab=sheet_tab, existing=existing)
         if existing == effective_headers:
-            return HeaderState(headers=tuple(effective_headers), previous_headers=tuple(existing), replaced_schema=False)
+            return HeaderState(
+                headers=tuple(effective_headers),
+                previous_headers=tuple(existing),
+                replaced_schema=False,
+                reordered_schema=False,
+            )
         self.service.spreadsheets().values().update(
             spreadsheetId=self.spreadsheet_id,
             range=_sheet_range(sheet_tab, tuple(effective_headers), row="1"),
             valueInputOption="USER_ENTERED",
             body={"values": [effective_headers]},
         ).execute()
-        return HeaderState(headers=tuple(effective_headers), previous_headers=tuple(existing), replaced_schema=replaced_schema)
+        return HeaderState(
+            headers=tuple(effective_headers),
+            previous_headers=tuple(existing),
+            replaced_schema=replaced_schema,
+            reordered_schema=bool(existing) and existing != effective_headers,
+        )
 
     def _ensure_sheet_tab(self, *, sheet_tab: str) -> None:
         response = self.service.spreadsheets().get(
@@ -618,6 +635,7 @@ class HeaderState:
     headers: tuple[str, ...]
     previous_headers: tuple[str, ...]
     replaced_schema: bool
+    reordered_schema: bool
 
 
 def _headers_for_tab(sheet_tab: str) -> tuple[str, ...]:
@@ -631,6 +649,8 @@ def _headers_for_tab(sheet_tab: str) -> tuple[str, ...]:
 def _effective_headers(*, sheet_tab: str, existing: list[str], canonical: list[str]) -> list[str]:
     if _replaces_candidate_detail_schema(sheet_tab=sheet_tab, existing=existing):
         return canonical + [header for header in existing if header and header not in canonical and header != "entity_id"]
+    if sheet_tab == "Candidate Detail" and existing:
+        return canonical + [header for header in existing if header and header not in canonical]
     return _merge_headers(existing=existing, canonical=canonical)
 
 
@@ -676,6 +696,30 @@ def _row_values(row: dict[str, object], headers: tuple[str, ...], *, escape_form
     if not escape_formula_cells:
         return values
     return [_safe_cell_value(value) for value in values]
+
+
+def _remap_existing_values(
+    *,
+    sheet_tab: str,
+    headers: tuple[str, ...],
+    previous_headers: tuple[str, ...],
+    existing_values: list[list[object]],
+) -> list[list[object]]:
+    if not existing_values or not previous_headers or previous_headers == headers:
+        return existing_values
+    remapped: list[list[object]] = [list(headers)]
+    for values in existing_values[1:]:
+        if _is_display_label_row(sheet_tab=sheet_tab, headers=previous_headers, values=values):
+            label_row = _display_label_row(sheet_tab=sheet_tab, headers=headers)
+            remapped.append(label_row if label_row is not None else _remap_row_values(values, previous_headers, headers))
+            continue
+        remapped.append(_remap_row_values(values, previous_headers, headers))
+    return remapped
+
+
+def _remap_row_values(values: list[object], previous_headers: tuple[str, ...], headers: tuple[str, ...]) -> list[object]:
+    previous_row = dict(zip(previous_headers, values, strict=False))
+    return [previous_row.get(header, "") for header in headers]
 
 
 def _sheet_preamble(

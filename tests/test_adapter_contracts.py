@@ -914,6 +914,61 @@ def test_google_sheet_review_queue_rewrites_below_korean_display_label_row() -> 
     assert rewritten[2][headers.index("sminfo_company")] == "(주)에이아이오"
 
 
+def test_google_sheet_review_queue_reorders_candidate_detail_p1_headers_next_to_industry() -> None:
+    service = FakeSheetsService()
+    service.sheet_titles.add("Candidate Detail")
+    canonical_headers = list(OPERATOR_CONSOLE_HEADERS["Candidate Detail"])
+    p1_headers = [
+        "p1_region_match",
+        "p1_region_rule",
+        "p1_region_detail",
+        "p1_purpose_match",
+        "p1_purpose_detail",
+    ]
+    legacy_headers = [header for header in canonical_headers if header not in p1_headers] + p1_headers + ["operator_note"]
+    expected_headers = canonical_headers + ["operator_note"]
+    existing_row = [""] * len(legacy_headers)
+    existing_row[legacy_headers.index("collected_at")] = "2026-05-20T11:40:00+09:00"
+    existing_row[legacy_headers.index("company")] = "Merry AI"
+    existing_row[legacy_headers.index("homepage")] = "https://merry.ai"
+    existing_row[legacy_headers.index("region")] = "경상북도 청도군"
+    existing_row[legacy_headers.index("industry")] = "Agri"
+    existing_row[legacy_headers.index("summary")] = "공개 카드 -> Merry AI"
+    existing_row[legacy_headers.index("business_model")] = "local food"
+    existing_row[legacy_headers.index("p1_region_match")] = "Y"
+    existing_row[legacy_headers.index("p1_region_rule")] = "1_특정지역_4000백만원이상; 5_인구감소지역"
+    existing_row[legacy_headers.index("p1_region_detail")] = "경북, 청도군; 경북 청도군"
+    existing_row[legacy_headers.index("p1_purpose_match")] = "Y"
+    existing_row[legacy_headers.index("p1_purpose_detail")] = "소재지 단독 기준 해당"
+    existing_row[legacy_headers.index("operator_note")] = "keep this note"
+    service.values_obj.get_responses.extend(
+        [
+            {"values": [legacy_headers]},
+            {"values": [expected_headers, existing_row]},
+        ]
+    )
+    queue = GoogleSheetReviewQueue(service=service, spreadsheet_id="sheet_1")
+
+    queue.upsert_cards(
+        sheet_tab="Candidate Detail",
+        rows=[{"company": "Merry AI", "homepage": "https://merry.ai"}],
+        key_fields=("company",),
+    )
+
+    rewritten = service.values_obj.update_body["values"]  # type: ignore[index]
+    headers = rewritten[0]
+    row = rewritten[1]
+    assert service.values_obj.update_kwargs["range"] == "'Candidate Detail'!A1:AS2"
+    assert headers.index("p1_region_match") == headers.index("industry") + 1
+    assert headers.index("summary") == headers.index("p1_purpose_detail") + 1
+    assert row[headers.index("industry")] == "Agri"
+    assert row[headers.index("p1_region_match")] == "Y"
+    assert row[headers.index("p1_region_rule")] == "1_특정지역_4000백만원이상; 5_인구감소지역"
+    assert row[headers.index("summary")] == "공개 카드 -> Merry AI"
+    assert row[headers.index("business_model")] == "local food"
+    assert row[headers.index("operator_note")] == "keep this note"
+
+
 def test_google_sheet_review_queue_migrates_candidate_detail_from_entity_id_schema() -> None:
     service = FakeSheetsService()
     service.sheet_titles.add("Candidate Detail")
