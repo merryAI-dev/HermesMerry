@@ -55,7 +55,10 @@ class PublicWebSearchClient:
             user_agent=self.user_agent,
             urlopen=self.urlopen,
         )
-        results = duckduckgo.search(query, max_results=max_results)
+        try:
+            results = duckduckgo.search(query, max_results=max_results)
+        except Exception:
+            results = []
         if results:
             return results
         return _fetch_bing_results(

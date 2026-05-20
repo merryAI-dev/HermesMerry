@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -64,7 +65,9 @@ class SQLiteStructuredStore:
         reference_time: str,
         agent_id: str,
         leased_at: str,
+        stale_running_seconds: int = 3600,
     ) -> list[dict[str, object]]:
+        stale_cutoff = _stale_cutoff(reference_time=reference_time, seconds=stale_running_seconds)
         with sqlite3.connect(self.db_path, isolation_level=None) as connection:
             connection.row_factory = sqlite3.Row
             connection.execute("PRAGMA journal_mode=WAL")
@@ -73,12 +76,15 @@ class SQLiteStructuredStore:
                 rows = connection.execute(
                     """
                     select * from sminfo_enrichment_queue
-                    where status in ('pending', 'retry')
-                      and next_run_at <= ?
+                    where next_run_at <= ?
+                      and (
+                        status in ('pending', 'retry')
+                        or (status = 'running' and locked_at != '' and locked_at <= ?)
+                      )
                     order by priority asc, created_at asc
                     limit ?
                     """,
-                    (reference_time, max(max_items, 0)),
+                    (reference_time, stale_cutoff, max(max_items, 0)),
                 ).fetchall()
                 task_ids = [str(row["task_id"]) for row in rows]
                 if not task_ids:
@@ -207,3 +213,8 @@ class SQLiteStructuredStore:
             "STRING": "TEXT",
             "TIMESTAMP": "TEXT",
         }.get(bigquery_type, "TEXT")
+
+
+def _stale_cutoff(*, reference_time: str, seconds: int) -> str:
+    parsed = datetime.fromisoformat(reference_time.replace("Z", "+00:00"))
+    return (parsed - timedelta(seconds=max(seconds, 1))).isoformat()

@@ -143,13 +143,20 @@ def _research_one_investor(
     collected_at: str,
     search_max_results: int,
 ) -> dict[str, object]:
-    query, evidence = _search_investor_evidence(
-        investor=investor,
-        search_client=search_client,
-        search_max_results=search_max_results,
-    )
     manager_id = str(investor.get("manager_id") or "")
     manager_name = str(investor.get("manager_name") or "")
+    try:
+        query, evidence = _search_investor_evidence(
+            investor=investor,
+            search_client=search_client,
+            search_max_results=search_max_results,
+        )
+        search_error = ""
+    except Exception as exc:
+        queries = _investor_search_queries(investor)
+        query = queries[0] if queries else manager_name
+        evidence = []
+        search_error = f"{type(exc).__name__}: {exc}"[:1000]
     base = {
         "manager_id": manager_id,
         "manager_name": manager_name,
@@ -168,6 +175,8 @@ def _research_one_investor(
         "collected_at": collected_at,
         "updated_at": collected_at,
     }
+    if search_error:
+        return {**base, "status": "error", "error_message": search_error}
     if not evidence:
         return base
     try:

@@ -132,6 +132,13 @@ def crawl_sources(
                 slack_channel=slack_channel,
                 sources=portfolio_news_sources,
             )
+            if review_queue is not None and notified_count:
+                _mark_portfolio_news_notified(
+                    review_queue=review_queue,
+                    sources=portfolio_news_sources,
+                    collected_at=started_at,
+                    notified_at=_now(),
+                )
 
     result = CrawlResult(
         run_id=run_id,
@@ -359,6 +366,26 @@ def _publish_sminfo_queue_projection(*, review_queue: ReviewQueue, tasks: list[d
         sheet_tab="SMINFO Queue",
         rows=[sminfo_queue_sheet_row(task) for task in tasks],
         key_fields=("task_id",),
+    )
+
+
+def _mark_portfolio_news_notified(
+    *,
+    review_queue: ReviewQueue,
+    sources: list[dict[str, str]],
+    collected_at: str,
+    notified_at: str,
+) -> None:
+    parsed_sources = [_parse_projection_source(source) for source in sources]
+    rows = []
+    for parsed in parsed_sources:
+        row = _portfolio_news_row(parsed, collected_at=collected_at)
+        row["notified_at"] = notified_at
+        rows.append(row)
+    review_queue.upsert_cards(
+        sheet_tab="Portfolio News",
+        rows=rows,
+        key_fields=("url", "company"),
     )
 
 

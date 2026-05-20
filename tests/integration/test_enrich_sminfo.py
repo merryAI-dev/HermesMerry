@@ -1,6 +1,7 @@
 from datetime import UTC, datetime, timedelta
 
 from merry_runtime.adapters.fakes import FakeReviewQueue, FakeStructuredStore
+from merry_runtime.adapters.sqlite_store import SQLiteStructuredStore
 from merry_runtime.ingestion.sminfo import SminfoProfile
 from merry_runtime.ingestion.sminfo_queue import build_sminfo_task
 from merry_runtime.pipelines.enrich_sminfo import enrich_sminfo_candidates
@@ -252,6 +253,45 @@ def test_enrich_sminfo_candidates_retries_queue_task_after_browser_error() -> No
     assert updated_task["next_run_at"].endswith("+09:00")
     assert updated_task["updated_at"].endswith("+09:00")
     assert "RuntimeError: connection reset" in updated_task["last_error"]
+
+
+def test_enrich_sminfo_candidates_reclaims_stale_running_queue_task(tmp_path) -> None:
+    queue = FakeReviewQueue()
+    store = SQLiteStructuredStore(db_path=tmp_path / "mother.db")
+    stale_locked_at = (datetime.now(UTC) - timedelta(hours=2)).isoformat()
+    task = build_sminfo_task(
+        {
+            "company": "에이아이오",
+            "normalized_name": "에이아이오",
+            "representative": "권진형",
+            "homepage": "https://the-aio.com/",
+            "source_url": "https://thevc.kr/aio",
+        },
+        source_channel="thevc_investment_ma",
+        now=stale_locked_at,
+    )
+    task["status"] = "running"
+    task["locked_at"] = stale_locked_at
+    task["locked_by"] = "dead-agent"
+    task["updated_at"] = stale_locked_at
+    store.upsert_rows(table="sminfo_enrichment_queue", rows=[task], key_fields=("task_id",))
+
+    result = enrich_sminfo_candidates(
+        review_queue=queue,
+        structured_store=store,
+        client=FakeSminfoClient(),
+        max_items=1,
+        min_interval_seconds=35,
+        agent_id="agent-test",
+        run_id="run_sminfo_stale_running",
+    )
+
+    assert result.processed_count == 1
+    [updated_task] = store.query_rows(sql="select * from sminfo_enrichment_queue", parameters={})
+    assert updated_task["status"] == "matched"
+    assert updated_task["attempt_count"] == 1
+    assert updated_task["locked_by"] == ""
+    assert updated_task["completed_at"].endswith("+09:00")
 
 
 def test_enrich_sminfo_candidates_does_not_use_sheet_fallback_when_queue_has_no_due_tasks() -> None:

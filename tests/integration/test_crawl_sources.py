@@ -467,8 +467,9 @@ def test_crawl_sources_sends_slack_for_new_platum_portfolio_news_only(tmp_path) 
         </div>
     """
 
+    results = []
     for run_id in ("run_first", "run_second"):
-        result = crawl_sources(
+        results.append(crawl_sources(
             targets=[
                 {
                     "url": "https://platum.kr/archives/category/investment",
@@ -483,8 +484,10 @@ def test_crawl_sources_sends_slack_for_new_platum_portfolio_news_only(tmp_path) 
             slack_channel="C123",
             fetch_url=lambda url: html,
             run_id=run_id,
-        )
+        ))
 
+    result = results[-1]
+    assert results[0].notified_count == 1
     assert result.crawled_source_count == 0
     assert result.notified_count == 0
     assert len(structured_store.tables["raw_sources"]) == 1
@@ -503,7 +506,7 @@ def test_crawl_sources_sends_slack_for_new_platum_portfolio_news_only(tmp_path) 
     assert portfolio_news["source"] == "Platum"
     assert portfolio_news["channel"] == "platum_investment_news"
     assert portfolio_news["matched_companies"] == "비저너리"
-    assert portfolio_news["notified_at"] == ""
+    assert portfolio_news["notified_at"].endswith("+09:00")
     assert portfolio_news["status"] == "new"
     assert len(notifier.messages) == 1
     assert notifier.messages[0]["channel"] == "C123"

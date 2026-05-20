@@ -18,6 +18,15 @@ class FakeSearchClient:
 
 
 @dataclass(slots=True)
+class FailingSearchClient:
+    queries: list[str] = field(default_factory=list)
+
+    def search(self, query: str, *, max_results: int) -> list[dict[str, str]]:
+        self.queries.append(query)
+        raise TimeoutError("search timed out")
+
+
+@dataclass(slots=True)
 class FakeLLMClient:
     response: dict[str, object]
     prompts: list[dict[str, object]] = field(default_factory=list)
@@ -154,3 +163,50 @@ def test_research_investors_records_no_result_without_search_evidence(tmp_path) 
     assert profile["status"] == "no_result"
     assert profile["external_aum_eok"] == 0.0
     assert profile["evidence_url"] == ""
+
+
+def test_research_investors_records_error_when_public_search_fails(tmp_path) -> None:
+    store = SQLiteStructuredStore(db_path=tmp_path / "mother.db")
+    store.upsert_rows(
+        table="kvic_investor_managers",
+        rows=[
+            {
+                "manager_id": "kvic_mgr_timeout",
+                "manager_name": "타임아웃벤처스",
+                "total_fund_count": 1,
+                "active_fund_count": 1,
+                "total_amount_eok": 10.0,
+                "active_amount_eok": 10.0,
+                "total_commitment_eok": 5.0,
+                "active_commitment_eok": 5.0,
+                "fund_fields": [],
+                "representative_funds": ["타임아웃 투자조합"],
+                "profile_tags": [],
+                "latest_fund_year": 2024,
+                "next_expiry_at": "2032-01-01",
+                "latest_expiry_at": "2032-01-01",
+                "collected_at": "2026-05-19T09:00:00+09:00",
+            }
+        ],
+        key_fields=("manager_id",),
+    )
+    search_client = FailingSearchClient()
+    llm_client = FakeLLMClient(response={"status": "success"})
+
+    result = research_investors(
+        structured_store=store,
+        search_client=search_client,
+        llm_client=llm_client,
+        collected_at="2026-05-19T18:20:00+09:00",
+        batch_limit=10,
+    )
+
+    assert result.status == "success"
+    assert result.researched_count == 1
+    assert llm_client.prompts == []
+    [profile] = store.query_rows(sql="select * from investor_external_profiles", parameters={})
+    assert profile["status"] == "error"
+    assert "TimeoutError: search timed out" in profile["error_message"]
+    [agent_run] = store.query_rows(sql="select * from agent_runs", parameters={})
+    assert agent_run["job_name"] == "research-investors"
+    assert agent_run["status"] == "success"
