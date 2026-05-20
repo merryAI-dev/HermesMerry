@@ -775,6 +775,11 @@ def test_google_sheet_review_queue_upserts_existing_row_by_key() -> None:
         "master@thevc.kr",
         "Seoul",
         "AI",
+        "",
+        "",
+        "",
+        "",
+        "",
         "공개 카드 -> Merry AI",
         "old model",
         "Seed",
@@ -823,11 +828,12 @@ def test_google_sheet_review_queue_upserts_existing_row_by_key() -> None:
 
     assert count == 1
     assert service.values_obj.append_body is None
-    assert service.values_obj.update_kwargs["range"] == "'Candidate Detail'!A2:AM2"
-    assert service.values_obj.update_body["values"][0][3] == "New Founder"  # type: ignore[index]
-    assert service.values_obj.update_body["values"][0][5] == "founder@merry.ai"  # type: ignore[index]
-    assert service.values_obj.update_body["values"][0][8] == "공개 카드 -> Merry AI"  # type: ignore[index]
-    assert service.values_obj.update_body["values"][0][9] == "AI workflow automation"  # type: ignore[index]
+    assert service.values_obj.update_kwargs["range"] == "'Candidate Detail'!A2:AR2"
+    updated = service.values_obj.update_body["values"][0]  # type: ignore[index]
+    assert updated[headers.index("representative")] == "New Founder"
+    assert updated[headers.index("contact_email")] == "founder@merry.ai"
+    assert updated[headers.index("summary")] == "공개 카드 -> Merry AI"
+    assert updated[headers.index("business_model")] == "AI workflow automation"
 
 
 def test_google_sheet_review_queue_skips_korean_display_label_row_when_reading_candidates() -> None:
@@ -898,7 +904,7 @@ def test_google_sheet_review_queue_rewrites_below_korean_display_label_row() -> 
         key_fields=("company", "homepage"),
     )
 
-    assert service.values_obj.update_kwargs["range"] == "'Candidate Detail'!A1:AM3"
+    assert service.values_obj.update_kwargs["range"] == "'Candidate Detail'!A1:AR3"
     rewritten = service.values_obj.update_body["values"]  # type: ignore[index]
     assert rewritten[1][headers.index("company")] == "기업명"
     assert rewritten[1][headers.index("sminfo_status")] == "중기현황 상태"
@@ -981,16 +987,17 @@ def test_google_sheet_review_queue_migrates_candidate_detail_from_entity_id_sche
 
     assert count == 1
     rewritten = service.values_obj.update_body["values"]  # type: ignore[index]
-    assert service.values_obj.update_kwargs["range"] == "'Candidate Detail'!A1:AM2"
+    assert service.values_obj.update_kwargs["range"] == "'Candidate Detail'!A1:AR2"
     assert rewritten[0][0] == "collected_at"
     assert "entity_id" not in rewritten[0]
+    rewritten_headers = rewritten[0]
     assert rewritten[1][0] == "2026-05-19T00:00:00+00:00"
-    assert rewritten[1][1] == "Merry AI"
-    assert rewritten[1][3] == "New Founder"
-    assert rewritten[1][4] == "https://merry.ai"
-    assert rewritten[1][5] == "founder@merry.ai"
-    assert rewritten[1][8] == "공개 카드 -> Merry AI"
-    assert rewritten[1][9] == "AI workflow automation"
+    assert rewritten[1][rewritten_headers.index("company")] == "Merry AI"
+    assert rewritten[1][rewritten_headers.index("representative")] == "New Founder"
+    assert rewritten[1][rewritten_headers.index("homepage")] == "https://merry.ai"
+    assert rewritten[1][rewritten_headers.index("contact_email")] == "founder@merry.ai"
+    assert rewritten[1][rewritten_headers.index("summary")] == "공개 카드 -> Merry AI"
+    assert rewritten[1][rewritten_headers.index("business_model")] == "AI workflow automation"
 
 
 def test_google_sheet_review_queue_rewrites_legacy_candidate_detail_projection_rows() -> None:
@@ -1006,6 +1013,11 @@ def test_google_sheet_review_queue_rewrites_legacy_candidate_detail_projection_r
         "hello@old.example",
         "Seoul",
         "AI",
+        "",
+        "",
+        "",
+        "",
+        "",
         "THE VC 투자/M&A 공개 카드: Old Co / Old Product.",
         "",
         "",
@@ -1027,6 +1039,11 @@ def test_google_sheet_review_queue_rewrites_legacy_candidate_detail_projection_r
         "hello@stale.example",
         "Seoul",
         "AI",
+        "",
+        "",
+        "",
+        "",
+        "",
         "공개 카드 -> Merry AI",
         "",
         "",
@@ -1075,11 +1092,11 @@ def test_google_sheet_review_queue_rewrites_legacy_candidate_detail_projection_r
 
     assert count == 1
     rewritten = service.values_obj.update_body["values"]  # type: ignore[index]
-    assert service.values_obj.update_kwargs["range"] == "'Candidate Detail'!A1:AM2"
-    assert service.values_obj.clear_kwargs["range"] == "'Candidate Detail'!A3:AM3"
+    assert service.values_obj.update_kwargs["range"] == "'Candidate Detail'!A1:AR2"
+    assert service.values_obj.clear_kwargs["range"] == "'Candidate Detail'!A3:AR3"
     assert len(rewritten) == 2
     assert rewritten[1][1] == "Merry AI"
-    assert rewritten[1][8] == "공개 카드 -> Merry AI"
+    assert rewritten[1][headers.index("summary")] == "공개 카드 -> Merry AI"
 
 
 def test_google_sheet_review_queue_upsert_dedupes_new_rows_with_same_key_in_batch() -> None:
@@ -1123,28 +1140,27 @@ def test_google_sheet_review_queue_upsert_preserves_sheet_owned_and_custom_cells
     service = FakeSheetsService()
     service.sheet_titles.add("Candidate Detail")
     headers = [*OPERATOR_CONSOLE_HEADERS["Candidate Detail"], "operator_note"]
-    existing_row = [
-        "2026-05-18T00:00:00+00:00",
-        "Merry AI",
-        "merryai",
-        "Old Founder",
-        "https://merry.ai",
-        "hello@merry.ai",
-        "Seoul",
-        "AI",
-        "공개 카드 -> Merry AI",
-        "old model",
-        "Seed",
-        "undisclosed",
-        "Old Investor",
-        "91.0",
-        "0.92",
-        "priority",
-        "advance",
-        "qualified",
-        "wiki/entities/Merry AI.md",
-        "call Tuesday",
-    ]
+    existing_row = [""] * len(headers)
+    existing_row[headers.index("collected_at")] = "2026-05-18T00:00:00+00:00"
+    existing_row[headers.index("company")] = "Merry AI"
+    existing_row[headers.index("normalized_name")] = "merryai"
+    existing_row[headers.index("representative")] = "Old Founder"
+    existing_row[headers.index("homepage")] = "https://merry.ai"
+    existing_row[headers.index("contact_email")] = "hello@merry.ai"
+    existing_row[headers.index("region")] = "Seoul"
+    existing_row[headers.index("industry")] = "AI"
+    existing_row[headers.index("summary")] = "공개 카드 -> Merry AI"
+    existing_row[headers.index("business_model")] = "old model"
+    existing_row[headers.index("investment_round")] = "Seed"
+    existing_row[headers.index("investment_amount")] = "undisclosed"
+    existing_row[headers.index("investor")] = "Old Investor"
+    existing_row[headers.index("latest_score")] = "91.0"
+    existing_row[headers.index("priority_probability")] = "0.92"
+    existing_row[headers.index("queue_type")] = "priority"
+    existing_row[headers.index("recommended_action")] = "advance"
+    existing_row[headers.index("status")] = "qualified"
+    existing_row[headers.index("wiki_path")] = "wiki/entities/Merry AI.md"
+    existing_row[headers.index("operator_note")] = "call Tuesday"
     service.values_obj.get_responses.extend(
         [
             {"values": [headers]},
@@ -1182,13 +1198,13 @@ def test_google_sheet_review_queue_upsert_preserves_sheet_owned_and_custom_cells
     )
 
     updated = service.values_obj.update_body["values"][0]  # type: ignore[index]
-    assert updated[3] == "New Founder"
-    assert updated[4] == "https://merry.ai"
-    assert updated[5] == "hello@merry.ai"
-    assert updated[13] == "91.0"
-    assert updated[14] == "0.92"
-    assert updated[17] == "qualified"
-    assert updated[19] == "call Tuesday"
+    assert updated[headers.index("representative")] == "New Founder"
+    assert updated[headers.index("homepage")] == "https://merry.ai"
+    assert updated[headers.index("contact_email")] == "hello@merry.ai"
+    assert updated[headers.index("latest_score")] == "91.0"
+    assert updated[headers.index("priority_probability")] == "0.92"
+    assert updated[headers.index("status")] == "qualified"
+    assert updated[headers.index("operator_note")] == "call Tuesday"
 
 
 def test_google_sheet_review_queue_upsert_clears_known_bad_crawl_cells() -> None:
@@ -1363,8 +1379,8 @@ def test_google_sheet_review_queue_compacts_candidate_detail_by_company_or_homep
     assert count == 1
     assert service.values_obj.calls[-2][0] == "update"
     assert service.values_obj.calls[-1][0] == "clear"
-    assert service.values_obj.update_kwargs["range"] == "'Candidate Detail'!A1:AM2"
-    assert service.values_obj.clear_kwargs["range"] == "'Candidate Detail'!A3:AM4"
+    assert service.values_obj.update_kwargs["range"] == "'Candidate Detail'!A1:AR2"
+    assert service.values_obj.clear_kwargs["range"] == "'Candidate Detail'!A3:AR4"
     rewritten = service.values_obj.update_body["values"]  # type: ignore[index]
     assert len(rewritten) == 2
     assert rewritten[1][1] == "Merry AI"
@@ -1566,6 +1582,11 @@ def test_google_sheet_review_queue_supports_operator_console_tabs() -> None:
             "contact_email",
             "region",
             "industry",
+            "p1_region_match",
+            "p1_region_rule",
+            "p1_region_detail",
+            "p1_purpose_match",
+            "p1_purpose_detail",
             "summary",
             "business_model",
             "investment_round",

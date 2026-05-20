@@ -15,6 +15,7 @@ from merry_runtime.ingestion.sminfo_queue import (
     queue_status_for_profile,
     sminfo_queue_sheet_row,
 )
+from merry_runtime.regional_priority import evaluate_p1_regional_priority
 
 
 _TERMINAL_SMINFO_STATUSES = {"matched", "not_found", "ambiguous"}
@@ -377,6 +378,15 @@ def _parse_timestamp(value: str) -> datetime | None:
 
 
 def _candidate_detail_update(*, candidate: dict[str, str], profile: SminfoProfile, collected_at: str) -> dict[str, object]:
+    p1_context = evaluate_p1_regional_priority(
+        region=candidate.get("region", ""),
+        road_address=profile.road_address,
+        business_model=candidate.get("business_model", ""),
+        industry=candidate.get("industry", ""),
+        company_type=profile.company_type,
+        main_products=profile.main_products,
+        standard_industry=profile.standard_industry,
+    )
     return {
         "company": _candidate_company(candidate),
         "homepage": candidate.get("homepage", ""),
@@ -393,6 +403,7 @@ def _candidate_detail_update(*, candidate: dict[str, str], profile: SminfoProfil
         "sminfo_error_message": profile.error_message,
         "sminfo_profile_url": profile.sminfo_url,
         "sminfo_collected_at": collected_at,
+        **p1_context,
     }
 
 

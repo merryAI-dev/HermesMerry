@@ -20,6 +20,7 @@ from merry_runtime.portfolio_watchlist import PortfolioKeyword, build_portfolio_
 from merry_runtime.ingestion.web_crawler import CrawlFetchError, fetch_url as fetch_url_text
 from merry_runtime.normalization import normalize_company_name
 from merry_runtime.pipelines.ingest_sources import ingest_sources
+from merry_runtime.regional_priority import evaluate_p1_regional_priority
 from merry_runtime.wiki_store import SQLiteWikiStore
 
 
@@ -422,7 +423,13 @@ def _candidate_detail_row(
 ) -> dict[str, object]:
     signal = parsed.signals[0]
     fields = _payload_fields(parsed.raw_text)
+    business_model = fields.get("business model") or fields.get("product") or signal.evidence_text
     kvic_context = _kvic_investor_context(str(fields.get("investor", "")), kvic_profiles or [])
+    p1_context = evaluate_p1_regional_priority(
+        region=parsed.entity.region,
+        business_model=business_model,
+        industry=parsed.entity.industry,
+    )
     return {
         "collected_at": collected_at,
         "company": parsed.entity.name,
@@ -433,7 +440,8 @@ def _candidate_detail_row(
         "region": parsed.entity.region,
         "industry": parsed.entity.industry,
         "summary": f"공개 카드 -> {parsed.entity.name}",
-        "business_model": fields.get("business model") or fields.get("product") or signal.evidence_text,
+        "business_model": business_model,
+        **p1_context,
         "investment_round": fields.get("investment round", ""),
         "investment_amount": fields.get("investment amount", ""),
         "investor": fields.get("investor", ""),

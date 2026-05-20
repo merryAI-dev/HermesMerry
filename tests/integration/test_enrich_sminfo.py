@@ -131,6 +131,10 @@ def test_enrich_sminfo_candidates_persists_profile_to_sqlite_projection_and_shee
     assert candidate_update["sminfo_largest_shareholder_ratio_pct"] == "52.00"
     assert candidate_update["sminfo_profile_url"].endswith("0007451769")
     assert candidate_update["sminfo_collected_at"].endswith("+09:00")
+    assert candidate_update["p1_region_match"] == "Y"
+    assert candidate_update["p1_region_rule"] == "2_경기도_사회적경제"
+    assert candidate_update["p1_region_detail"] == "경기"
+    assert candidate_update["p1_purpose_match"] == "확인필요"
 
 
 def test_enrich_sminfo_candidates_drains_due_sqlite_queue_before_sheet_fallback() -> None:
