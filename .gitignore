@@ -6,6 +6,7 @@ __pycache__/
 .venv/
 dist/
 build/
+output/
 *.egg-info/
 .DS_Store
 .terraform/
@@ -14,5 +15,7 @@ build/
 terraform.tfvars
 *.tfvars
 .env
+.env.local
+.env.*.local
 .playwright-cli/
 apps_script/**/.clasp.json

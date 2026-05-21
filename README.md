@@ -93,7 +93,7 @@ INVESTOR_RESEARCH_SEARCH_MAX_RESULTS=5
 WIKI_ROOT=/home/hermes/hermes/wiki
 HERMES_AGENT_ID=runpod-hermes-staging
 CRAWL_SHEET_TAB=Crawl Sources
-CRAWL_TARGETS_JSON=[{"url":"https://thevc.kr/","source_kind":"thevc_investment_ma","max_cards":20},{"url":"https://platum.kr/archives/category/investment","source_kind":"platum_investment_news","max_articles":24,"max_pages":2,"portfolio_watchlist_path":"configs/portfolio_watchlist.txt"}]
+CRAWL_TARGETS_JSON=[{"url":"https://thevc.kr/","source_kind":"thevc_investment_ma","max_cards":20},{"url":"https://platum.kr/archives/category/investment","source_kind":"platum_investment_news","max_articles":24,"max_pages":2,"portfolio_watchlist_path":"configs/portfolio_watchlist.txt"},{"url":"https://platum.kr/archives/category/investment","source_kind":"platum_investment_news","max_articles":24,"max_pages":2,"portfolio_watchlist_sheet_tab":"Accelerator Watchlist","portfolio_news_sheet_tab":"Accelerator News","portfolio_news_slack_heading":"Hermes 육성기업 뉴스 감지","portfolio_notify_recent_days":2}]
 AGENT_LOOP_JOBS=sync-kvic-funds,research-investors,crawl-sources,draft-outreach-emails,enrich-sminfo,backup-export
 AGENT_LOOP_INTERVAL_SECONDS=3600
 AGENT_LOOP_MAX_CYCLES=0
@@ -124,6 +124,12 @@ python3 -m merry_runtime.jobs run research-investors
 Without `--sources-file` or `--sources-json`, `crawl-sources` reads URL targets
 from the `Crawl Sources` Sheet tab. The first crawler target is THE VC public
 investment/M&A cards on `https://thevc.kr/`; it does not call `/api` paths.
+Platum portfolio monitoring and accelerator-company monitoring should use
+separate rows: keep the investment list in `Portfolio News`, and put accelerator
+companies in the `Accelerator Watchlist` tab so row add/edit/delete becomes the
+runtime CRUD surface. Accelerator matches are written to `Accelerator News`;
+`portfolio_notify_recent_days=2` limits Slack to today and yesterday while still
+recording all matched rows in the sheet.
 If `crawl4ai` is installed in the runtime image, the crawler uses it first;
 otherwise it falls back to a bounded stdlib HTML fetch for server-rendered pages.
 Without source flags, `ingest-sources` reads Gmail messages from

@@ -30,9 +30,25 @@ class PortfolioKeyword:
     normalized_name: str
 
 
+_INACTIVE_ROW_STATUSES = {"done", "disabled", "skip", "skipped", "inactive"}
+
+
 def load_portfolio_watchlist(path: str | Path) -> tuple[PortfolioKeyword, ...]:
     raw_names = Path(path).read_text(encoding="utf-8").splitlines()
     return build_portfolio_watchlist(raw_names)
+
+
+def build_portfolio_watchlist_from_rows(rows: list[dict[str, str]]) -> tuple[PortfolioKeyword, ...]:
+    raw_names: list[str] = []
+    for row in rows:
+        status = str(row.get("status") or "").strip().casefold()
+        if status in _INACTIVE_ROW_STATUSES:
+            continue
+        company = str(row.get("company") or "").strip()
+        if company:
+            raw_names.append(_main_text_without_parenthetical_aliases(company))
+        raw_names.extend(_split_alias_cell(str(row.get("aliases") or "")))
+    return _build_strict_watchlist(raw_names)
 
 
 def build_portfolio_watchlist(raw_names: list[str] | tuple[str, ...]) -> tuple[PortfolioKeyword, ...]:
@@ -46,6 +62,19 @@ def build_portfolio_watchlist(raw_names: list[str] | tuple[str, ...]) -> tuple[P
                 continue
             seen.add(normalized_name)
             keywords.append(PortfolioKeyword(display_name=display_name, normalized_name=normalized_name))
+    return tuple(keywords)
+
+
+def _build_strict_watchlist(raw_names: list[str] | tuple[str, ...]) -> tuple[PortfolioKeyword, ...]:
+    seen: set[str] = set()
+    keywords: list[PortfolioKeyword] = []
+    for raw_name in raw_names:
+        display_name = _clean_display_name(raw_name)
+        normalized_name = _normalize_for_substring_match(display_name)
+        if len(normalized_name) < 2 or normalized_name in seen:
+            continue
+        seen.add(normalized_name)
+        keywords.append(PortfolioKeyword(display_name=display_name, normalized_name=normalized_name))
     return tuple(keywords)
 
 
@@ -84,6 +113,18 @@ def _aliases(raw_name: str) -> tuple[str, ...]:
         if "구." in parenthetical:
             aliases.append(parenthetical.split("구.", 1)[1])
     return tuple(alias for alias in aliases if alias.strip())
+
+
+def _split_alias_cell(value: str) -> tuple[str, ...]:
+    normalized = value.replace("\r\n", "\n").replace("\r", "\n")
+    for delimiter in (",", ";"):
+        normalized = normalized.replace(delimiter, "\n")
+    return tuple(part.strip() for part in normalized.splitlines() if part.strip())
+
+
+def _main_text_without_parenthetical_aliases(value: str) -> str:
+    outside, _ = _split_parentheticals(value)
+    return outside or value
 
 
 def _split_parentheticals(value: str) -> tuple[str, list[str]]:

@@ -53,7 +53,7 @@ Cloud Run is optional and belongs to `docs/runbooks/staging-canary.md`.
 - `INVESTOR_RESEARCH_STALE_DAYS=7`
 - `INVESTOR_RESEARCH_SEARCH_MAX_RESULTS=5`
 - `CRAWL_SHEET_TAB=Crawl Sources`
-- `CRAWL_TARGETS_JSON=[{"url":"https://thevc.kr/","source_kind":"thevc_investment_ma","max_cards":20},{"url":"https://platum.kr/archives/category/investment","source_kind":"platum_investment_news","max_articles":24,"max_pages":2,"portfolio_watchlist_path":"configs/portfolio_watchlist.txt"}]`
+- `CRAWL_TARGETS_JSON=[{"url":"https://thevc.kr/","source_kind":"thevc_investment_ma","max_cards":20},{"url":"https://platum.kr/archives/category/investment","source_kind":"platum_investment_news","max_articles":24,"max_pages":2,"portfolio_watchlist_path":"configs/portfolio_watchlist.txt"},{"url":"https://platum.kr/archives/category/investment","source_kind":"platum_investment_news","max_articles":24,"max_pages":2,"portfolio_watchlist_sheet_tab":"Accelerator Watchlist","portfolio_news_sheet_tab":"Accelerator News","portfolio_news_slack_heading":"Hermes 육성기업 뉴스 감지","portfolio_notify_recent_days":2}]`
 - `AGENT_LOOP_JOBS=sync-kvic-funds,research-investors,crawl-sources,draft-outreach-emails,enrich-sminfo,backup-export`
 - `AGENT_LOOP_INTERVAL_SECONDS=3600`
 - `AGENT_LOOP_MAX_CYCLES=0` for the always-on SQLite loop that repeats every 1 hour
@@ -157,7 +157,7 @@ INVESTOR_RESEARCH_BATCH_LIMIT: 20
 INVESTOR_RESEARCH_STALE_DAYS: 7
 INVESTOR_RESEARCH_SEARCH_MAX_RESULTS: 5
 CRAWL_SHEET_TAB: Crawl Sources
-CRAWL_TARGETS_JSON: [{"url":"https://thevc.kr/","source_kind":"thevc_investment_ma","max_cards":20},{"url":"https://platum.kr/archives/category/investment","source_kind":"platum_investment_news","max_articles":24,"max_pages":2,"portfolio_watchlist_path":"configs/portfolio_watchlist.txt"}]
+CRAWL_TARGETS_JSON: [{"url":"https://thevc.kr/","source_kind":"thevc_investment_ma","max_cards":20},{"url":"https://platum.kr/archives/category/investment","source_kind":"platum_investment_news","max_articles":24,"max_pages":2,"portfolio_watchlist_path":"configs/portfolio_watchlist.txt"},{"url":"https://platum.kr/archives/category/investment","source_kind":"platum_investment_news","max_articles":24,"max_pages":2,"portfolio_watchlist_sheet_tab":"Accelerator Watchlist","portfolio_news_sheet_tab":"Accelerator News","portfolio_news_slack_heading":"Hermes 육성기업 뉴스 감지","portfolio_notify_recent_days":2}]
 AGENT_LOOP_JOBS: sync-kvic-funds,research-investors,crawl-sources,draft-outreach-emails,enrich-sminfo,backup-export
 AGENT_LOOP_INTERVAL_SECONDS: 3600
 AGENT_LOOP_MAX_CYCLES: 0
@@ -236,6 +236,8 @@ Verify Sheet console tabs:
 
 ```text
 Crawl Sources
+Accelerator Watchlist
+Accelerator News
 Review Queue
 Candidate Detail
 Evidence
@@ -336,6 +338,23 @@ url: https://thevc.kr/
 source_kind: thevc_investment_ma
 status: pending
 ```
+
+For accelerator-company monitoring, add a separate Platum row:
+
+```text
+url: https://platum.kr/archives/category/investment
+source_kind: platum_investment_news
+portfolio_watchlist_sheet_tab: Accelerator Watchlist
+portfolio_news_sheet_tab: Accelerator News
+portfolio_news_slack_heading: Hermes 육성기업 뉴스 감지
+portfolio_notify_recent_days: 2
+status: active
+```
+
+Seed `Accelerator Watchlist` from `configs/accelerator_watchlist.txt` with
+columns `company`, `aliases`, `normalized_name`, `status`, and `notes`. Hermes
+uses active rows only; deleting or marking a row inactive removes it from the
+next crawl without touching the investment portfolio watchlist.
 
 The THE VC crawler is limited to public HTML paths. Do not configure `/api`
 targets. `https://thevc.kr/robots.txt` currently allows `/` and disallows

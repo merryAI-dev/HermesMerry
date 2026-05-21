@@ -3,11 +3,11 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any, Callable
 
 from merry_runtime.adapters.interfaces import Notifier, ObjectStore, ReviewQueue, StructuredStore
-from merry_runtime.clock import now_kst, now_kst_datetime
+from merry_runtime.clock import KST, now_kst, now_kst_datetime
 from merry_runtime.ingestion.sminfo_queue import build_sminfo_task, is_terminal_queue_status, sminfo_queue_sheet_row
 from merry_runtime.ingestion.platum import (
     PLATUM_INVESTMENT_CHANNEL,
@@ -16,7 +16,12 @@ from merry_runtime.ingestion.platum import (
 )
 from merry_runtime.ingestion.thevc import THEVC_INVESTMENT_CHANNEL, extract_thevc_investment_sources
 from merry_runtime.ingestion.parsers import ParsedSource, parse_platum_portfolio_news, parse_thevc_investment_card
-from merry_runtime.portfolio_watchlist import PortfolioKeyword, build_portfolio_watchlist, load_portfolio_watchlist
+from merry_runtime.portfolio_watchlist import (
+    PortfolioKeyword,
+    build_portfolio_watchlist,
+    build_portfolio_watchlist_from_rows,
+    load_portfolio_watchlist,
+)
 from merry_runtime.ingestion.web_crawler import CrawlFetchError, fetch_url as fetch_url_text
 from merry_runtime.normalization import normalize_company_name
 from merry_runtime.pipelines.ingest_sources import ingest_sources
@@ -37,9 +42,20 @@ class CrawlResult:
     warning_count: int = 0
 
 
+@dataclass(slots=True)
+class PortfolioNewsProjectionBatch:
+    sheet_tab: str
+    slack_heading: str
+    notify_recent_days: int
+    sources: list[dict[str, str]]
+
+
 _PLATUM_DEFAULT_MAX_ARTICLES_PER_PAGE = 24
 _PLATUM_DEFAULT_MAX_PAGES = 2
 _PLATUM_MAX_PAGES = 50
+_DEFAULT_PORTFOLIO_NEWS_SHEET_TAB = "Portfolio News"
+_DEFAULT_PORTFOLIO_NEWS_SLACK_HEADING = "Hermes 포트폴리오 뉴스 감지"
+_DEFAULT_PORTFOLIO_WATCHLIST_PATH = "configs/portfolio_watchlist.txt"
 
 
 def crawl_sources(
@@ -59,11 +75,11 @@ def crawl_sources(
     started_at = _now()
     run_id = run_id or _stable_run_id(targets)
     active_targets = [_normalize_target(target) for target in targets if _is_active_target(target)]
-    existing_portfolio_news_keys = _existing_portfolio_news_keys(review_queue=review_queue)
+    existing_portfolio_news_keys_by_tab: dict[str, set[tuple[str, str]]] = {}
+    portfolio_news_batches: dict[str, PortfolioNewsProjectionBatch] = {}
 
     sources: list[dict[str, str]] = []
     sheet_projection_sources: list[dict[str, str]] = []
-    portfolio_news_sources: list[dict[str, str]] = []
     warnings: list[str] = []
     for target in active_targets:
         html = fetch_url(target["url"])
@@ -82,21 +98,46 @@ def crawl_sources(
                 first_page_html=html,
                 target=target,
                 fetch_platum_page=fetch_platum_page,
+                review_queue=review_queue,
             )
             warnings.extend(target_warnings)
+            portfolio_news_sheet_tab = _portfolio_news_sheet_tab(target)
+            existing_portfolio_news_keys = existing_portfolio_news_keys_by_tab.setdefault(
+                portfolio_news_sheet_tab,
+                _existing_portfolio_news_keys(review_queue=review_queue, sheet_tab=portfolio_news_sheet_tab),
+            )
             new_sources = [
                 source
                 for source in extracted_sources
                 if not _is_existing_platum_news_source(source=source, structured_store=structured_store)
             ]
             sources.extend(new_sources)
+            sheet_candidate_sources = (
+                extracted_sources
+                if portfolio_news_sheet_tab != _DEFAULT_PORTFOLIO_NEWS_SHEET_TAB
+                else new_sources
+            )
             new_sheet_sources = [
                 source
-                for source in new_sources
+                for source in sheet_candidate_sources
                 if not _is_existing_portfolio_news_sheet_source(source=source, existing_keys=existing_portfolio_news_keys)
             ]
+            for source in new_sheet_sources:
+                source_key = _portfolio_news_source_key(source)
+                if source_key is not None:
+                    existing_portfolio_news_keys.add(source_key)
             sheet_projection_sources.extend(new_sheet_sources)
-            portfolio_news_sources.extend(new_sheet_sources)
+            if new_sheet_sources:
+                batch = portfolio_news_batches.get(portfolio_news_sheet_tab)
+                if batch is None:
+                    batch = PortfolioNewsProjectionBatch(
+                        sheet_tab=portfolio_news_sheet_tab,
+                        slack_heading=_portfolio_news_slack_heading(target),
+                        notify_recent_days=_portfolio_notify_recent_days(target),
+                        sources=[],
+                    )
+                    portfolio_news_batches[portfolio_news_sheet_tab] = batch
+                batch.sources.extend(new_sheet_sources)
             continue
         raise ValueError(f"Unsupported crawl source_kind: {target['source_kind']}")
 
@@ -111,13 +152,6 @@ def crawl_sources(
             wiki_store=wiki_store,
             run_id=f"{run_id}_ingest",
         )
-        if review_queue is not None:
-            _publish_sheet_projection(
-                review_queue=review_queue,
-                structured_store=structured_store,
-                sources=sheet_projection_sources,
-                collected_at=started_at,
-            )
         enqueued_sminfo_tasks = _enqueue_sminfo_tasks(
             structured_store=structured_store,
             sources=sources,
@@ -126,18 +160,47 @@ def crawl_sources(
         )
         if review_queue is not None and enqueued_sminfo_tasks:
             _publish_sminfo_queue_projection(review_queue=review_queue, tasks=enqueued_sminfo_tasks)
-        if portfolio_news_sources and notifier is not None and slack_channel:
-            notified_count = _notify_portfolio_news(
+
+    if review_queue is not None:
+        if sheet_projection_sources:
+            _publish_sheet_projection(
+                review_queue=review_queue,
+                structured_store=structured_store,
+                sources=sheet_projection_sources,
+                collected_at=started_at,
+            )
+        for batch in portfolio_news_batches.values():
+            _publish_portfolio_news_projection(
+                review_queue=review_queue,
+                sources=batch.sources,
+                collected_at=started_at,
+                sheet_tab=batch.sheet_tab,
+            )
+
+    if notifier is not None and slack_channel:
+        reference_time = now_kst_datetime()
+        for batch in portfolio_news_batches.values():
+            notifiable_sources = _notifiable_portfolio_news_sources(
+                batch.sources,
+                recent_days=batch.notify_recent_days,
+                reference_time=reference_time,
+            )
+            if not notifiable_sources:
+                continue
+            batch_notified_count = _notify_portfolio_news(
                 notifier=notifier,
                 slack_channel=slack_channel,
-                sources=portfolio_news_sources,
+                sources=notifiable_sources,
+                heading=batch.slack_heading,
             )
-            if review_queue is not None and notified_count:
+            notified_count += batch_notified_count
+            if review_queue is not None and batch_notified_count:
                 _mark_portfolio_news_notified(
                     review_queue=review_queue,
-                    sources=portfolio_news_sources,
+                    sources=notifiable_sources,
                     collected_at=started_at,
                     notified_at=_now(),
+                    sheet_tab=batch.sheet_tab,
                 )
 
     result = CrawlResult(
@@ -183,8 +246,9 @@ def _extract_platum_sources_from_pages(
     first_page_html: str,
     target: dict[str, Any],
     fetch_platum_page: Callable[[str, int], str],
+    review_queue: ReviewQueue | None = None,
 ) -> tuple[list[dict[str, str]], list[str]]:
-    watchlist = _watchlist_for_target(target)
+    watchlist = _watchlist_for_target(target, review_queue=review_queue)
     max_articles = _target_positive_int(
         target.get("max_articles") or target.get("max_cards"),
         default=_PLATUM_DEFAULT_MAX_ARTICLES_PER_PAGE,
@@ -273,13 +337,6 @@ def _publish_sheet_projection(
         rows=[_evidence_row(parsed) for parsed in parsed_sources],
         key_fields=("source_id", "url"),
     )
-    portfolio_news_sources = [parsed for parsed in parsed_sources if parsed.raw_source.channel == PLATUM_INVESTMENT_CHANNEL]
-    if portfolio_news_sources:
-        review_queue.upsert_cards(
-            sheet_tab="Portfolio News",
-            rows=[_portfolio_news_row(parsed, collected_at=collected_at) for parsed in portfolio_news_sources],
-            key_fields=("url", "company"),
-        )
     candidate_detail_sources = [parsed for parsed in parsed_sources if parsed.raw_source.channel == THEVC_INVESTMENT_CHANNEL]
     if not candidate_detail_sources:
         return
@@ -291,6 +348,26 @@ def _publish_sheet_projection(
             for parsed in candidate_detail_sources
         ],
         key_fields=("company", "homepage"),
+    )
+
+
+def _publish_portfolio_news_projection(
+    *,
+    review_queue: ReviewQueue,
+    sources: list[dict[str, str]],
+    collected_at: str,
+    sheet_tab: str,
+) -> None:
+    if not sources:
+        return
+    parsed_sources = [_parse_projection_source(source) for source in sources]
+    portfolio_news_sources = [parsed for parsed in parsed_sources if parsed.raw_source.channel == PLATUM_INVESTMENT_CHANNEL]
+    if not portfolio_news_sources:
+        return
+    review_queue.upsert_cards(
+        sheet_tab=sheet_tab,
+        rows=[_portfolio_news_row(parsed, collected_at=collected_at) for parsed in portfolio_news_sources],
+        key_fields=("url", "company"),
     )
 
 
@@ -375,6 +452,7 @@ def _mark_portfolio_news_notified(
     sources: list[dict[str, str]],
     collected_at: str,
     notified_at: str,
+    sheet_tab: str,
 ) -> None:
     parsed_sources = [_parse_projection_source(source) for source in sources]
     rows = []
@@ -383,7 +461,7 @@ def _mark_portfolio_news_notified(
         row["notified_at"] = notified_at
         rows.append(row)
     review_queue.upsert_cards(
-        sheet_tab="Portfolio News",
+        sheet_tab=sheet_tab,
         rows=rows,
         key_fields=("url", "company"),
     )
@@ -593,11 +671,19 @@ def _parse_timestamp(value: str) -> datetime | None:
         return None
 
 
-def _watchlist_for_target(target: dict[str, Any]) -> tuple[PortfolioKeyword, ...]:
+def _watchlist_for_target(
+    target: dict[str, Any],
+    *,
+    review_queue: ReviewQueue | None = None,
+) -> tuple[PortfolioKeyword, ...]:
+    watchlist_sheet_tab = str(target.get("portfolio_watchlist_sheet_tab") or "").strip()
+    if watchlist_sheet_tab and review_queue is not None:
+        rows = review_queue.read_pending_reviews(sheet_tab=watchlist_sheet_tab)
+        return build_portfolio_watchlist_from_rows(rows)
     companies = target.get("portfolio_companies")
     if isinstance(companies, list):
         return build_portfolio_watchlist([str(company) for company in companies])
-    watchlist_path = str(target.get("portfolio_watchlist_path") or "configs/portfolio_watchlist.txt").strip()
+    watchlist_path = str(target.get("portfolio_watchlist_path") or _DEFAULT_PORTFOLIO_WATCHLIST_PATH).strip()
     return load_portfolio_watchlist(watchlist_path)
 
 
@@ -650,10 +736,10 @@ def _raw_source_has_company(
     return False
 
 
-def _existing_portfolio_news_keys(*, review_queue: ReviewQueue | None) -> set[tuple[str, str]]:
+def _existing_portfolio_news_keys(*, review_queue: ReviewQueue | None, sheet_tab: str) -> set[tuple[str, str]]:
     if review_queue is None:
         return set()
-    rows = review_queue.read_pending_reviews(sheet_tab="Portfolio News")
+    rows = review_queue.read_pending_reviews(sheet_tab=sheet_tab)
     return {
         (url, company)
         for row in rows
@@ -663,15 +749,76 @@ def _existing_portfolio_news_keys(*, review_queue: ReviewQueue | None) -> set[tu
 
 
 def _is_existing_portfolio_news_sheet_source(*, source: dict[str, str], existing_keys: set[tuple[str, str]]) -> bool:
+    source_key = _portfolio_news_source_key(source)
+    if source_key is None:
+        return False
+    url, company = source_key
+    return bool((url, company) in existing_keys or (url, "") in existing_keys)
+
+
+def _portfolio_news_source_key(source: dict[str, str]) -> tuple[str, str] | None:
     fields = _payload_fields(str(source.get("payload") or ""))
     url = fields.get("url", "").strip()
-    company = fields.get("company", "").strip()
-    return bool(url and ((url, company) in existing_keys or (url, "") in existing_keys))
+    if not url:
+        return None
+    return url, fields.get("company", "").strip()
 
 
-def _notify_portfolio_news(*, notifier: Notifier, slack_channel: str, sources: list[dict[str, str]]) -> int:
+def _portfolio_news_sheet_tab(target: dict[str, Any]) -> str:
+    value = str(target.get("portfolio_news_sheet_tab") or "").strip()
+    return value or _DEFAULT_PORTFOLIO_NEWS_SHEET_TAB
+
+
+def _portfolio_news_slack_heading(target: dict[str, Any]) -> str:
+    value = str(target.get("portfolio_news_slack_heading") or "").strip()
+    return value or _DEFAULT_PORTFOLIO_NEWS_SLACK_HEADING
+
+
+def _portfolio_notify_recent_days(target: dict[str, Any]) -> int:
+    try:
+        parsed = int(str(target.get("portfolio_notify_recent_days") or "0").strip())
+    except ValueError:
+        return 0
+    return max(parsed, 0)
+
+
+def _notifiable_portfolio_news_sources(
+    sources: list[dict[str, str]],
+    *,
+    recent_days: int,
+    reference_time: datetime,
+) -> list[dict[str, str]]:
+    if recent_days <= 0:
+        return list(sources)
+    reference_date = _kst_date(reference_time)
+    start_date = reference_date - timedelta(days=recent_days - 1)
+    filtered_sources: list[dict[str, str]] = []
+    for source in sources:
+        fields = _payload_fields(str(source.get("payload") or ""))
+        published = _parse_timestamp(fields.get("published", ""))
+        if published is None:
+            continue
+        published_date = _kst_date(published)
+        if start_date <= published_date <= reference_date:
+            filtered_sources.append(source)
+    return filtered_sources
+
+
+def _kst_date(timestamp: datetime) -> date:
+    if timestamp.tzinfo is None:
+        timestamp = timestamp.replace(tzinfo=KST)
+    return timestamp.astimezone(KST).date()
+
+
+def _notify_portfolio_news(
+    *,
+    notifier: Notifier,
+    slack_channel: str,
+    sources: list[dict[str, str]],
+    heading: str = _DEFAULT_PORTFOLIO_NEWS_SLACK_HEADING,
+) -> int:
     items = [_payload_fields(str(source.get("payload") or "")) for source in sources]
-    lines = ["Hermes 포트폴리오 뉴스 감지"]
+    lines = [heading]
     for item in items[:10]:
         company = item.get("company", "")
         title = item.get("title", "")

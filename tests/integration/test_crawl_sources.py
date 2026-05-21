@@ -1,6 +1,8 @@
 from datetime import UTC, datetime
 
+import merry_runtime.pipelines.crawl_sources as crawl_sources_module
 from merry_runtime.adapters.fakes import FakeNotifier, FakeObjectStore, FakeReviewQueue, FakeStructuredStore
+from merry_runtime.clock import KST
 from merry_runtime.ingestion.sminfo_queue import build_sminfo_task
 from merry_runtime.ingestion.web_crawler import CrawlFetchError
 from merry_runtime.pipelines.crawl_sources import crawl_sources
@@ -561,6 +563,129 @@ def test_crawl_sources_does_not_slack_platum_news_already_in_sheet_when_db_is_em
     assert len(structured_store.tables["raw_sources"]) == 1
     assert structured_store.tables["raw_sources"][0]["channel"] == "platum_investment_news"
     assert review_queue.published["Portfolio News"] == []
+
+
+def test_crawl_sources_uses_accelerator_watchlist_sheet_tab_and_recent_slack(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(
+        crawl_sources_module,
+        "now_kst_datetime",
+        lambda: datetime(2026, 5, 21, 12, 0, 0, tzinfo=KST),
+    )
+    monkeypatch.setattr(crawl_sources_module, "now_kst", lambda: "2026-05-21T12:00:00+09:00")
+    object_store = FakeObjectStore(bucket="raw-bucket")
+    structured_store = FakeStructuredStore()
+    review_queue = FakeReviewQueue()
+    review_queue.seed_reviews(
+        "Accelerator Watchlist",
+        [
+            {"company": "(주)공감만세", "aliases": "", "status": "active"},
+            {"company": "(주)제로원", "aliases": "", "status": "active"},
+            {"company": "숨은회사", "aliases": "", "status": "inactive"},
+        ],
+    )
+    notifier = FakeNotifier()
+    html = """
+        <div class="gb-grid-column gb-query-loop-item">
+          <a class="gb-container-link" href="https://platum.kr/archives/300001"></a>
+          <h3 class="gb-headline">공감만세, 지역 관광 프로그램 확장</h3>
+          <p class="gb-headline excerpt">공감만세가 지역 기반 프로그램을 확대했다.</p>
+          <time class="entry-date published" datetime="2026-05-20T09:00:00+09:00">2026.05.20</time>
+        </div>
+        <div class="gb-grid-column gb-query-loop-item">
+          <a class="gb-container-link" href="https://platum.kr/archives/300002"></a>
+          <h3 class="gb-headline">제로원, 창업 교육 플랫폼 출시</h3>
+          <p class="gb-headline excerpt">제로원이 신규 플랫폼을 공개했다.</p>
+          <time class="entry-date published" datetime="2026-03-01T09:00:00+09:00">2026.03.01</time>
+        </div>
+    """
+
+    result = crawl_sources(
+        targets=[
+            {
+                "url": "https://platum.kr/archives/category/investment",
+                "source_kind": "platum_investment_news",
+                "portfolio_watchlist_sheet_tab": "Accelerator Watchlist",
+                "portfolio_news_sheet_tab": "Accelerator News",
+                "portfolio_news_slack_heading": "Hermes 육성기업 뉴스 감지",
+                "portfolio_notify_recent_days": "2",
+                "max_pages": 1,
+            }
+        ],
+        object_store=object_store,
+        structured_store=structured_store,
+        review_queue=review_queue,
+        notifier=notifier,
+        slack_channel="C123",
+        fetch_url=lambda url: html,
+        run_id="run_accelerator_news",
+    )
+
+    assert result.crawled_source_count == 2
+    assert result.notified_count == 1
+    assert review_queue.published["Portfolio News"] == []
+    news_by_company = {str(row["company"]): row for row in review_queue.published["Accelerator News"]}
+    assert set(news_by_company) == {"공감만세", "제로원"}
+    assert news_by_company["공감만세"]["notified_at"] == "2026-05-21T12:00:00+09:00"
+    assert news_by_company["제로원"]["notified_at"] == ""
+    assert len(notifier.messages) == 1
+    assert "Hermes 육성기업 뉴스 감지" in notifier.messages[0]["text"]
+    assert "https://platum.kr/archives/300001" in notifier.messages[0]["text"]
+    assert "https://platum.kr/archives/300002" not in notifier.messages[0]["text"]
+
+
+def test_crawl_sources_publishes_existing_db_platum_source_to_new_news_tab(tmp_path) -> None:
+    object_store = FakeObjectStore(bucket="raw-bucket")
+    structured_store = FakeStructuredStore()
+    review_queue = FakeReviewQueue()
+    html = """
+        <div class="gb-grid-column gb-query-loop-item">
+          <a class="gb-container-link" href="https://platum.kr/archives/300003"></a>
+          <h3 class="gb-headline">공감만세, 임팩트 프로그램 확장</h3>
+          <p class="gb-headline excerpt">공감만세가 임팩트 프로그램을 확대했다.</p>
+          <time class="entry-date published" datetime="2026-05-20T09:00:00+09:00">2026.05.20</time>
+        </div>
+    """
+    crawl_sources(
+        targets=[
+            {
+                "url": "https://platum.kr/archives/category/investment",
+                "source_kind": "platum_investment_news",
+                "portfolio_companies": ["공감만세(주)"],
+                "max_pages": 1,
+            }
+        ],
+        object_store=object_store,
+        structured_store=structured_store,
+        review_queue=review_queue,
+        fetch_url=lambda url: html,
+        run_id="run_portfolio_first",
+    )
+    review_queue.seed_reviews(
+        "Accelerator Watchlist",
+        [{"company": "(주)공감만세", "aliases": "", "status": "active"}],
+    )
+
+    result = crawl_sources(
+        targets=[
+            {
+                "url": "https://platum.kr/archives/category/investment",
+                "source_kind": "platum_investment_news",
+                "portfolio_watchlist_sheet_tab": "Accelerator Watchlist",
+                "portfolio_news_sheet_tab": "Accelerator News",
+                "max_pages": 1,
+            }
+        ],
+        object_store=object_store,
+        structured_store=structured_store,
+        review_queue=review_queue,
+        fetch_url=lambda url: html,
+        run_id="run_accelerator_existing_db_source",
+    )
+
+    assert result.crawled_source_count == 0
+    assert len(structured_store.tables["raw_sources"]) == 1
+    assert [row["company"] for row in review_queue.published["Portfolio News"]] == ["공감만세"]
+    assert [row["company"] for row in review_queue.published["Accelerator News"]] == ["공감만세"]
 
 
 def test_crawl_sources_publishes_same_platum_url_for_new_company(tmp_path) -> None:

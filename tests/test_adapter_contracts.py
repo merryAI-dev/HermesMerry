@@ -630,6 +630,30 @@ def test_google_sheet_review_queue_migrates_operator_headers_when_reading() -> N
     assert rows[0]["max_articles"] == "24"
 
 
+def test_google_sheet_review_queue_migrates_accelerator_watchlist_headers_when_reading() -> None:
+    service = FakeSheetsService()
+    legacy_headers = ["company", "aliases", "status"]
+    migrated_headers = legacy_headers + ["normalized_name", "notes"]
+    service.values_obj.get_responses.extend(
+        [
+            {"values": [legacy_headers]},
+            {
+                "values": [
+                    migrated_headers,
+                    ["(주)공감만세", "공감만세", "active"],
+                ]
+            },
+        ]
+    )
+    queue = GoogleSheetReviewQueue(service=service, spreadsheet_id="sheet_1")
+
+    rows = queue.read_pending_reviews(sheet_tab="Accelerator Watchlist")
+
+    assert service.values_obj.update_body == {"values": [migrated_headers]}
+    assert rows[0]["company"] == "(주)공감만세"
+    assert rows[0]["status"] == "active"
+
+
 def test_google_sheet_review_queue_creates_missing_tab_before_headers() -> None:
     service = FakeSheetsService()
     service.values_obj.get_responses.append({"values": []})
@@ -1702,6 +1726,26 @@ def test_google_sheet_review_queue_supports_operator_console_tabs() -> None:
             "notified_at",
             "status",
         ),
+        "Accelerator News": (
+            "collected_at",
+            "company",
+            "title",
+            "summary",
+            "url",
+            "published_at",
+            "source",
+            "channel",
+            "matched_companies",
+            "notified_at",
+            "status",
+        ),
+        "Accelerator Watchlist": (
+            "company",
+            "aliases",
+            "normalized_name",
+            "status",
+            "notes",
+        ),
         "SMINFO Enrichment": (
             "collected_at",
             "requested_company",
@@ -1817,6 +1861,10 @@ def test_google_sheet_review_queue_supports_operator_console_tabs() -> None:
             "max_articles",
             "max_pages",
             "portfolio_watchlist_path",
+            "portfolio_watchlist_sheet_tab",
+            "portfolio_news_sheet_tab",
+            "portfolio_news_slack_heading",
+            "portfolio_notify_recent_days",
             "channel",
             "company",
             "region",

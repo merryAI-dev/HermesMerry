@@ -35,6 +35,19 @@ ENTITY_RESOLUTION_HEADERS: tuple[str, ...] = (
     "review_memo",
     "reviewer",
 )
+PORTFOLIO_NEWS_HEADERS: tuple[str, ...] = (
+    "collected_at",
+    "company",
+    "title",
+    "summary",
+    "url",
+    "published_at",
+    "source",
+    "channel",
+    "matched_companies",
+    "notified_at",
+    "status",
+)
 
 OPERATOR_CONSOLE_HEADERS: dict[str, tuple[str, ...]] = {
     "Review Queue": (
@@ -120,18 +133,14 @@ OPERATOR_CONSOLE_HEADERS: dict[str, tuple[str, ...]] = {
         "contains_pii",
         "raw_text_path",
     ),
-    "Portfolio News": (
-        "collected_at",
+    "Portfolio News": PORTFOLIO_NEWS_HEADERS,
+    "Accelerator News": PORTFOLIO_NEWS_HEADERS,
+    "Accelerator Watchlist": (
         "company",
-        "title",
-        "summary",
-        "url",
-        "published_at",
-        "source",
-        "channel",
-        "matched_companies",
-        "notified_at",
+        "aliases",
+        "normalized_name",
         "status",
+        "notes",
     ),
     "SMINFO Enrichment": (
         "collected_at",
@@ -248,6 +257,10 @@ OPERATOR_CONSOLE_HEADERS: dict[str, tuple[str, ...]] = {
         "max_articles",
         "max_pages",
         "portfolio_watchlist_path",
+        "portfolio_watchlist_sheet_tab",
+        "portfolio_news_sheet_tab",
+        "portfolio_news_slack_heading",
+        "portfolio_notify_recent_days",
         "channel",
         "company",
         "region",
@@ -374,7 +387,7 @@ KNOWN_BAD_HOMEPAGE_DOMAINS = {
 SIMPLE_SHEET_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 REPLACE_ROWS_BATCH_SIZE = 500
 LOSSLESS_REPLACE_TABS = {"SQLite Backup", "Wiki Backup", "Backup Manifest"}
-READ_TIME_HEADER_MIGRATION_TABS = {"Crawl Sources"}
+READ_TIME_HEADER_MIGRATION_TABS = {"Accelerator Watchlist", "Crawl Sources"}
 
 
 @dataclass(slots=True)
