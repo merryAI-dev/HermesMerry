@@ -7,6 +7,7 @@ __pycache__/
 dist/
 build/
 output/
+tmp/
 *.egg-info/
 .DS_Store
 .terraform/
@@ -17,5 +18,8 @@ terraform.tfvars
 .env
 .env.local
 .env.*.local
+*.db
+*.sqlite
+*.sqlite3
 .playwright-cli/
 apps_script/**/.clasp.json

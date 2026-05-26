@@ -2,12 +2,21 @@
   "version": "2.7.5",
   "kind": "codebase",
   "project": {
-    "name": "hermes-merry-ac-discovery",
-    "languages": ["python", "json", "markdown"],
-    "frameworks": ["pytest", "playwright", "google-sheets", "sqlite"],
-    "description": "Hermes x Merry AC discovery runtime. It crawls investment and portfolio signals, enriches companies through SMINFO, scores candidates for AC review, syncs Google Sheets, and exports runtime state.",
-    "analyzedAt": "2026-05-26T02:29:24Z",
-    "gitCommitHash": "fd105862498d953c71f77a2adcb52b361b0ce5f2"
+    "name": "HermesMerry",
+    "languages": [
+      "python",
+      "json",
+      "markdown"
+    ],
+    "frameworks": [
+      "pytest",
+      "playwright",
+      "google-sheets",
+      "sqlite"
+    ],
+    "description": "Queue-driven Hermes x Merry accelerator discovery runtime: crawls allowed source signals, stores evidence in SQLite, enriches candidates through SMINFO when configured, syncs Google Sheets, and renders local AIOps run state.",
+    "analyzedAt": "2026-05-26T03:12:16Z",
+    "gitCommitHash": "fdf0f0cf215f32f46c6e78f1ba53a409790c9b23"
   },
   "nodes": [
     {
@@ -16,7 +25,11 @@
       "name": "RuntimeConfig",
       "filePath": "src/merry_runtime/runtime_config.py",
       "summary": "환경변수에서 런타임 백엔드, 루프 잡, 자격증명, 배치 크기, 외부 서비스 설정을 읽고 잡별 필수 조건을 검증한다.",
-      "tags": ["configuration", "env", "runtime"],
+      "tags": [
+        "configuration",
+        "env",
+        "runtime"
+      ],
       "complexity": "moderate"
     },
     {
@@ -25,7 +38,10 @@
       "name": "merry_runtime.jobs",
       "filePath": "src/merry_runtime/jobs.py",
       "summary": "CLI 진입점. 단일 잡 실행, 루프 실행, 스키마 출력, 대시보드 렌더링을 제공한다.",
-      "tags": ["cli", "entrypoint"],
+      "tags": [
+        "cli",
+        "entrypoint"
+      ],
       "complexity": "moderate"
     },
     {
@@ -34,7 +50,10 @@
       "name": "agent loop",
       "filePath": "src/merry_runtime/agent_loop.py",
       "summary": "설정된 잡 목록을 주기적으로 실행하고 실패를 agent_runs에 남긴다.",
-      "tags": ["scheduler", "loop"],
+      "tags": [
+        "scheduler",
+        "loop"
+      ],
       "complexity": "simple"
     },
     {
@@ -43,7 +62,10 @@
       "name": "job_runner",
       "filePath": "src/merry_runtime/job_runner.py",
       "summary": "잡 이름을 실제 파이프라인 함수로 라우팅한다. 외부 클라이언트가 없으면 잡별 오류를 발생시킨다.",
-      "tags": ["routing", "jobs"],
+      "tags": [
+        "routing",
+        "jobs"
+      ],
       "complexity": "complex"
     },
     {
@@ -52,7 +74,12 @@
       "name": "crawl-sources",
       "filePath": "src/merry_runtime/pipelines/crawl_sources.py",
       "summary": "The VC, Platum 등 외부 소스를 수집해 raw_sources, mother_entities, signals, Candidate Detail, SMINFO 큐를 만든다.",
-      "tags": ["crawler", "ingestion", "thevc", "platum"],
+      "tags": [
+        "crawler",
+        "ingestion",
+        "thevc",
+        "platum"
+      ],
       "complexity": "complex"
     },
     {
@@ -61,7 +88,10 @@
       "name": "sminfo_enrichment_queue",
       "filePath": "src/merry_runtime/ingestion/sminfo_queue.py",
       "summary": "기업명/대표자/홈페이지 힌트로 SMINFO 조회 작업을 안정적인 task_id와 retry 상태로 표현한다.",
-      "tags": ["queue", "sminfo"],
+      "tags": [
+        "queue",
+        "sminfo"
+      ],
       "complexity": "moderate"
     },
     {
@@ -70,7 +100,11 @@
       "name": "enrich-sminfo",
       "filePath": "src/merry_runtime/pipelines/enrich_sminfo.py",
       "summary": "SMINFO 큐를 lease하고 Playwright 클라이언트로 중소기업현황정보를 조회해 sminfo_company_profiles와 Sheet projection을 갱신한다.",
-      "tags": ["sminfo", "playwright", "enrichment"],
+      "tags": [
+        "sminfo",
+        "playwright",
+        "enrichment"
+      ],
       "complexity": "complex"
     },
     {
@@ -79,7 +113,11 @@
       "name": "agent-work-queue",
       "filePath": "src/merry_runtime/pipelines/agent_work_queue.py",
       "summary": "JSON 스펙 기반으로 crawl, SMINFO, resolve, score, sheet sync, backup을 하나의 dependency queue로 연결한다.",
-      "tags": ["aiops", "queue", "orchestration"],
+      "tags": [
+        "aiops",
+        "queue",
+        "orchestration"
+      ],
       "complexity": "complex"
     },
     {
@@ -88,7 +126,11 @@
       "name": "SQLiteStructuredStore",
       "filePath": "src/merry_runtime/adapters/sqlite_store.py",
       "summary": "Mother DB SQLite 저장소. 스키마 초기화, upsert, SELECT query, queue leasing을 담당한다.",
-      "tags": ["sqlite", "mother-db", "lease"],
+      "tags": [
+        "sqlite",
+        "mother-db",
+        "lease"
+      ],
       "complexity": "moderate"
     },
     {
@@ -97,7 +139,11 @@
       "name": "GoogleSheetReviewQueue",
       "filePath": "src/merry_runtime/adapters/google_sheets.py",
       "summary": "Candidate Detail, SMINFO Queue, Review Sheet 등 사람용 projection을 Google Sheets에 쓴다.",
-      "tags": ["sheets", "projection", "human-review"],
+      "tags": [
+        "sheets",
+        "projection",
+        "human-review"
+      ],
       "complexity": "complex"
     },
     {
@@ -106,7 +152,11 @@
       "name": "Hermes loop dashboard",
       "filePath": "src/merry_runtime/loop_dashboard.py",
       "summary": "agent_runs, SMINFO 큐, 저장소 카운트를 읽어 한국어 AIOps 토폴로지 HTML을 렌더링한다.",
-      "tags": ["dashboard", "aiops", "html"],
+      "tags": [
+        "dashboard",
+        "aiops",
+        "html"
+      ],
       "complexity": "moderate"
     },
     {
@@ -115,7 +165,11 @@
       "name": "agent_work_queue",
       "filePath": "src/merry_runtime/schema.py",
       "summary": "범용 작업 큐 테이블. chain_id, stage, job_name, dependency_task_id, status, retry metadata를 저장한다.",
-      "tags": ["schema", "queue", "mother-db"],
+      "tags": [
+        "schema",
+        "queue",
+        "mother-db"
+      ],
       "complexity": "moderate"
     },
     {
@@ -124,7 +178,49 @@
       "name": "AC discovery chain spec",
       "filePath": "configs/agent_work_queue.discovery.json",
       "summary": "crawl-sources부터 backup-export까지의 실행 순서와 운영 리스크를 정의하는 JSON 스펙이다.",
-      "tags": ["json", "chain", "risk"],
+      "tags": [
+        "json",
+        "chain",
+        "risk"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "readme",
+      "type": "document",
+      "name": "README",
+      "filePath": "README.md",
+      "summary": "비개발자도 이해할 수 있도록 현재 구현 기능, 조건부 통합, 실행 명령, 운영 확인 지점을 정리한다.",
+      "tags": [
+        "documentation",
+        "operator-guide"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "onboarding_doc",
+      "type": "document",
+      "name": "ONBOARDING",
+      "filePath": "docs/ONBOARDING.md",
+      "summary": "Understand 그래프 기반의 신규 합류자용 시스템 흐름, 중요 파일, 큐, 장애 확인 방법을 설명한다.",
+      "tags": [
+        "documentation",
+        "onboarding",
+        "understand"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "readme_review",
+      "type": "document",
+      "name": "README QA and CEO Review",
+      "filePath": "docs/reviews/readme-qa-ceo-review.md",
+      "summary": "README와 온보딩 문서가 코드보다 과장되지 않았는지, 비개발자에게 이해 가능한지 점검한 기록이다.",
+      "tags": [
+        "qa",
+        "ceo-review",
+        "documentation"
+      ],
       "complexity": "simple"
     }
   ],
@@ -232,6 +328,38 @@
       "direction": "forward",
       "description": "AIOps 화면은 work queue 상태를 보여줄 수 있어야 한다.",
       "weight": 0.7
+    },
+    {
+      "source": "readme",
+      "target": "discovery_chain_spec",
+      "type": "documents",
+      "direction": "forward",
+      "description": "README는 운영 흐름을 agent_work_queue 체인 기준으로 설명한다.",
+      "weight": 0.75
+    },
+    {
+      "source": "onboarding_doc",
+      "target": "agent_work_queue",
+      "type": "documents",
+      "direction": "forward",
+      "description": "온보딩 문서는 체인 큐와 SMINFO 큐의 역할을 신규 합류자용으로 설명한다.",
+      "weight": 0.8
+    },
+    {
+      "source": "onboarding_doc",
+      "target": "loop_dashboard",
+      "type": "documents",
+      "direction": "forward",
+      "description": "온보딩 문서는 대시보드로 최근 실행 시간과 큐 상태를 확인하는 방법을 안내한다.",
+      "weight": 0.7
+    },
+    {
+      "source": "readme_review",
+      "target": "readme",
+      "type": "reviews",
+      "direction": "forward",
+      "description": "QA/CEO-review 문서는 README 표현의 과장 여부와 비개발자 이해도를 점검한다.",
+      "weight": 0.7
     }
   ],
   "layers": [
@@ -239,39 +367,69 @@
       "id": "runtime",
       "name": "Runtime Orchestration",
       "description": "CLI, 설정, 루프, 잡 라우팅 계층",
-      "nodeIds": ["runtime_config", "jobs_cli", "agent_loop", "job_runner", "agent_work_queue"]
+      "nodeIds": [
+        "runtime_config",
+        "jobs_cli",
+        "agent_loop",
+        "job_runner",
+        "agent_work_queue"
+      ]
     },
     {
       "id": "data_plane",
       "name": "Data Plane",
       "description": "수집, SMINFO enrichment, Sheet projection",
-      "nodeIds": ["crawl_sources", "sminfo_queue", "enrich_sminfo", "google_sheets"]
+      "nodeIds": [
+        "crawl_sources",
+        "sminfo_queue",
+        "enrich_sminfo",
+        "google_sheets"
+      ]
     },
     {
       "id": "state_observability",
       "name": "State and Observability",
       "description": "Mother DB, queue schema, loop dashboard",
-      "nodeIds": ["sqlite_store", "agent_work_queue_schema", "loop_dashboard", "discovery_chain_spec"]
+      "nodeIds": [
+        "sqlite_store",
+        "agent_work_queue_schema",
+        "loop_dashboard",
+        "discovery_chain_spec"
+      ]
     }
   ],
   "tour": [
     {
-      "order": 1,
-      "title": "진입점",
-      "description": "jobs CLI가 RuntimeConfig를 읽고 agent loop 또는 단일 job을 실행한다.",
-      "nodeIds": ["jobs_cli", "runtime_config", "agent_loop"]
+      "nodeId": "readme",
+      "title": "Start with the operating promise"
     },
     {
-      "order": 2,
-      "title": "단일 큐 오케스트레이션",
-      "description": "agent-work-queue가 JSON 스펙을 읽어 stage별 dependency를 큐 상태로 저장하고 처리한다.",
-      "nodeIds": ["agent_work_queue", "discovery_chain_spec", "agent_work_queue_schema"]
+      "nodeId": "runtime_config",
+      "title": "Check required environment variables"
     },
     {
-      "order": 3,
-      "title": "SMINFO 연결 지점",
-      "description": "crawl-sources가 기업 조회 작업을 만들고 enrich-sminfo가 SMINFO 로그인/조회/Sheet projection을 담당한다.",
-      "nodeIds": ["crawl_sources", "sminfo_queue", "enrich_sminfo", "google_sheets"]
+      "nodeId": "jobs_cli",
+      "title": "Find the commands"
+    },
+    {
+      "nodeId": "agent_work_queue",
+      "title": "Understand the chained loop"
+    },
+    {
+      "nodeId": "crawl_sources",
+      "title": "Follow source ingestion"
+    },
+    {
+      "nodeId": "enrich_sminfo",
+      "title": "Follow SMINFO enrichment"
+    },
+    {
+      "nodeId": "loop_dashboard",
+      "title": "Inspect runtime state"
+    },
+    {
+      "nodeId": "onboarding_doc",
+      "title": "Use the operator onboarding guide"
     }
   ]
 }
