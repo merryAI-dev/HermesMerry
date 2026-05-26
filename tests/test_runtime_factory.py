@@ -9,6 +9,7 @@ from merry_runtime.adapters.local_files import LocalFileObjectStore
 from merry_runtime.adapters.sminfo_playwright import SminfoPlaywrightClient
 from merry_runtime.adapters.sqlite_store import SQLiteStructuredStore
 from merry_runtime.adapters.slack import SlackNotifier
+from merry_runtime.adapters.thevc_playwright import TheVCPlaywrightClient
 from merry_runtime.adapters.web_search import PublicWebSearchClient
 from merry_runtime.runtime_config import RuntimeConfig
 from merry_runtime.runtime_factory import build_runtime
@@ -71,8 +72,39 @@ def test_runtime_factory_builds_production_adapters(monkeypatch, tmp_path) -> No
     assert isinstance(runtime.email_draft_client, GmailDraftClient)
     assert isinstance(runtime.notifier, SlackNotifier)
     assert isinstance(runtime.wiki_store, SQLiteWikiStore)
+    assert isinstance(runtime.thevc_client, TheVCPlaywrightClient)
     assert runtime.structured_store.write_mode == "merge"
     assert built_services == [("sheets", "v4"), ("gmail", "v1")]
+
+
+def test_runtime_factory_configures_thevc_playwright_client(monkeypatch, tmp_path) -> None:
+    monkeypatch.delenv("SLACK_BOT_TOKEN", raising=False)
+    config = RuntimeConfig(
+        project_id="",
+        dataset_id="",
+        raw_bucket="",
+        wiki_root=tmp_path / "wiki",
+        object_store_backend="local",
+        raw_root=tmp_path / "raw",
+        structured_store_backend="sqlite",
+        mother_db_path=tmp_path / "mother.db",
+        thevc_user_email="operator@mysc.co.kr",
+        thevc_password="thevc-password",
+        thevc_browser_state_path=tmp_path / "thevc-state.json",
+        thevc_browser_headless=False,
+        thevc_browser_channel="chrome",
+        thevc_timeout_seconds=45,
+    )
+
+    runtime = build_runtime(config)
+
+    assert isinstance(runtime.thevc_client, TheVCPlaywrightClient)
+    assert runtime.thevc_client.user_email == "operator@mysc.co.kr"
+    assert runtime.thevc_client.password == "thevc-password"
+    assert runtime.thevc_client.storage_state_path == tmp_path / "thevc-state.json"
+    assert runtime.thevc_client.headless is False
+    assert runtime.thevc_client.browser_channel == "chrome"
+    assert runtime.thevc_client.timeout_ms == 45000
 
 
 def test_runtime_factory_builds_gmail_draft_client_for_sheet_runtime(monkeypatch, tmp_path) -> None:

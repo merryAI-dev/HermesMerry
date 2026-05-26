@@ -52,11 +52,15 @@ Cloud Run is optional and belongs to `docs/runbooks/staging-canary.md`.
 - `INVESTOR_RESEARCH_BATCH_LIMIT=20`
 - `INVESTOR_RESEARCH_STALE_DAYS=7`
 - `INVESTOR_RESEARCH_SEARCH_MAX_RESULTS=5`
+- `THEVC_USER_EMAIL`
+- `THEVC_PASSWORD`
+- `THEVC_BROWSER_STATE_PATH=/home/hermes/hermes/thevc-state.json`
 - `CRAWL_SHEET_TAB=Crawl Sources`
-- `CRAWL_TARGETS_JSON=[{"url":"https://thevc.kr/","source_kind":"thevc_investment_ma","max_cards":20},{"url":"https://platum.kr/archives/category/investment","source_kind":"platum_investment_news","max_articles":24,"max_pages":2,"portfolio_watchlist_path":"configs/portfolio_watchlist.txt"},{"url":"https://platum.kr/archives/category/investment","source_kind":"platum_investment_news","max_articles":24,"max_pages":2,"portfolio_watchlist_sheet_tab":"Accelerator Watchlist","portfolio_news_sheet_tab":"Accelerator News","portfolio_news_slack_heading":"Hermes 육성기업 뉴스 감지","portfolio_notify_recent_days":2}]`
-- `AGENT_LOOP_JOBS=sync-kvic-funds,research-investors,crawl-sources,draft-outreach-emails,enrich-sminfo,backup-export`
+- `CRAWL_TARGETS_JSON=[{"url":"https://thevc.kr/","source_kind":"thevc_investment_ma","max_cards":20,"max_pages":3,"thevc_backend":"playwright"},{"url":"https://platum.kr/archives/category/investment","source_kind":"platum_investment_news","max_articles":24,"max_pages":2,"portfolio_watchlist_path":"configs/portfolio_watchlist.txt"},{"url":"https://platum.kr/archives/category/investment","source_kind":"platum_investment_news","max_articles":24,"max_pages":2,"portfolio_watchlist_sheet_tab":"Accelerator Watchlist","portfolio_news_sheet_tab":"Accelerator News","portfolio_news_slack_heading":"Hermes 육성기업 뉴스 감지","portfolio_notify_recent_days":2}]`
+- `AGENT_LOOP_JOBS=agent-work-queue`
 - `AGENT_LOOP_INTERVAL_SECONDS=3600`
 - `AGENT_LOOP_MAX_CYCLES=0` for the always-on SQLite loop that repeats every 1 hour
+- `HERMES_ALLOW_UNBOUNDED_LOOP=1` for any intentional always-on loop
 
 ## Stop Conditions
 
@@ -75,6 +79,13 @@ Stop before push, apply, or canary if any condition is true:
 - `WIKI_ROOT` is not under `/home/hermes/hermes`.
 - `REVIEW_SHEET_ID`, `GMAIL_LABEL_ID`, or `SLACK_CHANNEL` points to a
   production resource.
+- You have not reviewed `scripts/runpod_cost_audit.sh --days 3` output for
+  running Pods, active Serverless workers, network volumes, and recent billing.
+- The runtime is on a GPU Pod but the job mix is only crawl, Sheet, backup, or
+  SMINFO work. Those are Hermes control-plane jobs and should run on CPU or as a
+  finite batch.
+- A Gemma, Qwen, or other local model endpoint has active/min workers enabled
+  without an explicit low-latency requirement.
 
 ## Build And Push
 
@@ -156,11 +167,17 @@ HERMES_LLM_TIMEOUT_SECONDS: 30
 INVESTOR_RESEARCH_BATCH_LIMIT: 20
 INVESTOR_RESEARCH_STALE_DAYS: 7
 INVESTOR_RESEARCH_SEARCH_MAX_RESULTS: 5
+THEVC_USER_EMAIL: Runpod secret or local .env.local value
+THEVC_PASSWORD: Runpod secret or local .env.local value
+THEVC_BROWSER_STATE_PATH: /home/hermes/hermes/thevc-state.json
+THEVC_BROWSER_HEADLESS: 1
+THEVC_TIMEOUT_SECONDS: 30
 CRAWL_SHEET_TAB: Crawl Sources
-CRAWL_TARGETS_JSON: [{"url":"https://thevc.kr/","source_kind":"thevc_investment_ma","max_cards":20},{"url":"https://platum.kr/archives/category/investment","source_kind":"platum_investment_news","max_articles":24,"max_pages":2,"portfolio_watchlist_path":"configs/portfolio_watchlist.txt"},{"url":"https://platum.kr/archives/category/investment","source_kind":"platum_investment_news","max_articles":24,"max_pages":2,"portfolio_watchlist_sheet_tab":"Accelerator Watchlist","portfolio_news_sheet_tab":"Accelerator News","portfolio_news_slack_heading":"Hermes 육성기업 뉴스 감지","portfolio_notify_recent_days":2}]
+CRAWL_TARGETS_JSON: [{"url":"https://thevc.kr/","source_kind":"thevc_investment_ma","max_cards":20,"max_pages":3,"thevc_backend":"playwright"},{"url":"https://platum.kr/archives/category/investment","source_kind":"platum_investment_news","max_articles":24,"max_pages":2,"portfolio_watchlist_path":"configs/portfolio_watchlist.txt"},{"url":"https://platum.kr/archives/category/investment","source_kind":"platum_investment_news","max_articles":24,"max_pages":2,"portfolio_watchlist_sheet_tab":"Accelerator Watchlist","portfolio_news_sheet_tab":"Accelerator News","portfolio_news_slack_heading":"Hermes 육성기업 뉴스 감지","portfolio_notify_recent_days":2}]
 AGENT_LOOP_JOBS: sync-kvic-funds,research-investors,crawl-sources,draft-outreach-emails,enrich-sminfo,backup-export
 AGENT_LOOP_INTERVAL_SECONDS: 3600
 AGENT_LOOP_MAX_CYCLES: 0
+HERMES_ALLOW_UNBOUNDED_LOOP: 1
 ```
 
 `sync-kvic-funds` may run inside the hourly loop, but it enforces
@@ -206,6 +223,25 @@ dockerStartCmd: runpod-entrypoint python3 -m merry_runtime.jobs loop; status=$?;
 This prevents Runpod from restarting a finite command repeatedly while the Pod
 desired status remains `RUNNING`. Delete one-cycle canary Pods after SQLite,
 Sheet, wiki, and backup evidence is captured.
+
+## Cost Control
+
+The Hermes crawl/sheet/backup loop is the control plane. It does not need a GPU.
+Use an always-on loop only when it is deliberately placed on a CPU or other
+low-cost runtime and `HERMES_ALLOW_UNBOUNDED_LOOP=1` is set. Keep local model
+serving separate: Gemma, Qwen, or similar GPU workloads should live behind a
+Runpod Serverless endpoint with scale-to-zero settings for normal monitoring
+workloads. Use active workers only for a conscious low-latency serving period.
+
+Before and after any Runpod deployment, capture a billing snapshot:
+
+```bash
+scripts/runpod_cost_audit.sh --days 3
+```
+
+Review all four surfaces: Pods, Serverless endpoints/workers, network volumes,
+and daily billing buckets. A one-cycle canary that ends with `sleep infinity`
+still accrues Pod compute charges until the Pod is deleted.
 
 ## One-cycle Canary
 
@@ -320,7 +356,9 @@ summary and leaves the source URL empty with `설명 상태` set to `no_result`.
 Runpod staging should delegate the refresh to Hermes every day:
 
 ```text
-AGENT_LOOP_JOBS=sync-kvic-funds,research-investors,crawl-sources,draft-outreach-emails,enrich-sminfo,backup-export
+AGENT_WORK_QUEUE_SPEC_PATH=configs/agent_work_queue.discovery.json
+AGENT_WORK_QUEUE_BATCH_LIMIT=10
+AGENT_LOOP_JOBS=agent-work-queue
 KVIC_SYNC_INTERVAL_SECONDS=86400
 KVIC_FUND_DESCRIPTION_BATCH_LIMIT=50
 KVIC_FUND_DESCRIPTION_STALE_DAYS=30
@@ -336,6 +374,11 @@ Seed the `Crawl Sources` tab with at least:
 ```text
 url: https://thevc.kr/
 source_kind: thevc_investment_ma
+max_cards: 20
+max_pages: 3
+thevc_backend: playwright
+detail_enrichment: true
+thevc_login_required: false
 status: pending
 ```
 
@@ -358,12 +401,32 @@ next crawl without touching the investment portfolio watchlist.
 
 The THE VC crawler is limited to public HTML paths. Do not configure `/api`
 targets. `https://thevc.kr/robots.txt` currently allows `/` and disallows
-`/api`; treat that as the runtime boundary.
+`/api`; treat that as the runtime boundary. For richer pagination, set
+`thevc_backend=playwright`; Hermes will drive the visible home-page buttons
+and reuse the login session stored at `THEVC_BROWSER_STATE_PATH` when login
+succeeds. Keep `thevc_login_required=false` unless the run should fail when
+THE VC rejects automated login. When login fails in optional mode, Hermes keeps
+the public crawl result and records the fallback warning in `agent_runs` and the
+Sheet `Crawl Sources.error_message` field. Human Verification pages are treated
+as explicit warnings instead of silently producing an empty result.
+
+The VC browser credentials stay out of Git:
+
+```text
+THEVC_USER_EMAIL=
+THEVC_PASSWORD=
+THEVC_BROWSER_STATE_PATH=/home/hermes/hermes/thevc-state.json
+THEVC_BROWSER_HEADLESS=1
+THEVC_BROWSER_CHANNEL=
+THEVC_TIMEOUT_SECONDS=30
+```
 
 Crawler backend behavior:
 
 - Uses `crawl4ai` first when it is installed in the runtime image.
 - Falls back to a bounded stdlib HTML fetch for server-rendered pages.
+- Uses Playwright only for THE VC rows marked `thevc_backend=playwright`.
+- Records THE VC login fallback and Human Verification blocks as crawl warnings.
 - Keeps target count bounded through the `crawl_public_sources` MCP contract.
 
 BigQuery is optional. Use it only as a warehouse/export mirror after billing and

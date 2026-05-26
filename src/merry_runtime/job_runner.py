@@ -4,11 +4,12 @@ import base64
 import hashlib
 import json
 from dataclasses import asdict, dataclass
-from typing import Any
+from typing import Any, Callable
 
 from merry_runtime.adapters.interfaces import Notifier, ObjectStore, ReviewQueue, StructuredStore
 from merry_runtime.clock import now_kst
 from merry_runtime.pipelines.backup_export import backup_export
+from merry_runtime.pipelines.agent_work_queue import load_agent_work_queue_spec, run_agent_work_queue
 from merry_runtime.pipelines.calibrate_scores import calibrate_scores
 from merry_runtime.pipelines.crawl_sources import crawl_sources
 from merry_runtime.pipelines.draft_outreach_emails import draft_outreach_emails
@@ -42,6 +43,7 @@ class RuntimeAdapters:
     kvic_client: Any | None = None
     web_search_client: Any | None = None
     llm_client: Any | None = None
+    thevc_client: Any | None = None
 
 
 def run_job(
@@ -77,6 +79,8 @@ def run_job(
             slack_channel=config.slack_channel,
             wiki_store=runtime.wiki_store,
             sminfo_stale_days=config.sminfo_stale_days,
+            publish_crawl_status=bool(config.review_sheet_id and not sources_json),
+            thevc_source_fetcher=_thevc_source_fetcher(runtime.thevc_client),
         )
         return {"job_name": job_name, **asdict(result)}
 
@@ -124,6 +128,23 @@ def run_job(
             backup_root=config.backup_root,
             wiki_root=config.wiki_root,
             review_queue=runtime.review_queue if config.review_sheet_id else None,
+        )
+        return {"job_name": job_name, **asdict(result)}
+
+    if job_name == "agent-work-queue":
+        spec = load_agent_work_queue_spec(config.agent_work_queue_spec_path)
+        result = run_agent_work_queue(
+            runtime=runtime,
+            config=config,
+            structured_store=runtime.structured_store,
+            spec=spec,
+            max_tasks=config.agent_work_queue_batch_limit,
+            agent_id=config.hermes_agent_id,
+            run_job_fn=lambda inner_job_name, *, runtime, config: run_job(
+                inner_job_name,
+                runtime=runtime,
+                config=config,
+            ),
         )
         return {"job_name": job_name, **asdict(result)}
 
@@ -195,6 +216,15 @@ def _sources_from_json(value: str) -> list[dict[str, Any]]:
     if not isinstance(payload, list):
         raise JobRunError("sources JSON must be a list")
     return payload
+
+
+def _thevc_source_fetcher(thevc_client: Any | None) -> Callable[[dict[str, Any]], Any] | None:
+    if thevc_client is None:
+        return None
+    fetch_result = getattr(thevc_client, "fetch_investment_result", None)
+    if fetch_result is not None:
+        return fetch_result
+    return thevc_client.fetch_investment_sources
 
 
 def _sources_from_gmail(runtime: RuntimeAdapters) -> list[dict[str, Any]]:

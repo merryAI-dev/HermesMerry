@@ -90,20 +90,40 @@ HERMES_LLM_TIMEOUT_SECONDS=30
 INVESTOR_RESEARCH_BATCH_LIMIT=20
 INVESTOR_RESEARCH_STALE_DAYS=7
 INVESTOR_RESEARCH_SEARCH_MAX_RESULTS=5
+THEVC_USER_EMAIL=
+THEVC_PASSWORD=
+THEVC_BROWSER_STATE_PATH=/home/hermes/hermes/thevc-state.json
+THEVC_BROWSER_HEADLESS=1
+THEVC_BROWSER_CHANNEL=
+THEVC_TIMEOUT_SECONDS=30
 WIKI_ROOT=/home/hermes/hermes/wiki
 HERMES_AGENT_ID=runpod-hermes-staging
 CRAWL_SHEET_TAB=Crawl Sources
-CRAWL_TARGETS_JSON=[{"url":"https://thevc.kr/","source_kind":"thevc_investment_ma","max_cards":20},{"url":"https://platum.kr/archives/category/investment","source_kind":"platum_investment_news","max_articles":24,"max_pages":2,"portfolio_watchlist_path":"configs/portfolio_watchlist.txt"},{"url":"https://platum.kr/archives/category/investment","source_kind":"platum_investment_news","max_articles":24,"max_pages":2,"portfolio_watchlist_sheet_tab":"Accelerator Watchlist","portfolio_news_sheet_tab":"Accelerator News","portfolio_news_slack_heading":"Hermes 육성기업 뉴스 감지","portfolio_notify_recent_days":2}]
-AGENT_LOOP_JOBS=sync-kvic-funds,research-investors,crawl-sources,draft-outreach-emails,enrich-sminfo,backup-export
+CRAWL_TARGETS_JSON=[{"url":"https://thevc.kr/","source_kind":"thevc_investment_ma","max_cards":20,"max_pages":3,"thevc_backend":"playwright"},{"url":"https://platum.kr/archives/category/investment","source_kind":"platum_investment_news","max_articles":24,"max_pages":2,"portfolio_watchlist_path":"configs/portfolio_watchlist.txt"},{"url":"https://platum.kr/archives/category/investment","source_kind":"platum_investment_news","max_articles":24,"max_pages":2,"portfolio_watchlist_sheet_tab":"Accelerator Watchlist","portfolio_news_sheet_tab":"Accelerator News","portfolio_news_slack_heading":"Hermes 육성기업 뉴스 감지","portfolio_notify_recent_days":2}]
+AGENT_WORK_QUEUE_SPEC_PATH=configs/agent_work_queue.discovery.json
+AGENT_WORK_QUEUE_BATCH_LIMIT=10
+AGENT_LOOP_JOBS=agent-work-queue
 AGENT_LOOP_INTERVAL_SECONDS=3600
 AGENT_LOOP_MAX_CYCLES=0
+HERMES_ALLOW_UNBOUNDED_LOOP=1
 ```
 
 `AGENT_LOOP_INTERVAL_SECONDS=3600` with `AGENT_LOOP_MAX_CYCLES=0` means the
-Hermes agent stays alive and repeats the configured jobs every 1 hour.
+Hermes agent stays alive and repeats the configured jobs every 1 hour. Hermes
+requires `HERMES_ALLOW_UNBOUNDED_LOOP=1` for that mode so a canary or GPU Pod
+does not accidentally become a long-running compute bill. Keep the crawl/sheet
+control plane on a CPU or finite batch runtime. Run Gemma, Qwen, or other local
+LLM serving as a separate scale-to-zero Serverless endpoint unless low latency
+explicitly justifies active workers.
 `sync-kvic-funds` is safe to keep in that hourly loop because it enforces
 `KVIC_SYNC_INTERVAL_SECONDS=86400`; it refreshes the KVIC investor/fund snapshot
 every day and otherwise records a skipped run without calling KVIC again.
+
+For a read-only Runpod cost snapshot, run:
+
+```bash
+scripts/runpod_cost_audit.sh --days 3
+```
 
 Supported job commands:
 
@@ -119,11 +139,21 @@ python3 -m merry_runtime.jobs run weekly-summary
 python3 -m merry_runtime.jobs run draft-outreach-emails
 python3 -m merry_runtime.jobs run sync-kvic-funds
 python3 -m merry_runtime.jobs run research-investors
+python3 -m merry_runtime.jobs render-loop-dashboard --output tmp/hermes/loop-dashboard.html
 ```
 
 Without `--sources-file` or `--sources-json`, `crawl-sources` reads URL targets
 from the `Crawl Sources` Sheet tab. The first crawler target is THE VC public
 investment/M&A cards on `https://thevc.kr/`; it does not call `/api` paths.
+Set `thevc_backend=playwright` on that row to use a real browser session for
+the visible "더 보기" / "다음 페이지 보기" flow. `THEVC_USER_EMAIL` and
+`THEVC_PASSWORD` are optional for public crawling but enable the logged-in
+session, and `THEVC_BROWSER_STATE_PATH` stores reusable cookies outside Git.
+By default, failed automated login falls back to public crawling; set
+`thevc_login_required=true` only when the run should fail without login. Login
+fallback and THE VC human-verification blocks are recorded as crawl warnings in
+`agent_runs.error_message` and, for Sheet-driven runs, the `Crawl Sources`
+`error_message` column.
 Platum portfolio monitoring and accelerator-company monitoring should use
 separate rows: keep the investment list in `Portfolio News`, and put accelerator
 companies in the `Accelerator Watchlist` tab so row add/edit/delete becomes the

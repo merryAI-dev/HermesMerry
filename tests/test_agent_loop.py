@@ -99,12 +99,14 @@ def test_runtime_config_reads_agent_loop_environment(monkeypatch) -> None:
     monkeypatch.setenv("AGENT_LOOP_JOBS", "resolve-entities,score-candidates")
     monkeypatch.setenv("AGENT_LOOP_INTERVAL_SECONDS", "90")
     monkeypatch.setenv("AGENT_LOOP_MAX_CYCLES", "2")
+    monkeypatch.setenv("HERMES_ALLOW_UNBOUNDED_LOOP", "true")
 
     config = RuntimeConfig.from_env()
 
     assert config.agent_loop_jobs == ("resolve-entities", "score-candidates")
     assert config.agent_loop_interval_seconds == 90
     assert config.agent_loop_max_cycles == 2
+    assert config.allow_unbounded_loop is True
 
 
 def test_runtime_config_defaults_runpod_wiki_root(monkeypatch) -> None:
@@ -115,13 +117,13 @@ def test_runtime_config_defaults_runpod_wiki_root(monkeypatch) -> None:
     assert str(config.wiki_root) == "/workspace/hermes/wiki"
 
 
-def test_runtime_config_defaults_to_every_one_hour_crawl_first_loop(monkeypatch) -> None:
+def test_runtime_config_defaults_to_every_one_hour_agent_work_queue_loop(monkeypatch) -> None:
     monkeypatch.delenv("AGENT_LOOP_JOBS", raising=False)
     monkeypatch.delenv("AGENT_LOOP_INTERVAL_SECONDS", raising=False)
 
     config = RuntimeConfig.from_env()
 
-    assert config.agent_loop_jobs[0] == "crawl-sources"
+    assert config.agent_loop_jobs == ("agent-work-queue",)
     assert config.agent_loop_interval_seconds == 3600
 
 
@@ -181,3 +183,43 @@ def test_jobs_cli_loop_rejects_append_mode_for_unbounded_loop(monkeypatch, capsy
     assert exit_code == 2
     assert "BIGQUERY_WRITE_MODE=append" in stderr
     assert "AGENT_LOOP_MAX_CYCLES=1" in stderr
+
+
+def test_jobs_cli_loop_rejects_unbounded_loop_without_explicit_cost_ack(monkeypatch, capsys) -> None:
+    config = RuntimeConfig(
+        project_id="",
+        dataset_id="",
+        raw_bucket="",
+        structured_store_backend="sqlite",
+        mother_db_path="/tmp/hermes-mother.db",
+        agent_loop_jobs=("backup-export",),
+        agent_loop_max_cycles=0,
+        allow_unbounded_loop=False,
+    )
+
+    monkeypatch.setattr("merry_runtime.jobs.RuntimeConfig.from_env", lambda: config)
+    monkeypatch.setattr(
+        "merry_runtime.jobs.build_runtime",
+        lambda config: (_ for _ in ()).throw(AssertionError("build_runtime should not be called")),
+    )
+
+    exit_code = main(["loop"])
+
+    stderr = capsys.readouterr().err
+    assert exit_code == 2
+    assert "AGENT_LOOP_MAX_CYCLES=0" in stderr
+    assert "HERMES_ALLOW_UNBOUNDED_LOOP=1" in stderr
+
+
+def test_runtime_config_accepts_unbounded_loop_with_explicit_cost_ack(tmp_path) -> None:
+    config = RuntimeConfig(
+        project_id="",
+        dataset_id="",
+        raw_bucket="",
+        structured_store_backend="sqlite",
+        mother_db_path=tmp_path / "mother.db",
+        agent_loop_max_cycles=0,
+        allow_unbounded_loop=True,
+    )
+
+    config.validate_for_loop(max_cycles=config.agent_loop_max_cycles)

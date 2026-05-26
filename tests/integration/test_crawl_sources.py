@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 
 import merry_runtime.pipelines.crawl_sources as crawl_sources_module
 from merry_runtime.adapters.fakes import FakeNotifier, FakeObjectStore, FakeReviewQueue, FakeStructuredStore
+from merry_runtime.adapters.thevc_playwright import TheVCFetchResult, TheVCHumanVerificationError
 from merry_runtime.clock import KST
 from merry_runtime.ingestion.sminfo_queue import build_sminfo_task
 from merry_runtime.ingestion.web_crawler import CrawlFetchError
@@ -98,6 +99,289 @@ def test_crawl_sources_fetches_thevc_visible_investment_cards_into_mother_db(tmp
     assert queue_projection["updated_at"].endswith("+09:00")
     assert any(row["job_name"] == "crawl-sources" for row in structured_store.tables["agent_runs"])
     assert (tmp_path / "wiki" / "entities").exists()
+
+
+def test_crawl_sources_uses_thevc_playwright_fetcher_when_requested(tmp_path) -> None:
+    object_store = FakeObjectStore(bucket="raw-bucket")
+    structured_store = FakeStructuredStore()
+    review_queue = FakeReviewQueue()
+    seen_targets: list[dict[str, object]] = []
+
+    def static_fetch_url(url: str) -> str:
+        raise AssertionError(f"static fetch_url should not be used for Playwright The VC target: {url}")
+
+    def thevc_fetcher(target: dict[str, object]) -> list[dict[str, str]]:
+        seen_targets.append(target)
+        return [
+            {
+                "channel": "thevc_investment_ma",
+                "payload": "\n".join(
+                    [
+                        "Title: THE VC Investment/M&A - 로민 텍스트스코프",
+                        "URL: https://thevc.kr/",
+                        "Source URI: https://thevc.kr/lomin",
+                        "Company: 로민",
+                        "Product: 텍스트스코프",
+                        "Business Model: 텍스트스코프 - AI 문서 인식 솔루션",
+                        "Industry: 엔터프라이즈",
+                        "Representative: 강지홍",
+                        "Homepage: https://www.lomin.ai/",
+                        "Region: 한국, 서울특별시",
+                        "Contact Email: ",
+                        "Published: 2026-05-20",
+                        "Signal: investment",
+                        "Confidence: 0.65",
+                        "Tags: thevc_investment_ma, public_cold_lead, investment, fresh, detail_enriched, industry:엔터프라이즈, round:series-a",
+                        "Investment Round: Series A",
+                        "Investment Amount: 로그인 필요",
+                        "Investor: 네이버클라우드",
+                        "Evidence: THE VC 투자/M&A 공개 카드: 로민 / 텍스트스코프.",
+                    ]
+                ),
+            }
+        ]
+
+    result = crawl_sources(
+        targets=[
+            {
+                "url": "https://thevc.kr/",
+                "source_kind": "thevc_investment_ma",
+                "thevc_backend": "playwright",
+                "max_cards": "15",
+                "max_pages": "3",
+            }
+        ],
+        object_store=object_store,
+        structured_store=structured_store,
+        review_queue=review_queue,
+        wiki_store=SQLiteWikiStore(root=tmp_path),
+        fetch_url=static_fetch_url,
+        thevc_source_fetcher=thevc_fetcher,
+        run_id="run_thevc_playwright",
+    )
+
+    assert result.crawled_source_count == 1
+    assert seen_targets == [
+        {
+            "url": "https://thevc.kr/",
+            "source_kind": "thevc_investment_ma",
+            "thevc_backend": "playwright",
+            "max_cards": "15",
+            "max_pages": "3",
+        }
+    ]
+    assert structured_store.tables["mother_entities"][0]["name"] == "로민"
+
+
+def test_crawl_sources_records_thevc_playwright_warning_from_fetch_result(tmp_path) -> None:
+    object_store = FakeObjectStore(bucket="raw-bucket")
+    structured_store = FakeStructuredStore()
+    review_queue = FakeReviewQueue()
+
+    def thevc_fetcher(target: dict[str, object]) -> TheVCFetchResult:
+        return TheVCFetchResult(
+            sources=[
+                {
+                    "channel": "thevc_investment_ma",
+                    "payload": "\n".join(
+                        [
+                            "Title: THE VC Investment/M&A - 로민 텍스트스코프",
+                            "URL: https://thevc.kr/",
+                            "Source URI: https://thevc.kr/lomin",
+                            "Company: 로민",
+                            "Product: 텍스트스코프",
+                            "Business Model: 텍스트스코프 - AI 문서 인식 솔루션",
+                            "Industry: 엔터프라이즈",
+                            "Representative: 강지홍",
+                            "Homepage: https://www.lomin.ai/",
+                            "Region: 한국, 서울특별시",
+                            "Contact Email: ",
+                            "Published: 2026-05-20",
+                            "Signal: investment",
+                            "Confidence: 0.65",
+                            "Tags: thevc_investment_ma, public_cold_lead, investment, fresh, detail_enriched, industry:엔터프라이즈, round:series-a",
+                            "Investment Round: Series A",
+                            "Investment Amount: 로그인 필요",
+                            "Investor: 네이버클라우드",
+                            "Evidence: THE VC 투자/M&A 공개 카드: 로민 / 텍스트스코프.",
+                        ]
+                    ),
+                }
+            ],
+            login_status="failed",
+            warning_message="THE VC login failed; public crawl fallback used",
+        )
+
+    result = crawl_sources(
+        targets=[
+            {
+                "url": "https://thevc.kr/",
+                "source_kind": "thevc_investment_ma",
+                "thevc_backend": "playwright",
+            }
+        ],
+        object_store=object_store,
+        structured_store=structured_store,
+        review_queue=review_queue,
+        thevc_source_fetcher=thevc_fetcher,
+        run_id="run_thevc_warning",
+    )
+
+    assert result.crawled_source_count == 1
+    assert result.warning_count == 1
+    crawl_run = next(row for row in structured_store.tables["agent_runs"] if row["job_name"] == "crawl-sources")
+    assert crawl_run["error_message"] == "THE VC login failed; public crawl fallback used"
+
+
+def test_crawl_sources_records_thevc_human_verification_warning(tmp_path) -> None:
+    object_store = FakeObjectStore(bucket="raw-bucket")
+    structured_store = FakeStructuredStore()
+    review_queue = FakeReviewQueue()
+
+    def thevc_fetcher(target: dict[str, object]) -> TheVCFetchResult:
+        raise TheVCHumanVerificationError("THE VC human verification did not complete")
+
+    result = crawl_sources(
+        targets=[
+            {
+                "url": "https://thevc.kr/",
+                "source_kind": "thevc_investment_ma",
+                "thevc_backend": "playwright",
+            }
+        ],
+        object_store=object_store,
+        structured_store=structured_store,
+        review_queue=review_queue,
+        thevc_source_fetcher=thevc_fetcher,
+        run_id="run_thevc_human_verification",
+    )
+
+    assert result.crawled_source_count == 0
+    assert result.warning_count == 1
+    crawl_run = next(row for row in structured_store.tables["agent_runs"] if row["job_name"] == "crawl-sources")
+    assert "THE VC human verification blocked crawl" in crawl_run["error_message"]
+
+
+def test_crawl_sources_marks_sheet_targets_as_crawled(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(crawl_sources_module, "now_kst", lambda: "2026-05-22T11:30:00+09:00")
+    object_store = FakeObjectStore(bucket="raw-bucket")
+    structured_store = FakeStructuredStore()
+    review_queue = FakeReviewQueue()
+    review_queue.published["Crawl Sources"] = [
+        {
+            "url": "https://thevc.kr/",
+            "source_kind": "thevc_investment_ma",
+            "max_cards": "20",
+            "status": "active",
+            "last_crawled_at": "2026-05-20T09:36:52+09:00",
+            "error_message": "old error",
+        },
+        {
+            "url": "https://platum.kr/archives/category/investment",
+            "source_kind": "platum_investment_news",
+            "max_articles": "24",
+            "status": "inactive",
+            "last_crawled_at": "",
+            "error_message": "",
+        },
+    ]
+
+    result = crawl_sources(
+        targets=[
+            {
+                "url": "https://thevc.kr/",
+                "source_kind": "thevc_investment_ma",
+                "max_cards": "20",
+                "status": "active",
+                "last_crawled_at": "2026-05-20T09:36:52+09:00",
+                "error_message": "old error",
+            }
+        ],
+        object_store=object_store,
+        structured_store=structured_store,
+        review_queue=review_queue,
+        wiki_store=SQLiteWikiStore(root=tmp_path),
+        fetch_url=lambda url: """
+            <script type="application/ld+json">
+            {"@type": "Organization", "sameAs": ["https://the-aio.com/"]}
+            </script>
+        """
+        if url == "https://thevc.kr/aio"
+        else """
+            <tr>
+              <td><time datetime="2026-05-15T05:14:25.919Z">2026-05-15</time></td>
+              <td><span>에이아이오</span><span>낸드컨트롤러</span><div>낸드플래시 시스템 반도체</div></td>
+              <td><div>투자대상분야</div><div>반도체/디스플레이</div></td>
+              <td><div>투자단계</div><div>Pre-IPO</div></td>
+              <td><div>투자금액</div><button>로그인 필요</button></td>
+              <td><div>투자자</div><span>비엔더블유인베스트먼트</span></td>
+              <td><a href="/aio">프로필 확인</a></td>
+            </tr>
+        """,
+        publish_crawl_status=True,
+        run_id="run_sheet_status",
+    )
+
+    assert result.crawled_source_count == 1
+    crawl_rows = review_queue.published["Crawl Sources"]
+    assert crawl_rows[0]["last_crawled_at"] == "2026-05-22T11:30:00+09:00"
+    assert crawl_rows[0]["error_message"] == ""
+    assert crawl_rows[1]["last_crawled_at"] == ""
+
+
+def test_crawl_sources_generates_distinct_run_ids_for_repeated_target_sets(monkeypatch, tmp_path) -> None:
+    timestamps = iter(
+        [
+            "2026-05-22T11:30:00+09:00",
+            "2026-05-22T11:30:01+09:00",
+            "2026-05-22T11:31:00+09:00",
+            "2026-05-22T11:31:01+09:00",
+        ]
+    )
+    monkeypatch.setattr(crawl_sources_module, "now_kst", lambda: next(timestamps))
+    object_store = FakeObjectStore(bucket="raw-bucket")
+    structured_store = FakeStructuredStore()
+
+    def fetch_url(url: str) -> str:
+        if url == "https://thevc.kr/aio":
+            return """
+                <script type="application/ld+json">
+                {"@type": "Organization", "sameAs": ["https://the-aio.com/"]}
+                </script>
+            """
+        return """
+            <tr>
+              <td><time datetime="2026-05-15T05:14:25.919Z">2026-05-15</time></td>
+              <td><span>에이아이오</span><span>낸드컨트롤러</span><div>낸드플래시 시스템 반도체</div></td>
+              <td><div>투자대상분야</div><div>반도체/디스플레이</div></td>
+              <td><div>투자단계</div><div>Pre-IPO</div></td>
+              <td><div>투자금액</div><button>로그인 필요</button></td>
+              <td><div>투자자</div><span>비엔더블유인베스트먼트</span></td>
+              <td><a href="/aio">프로필 확인</a></td>
+            </tr>
+        """
+
+    targets = [{"url": "https://thevc.kr/", "source_kind": "thevc_investment_ma"}]
+    first = crawl_sources(
+        targets=targets,
+        object_store=object_store,
+        structured_store=structured_store,
+        wiki_store=SQLiteWikiStore(root=tmp_path),
+        fetch_url=fetch_url,
+    )
+    second = crawl_sources(
+        targets=targets,
+        object_store=object_store,
+        structured_store=structured_store,
+        wiki_store=SQLiteWikiStore(root=tmp_path),
+        fetch_url=fetch_url,
+    )
+
+    assert first.run_id != second.run_id
+    crawl_run_ids = [
+        row["run_id"] for row in structured_store.tables["agent_runs"] if row["job_name"] == "crawl-sources"
+    ]
+    assert crawl_run_ids == [first.run_id, second.run_id]
 
 
 def test_crawl_sources_does_not_republish_existing_sheet_projection_rows(tmp_path) -> None:

@@ -23,6 +23,8 @@ def test_runtime_config_reads_required_environment(monkeypatch) -> None:
     monkeypatch.setenv("SMINFO_BATCH_LIMIT", "20")
     monkeypatch.setenv("SMINFO_STALE_DAYS", "30")
     monkeypatch.setenv("HERMES_AGENT_ID", "runpod-pod-1")
+    monkeypatch.setenv("AGENT_WORK_QUEUE_SPEC_PATH", "configs/test-chain.json")
+    monkeypatch.setenv("AGENT_WORK_QUEUE_BATCH_LIMIT", "17")
     monkeypatch.setenv("KVIC_API_KEY", "public-kvic-key")
     monkeypatch.setenv("KVIC_SYNC_INTERVAL_SECONDS", "86400")
     monkeypatch.setenv("KVIC_FUND_DESCRIPTION_BATCH_LIMIT", "25")
@@ -34,6 +36,12 @@ def test_runtime_config_reads_required_environment(monkeypatch) -> None:
     monkeypatch.setenv("INVESTOR_RESEARCH_BATCH_LIMIT", "12")
     monkeypatch.setenv("INVESTOR_RESEARCH_STALE_DAYS", "9")
     monkeypatch.setenv("INVESTOR_RESEARCH_SEARCH_MAX_RESULTS", "8")
+    monkeypatch.setenv("THEVC_USER_EMAIL", "operator@mysc.co.kr")
+    monkeypatch.setenv("THEVC_PASSWORD", "thevc-password")
+    monkeypatch.setenv("THEVC_BROWSER_STATE_PATH", "/tmp/thevc-state.json")
+    monkeypatch.setenv("THEVC_BROWSER_HEADLESS", "0")
+    monkeypatch.setenv("THEVC_BROWSER_CHANNEL", "chrome")
+    monkeypatch.setenv("THEVC_TIMEOUT_SECONDS", "45")
 
     config = RuntimeConfig.from_env()
 
@@ -61,6 +69,8 @@ def test_runtime_config_reads_required_environment(monkeypatch) -> None:
     assert config.sminfo_batch_limit == 20
     assert config.sminfo_stale_days == 30
     assert config.hermes_agent_id == "runpod-pod-1"
+    assert str(config.agent_work_queue_spec_path) == "configs/test-chain.json"
+    assert config.agent_work_queue_batch_limit == 17
     assert config.kvic_api_key == "public-kvic-key"
     assert config.kvic_sync_interval_seconds == 86400
     assert config.kvic_fund_description_batch_limit == 25
@@ -72,6 +82,12 @@ def test_runtime_config_reads_required_environment(monkeypatch) -> None:
     assert config.investor_research_batch_limit == 12
     assert config.investor_research_stale_days == 9
     assert config.investor_research_search_max_results == 8
+    assert config.thevc_user_email == "operator@mysc.co.kr"
+    assert config.thevc_password == "thevc-password"
+    assert str(config.thevc_browser_state_path) == "/tmp/thevc-state.json"
+    assert config.thevc_browser_headless is False
+    assert config.thevc_browser_channel == "chrome"
+    assert config.thevc_timeout_seconds == 45
 
 
 def test_runtime_config_requires_job_specific_fields(monkeypatch) -> None:

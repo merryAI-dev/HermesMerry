@@ -70,8 +70,18 @@ def _crawl_public_sources(
         structured_store=runtime.structured_store,
         review_queue=runtime.review_queue if config.review_sheet_id else None,
         wiki_store=runtime.wiki_store,
+        thevc_source_fetcher=_thevc_source_fetcher(runtime.thevc_client),
     )
     return {"job_name": "crawl-sources", **asdict(result), "crawl_sheet_tab": config.crawl_sheet_tab}
+
+
+def _thevc_source_fetcher(thevc_client: Any | None) -> Callable[[dict[str, Any]], Any] | None:
+    if thevc_client is None:
+        return None
+    fetch_result = getattr(thevc_client, "fetch_investment_result", None)
+    if fetch_result is not None:
+        return fetch_result
+    return thevc_client.fetch_investment_sources
 
 
 def _enrich_sminfo_candidates(

@@ -14,6 +14,7 @@ from merry_runtime.agent_loop import run_agent_loop
 from merry_runtime.clock import now_kst
 from merry_runtime.hermes_profile import validate_tool_lockdown
 from merry_runtime.job_runner import JobRunError, run_job
+from merry_runtime.loop_dashboard import render_loop_dashboard
 from merry_runtime.runtime_config import RuntimeConfig, RuntimeConfigError
 from merry_runtime.runtime_factory import build_runtime
 from merry_runtime.schema import BIGQUERY_TABLES
@@ -33,6 +34,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     subparsers.add_parser("print-schema")
     subparsers.add_parser("list-mcp-tools")
 
+    dashboard_parser = subparsers.add_parser("render-loop-dashboard")
+    dashboard_parser.add_argument("--db", default="", help="SQLite Mother DB path. Defaults to MOTHER_DB_PATH env.")
+    dashboard_parser.add_argument(
+        "--output",
+        default="tmp/hermes/loop-dashboard.html",
+        help="HTML output path.",
+    )
+    dashboard_parser.add_argument("--limit", type=int, default=100, help="Maximum agent run events to render.")
+
     run_parser = subparsers.add_parser("run")
     run_parser.add_argument(
         "job_name",
@@ -46,6 +56,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             "calibrate-scores",
             "weekly-summary",
             "backup-export",
+            "agent-work-queue",
             "enrich-sminfo",
             "draft-outreach-emails",
             "sync-kvic-funds",
@@ -74,6 +85,13 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.command == "list-mcp-tools":
         print("\n".join(allowed_tool_names()))
+        return 0
+
+    if args.command == "render-loop-dashboard":
+        config = RuntimeConfig.from_env()
+        db_path = Path(args.db) if args.db else config.mother_db_path
+        output_path = render_loop_dashboard(db_path=db_path, output_path=Path(args.output), limit=args.limit)
+        print(str(output_path))
         return 0
 
     if args.command == "run":

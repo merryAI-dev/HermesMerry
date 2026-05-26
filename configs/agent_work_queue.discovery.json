@@ -1,0 +1,78 @@
+{
+  "chain_id": "ac_discovery_chain",
+  "description": "Hermes AC discovery chain: crawl source signals, drain SMINFO enrichment, resolve entities, score candidates, sync review sheet, and export backups from one durable queue.",
+  "stages": [
+    {
+      "stage": "crawl",
+      "job_name": "crawl-sources",
+      "payload": {},
+      "priority": 10,
+      "max_attempts": 3
+    },
+    {
+      "stage": "sminfo",
+      "job_name": "enrich-sminfo",
+      "payload": {},
+      "priority": 20,
+      "max_attempts": 3
+    },
+    {
+      "stage": "resolve",
+      "job_name": "resolve-entities",
+      "payload": {},
+      "priority": 30,
+      "max_attempts": 3
+    },
+    {
+      "stage": "score",
+      "job_name": "score-candidates",
+      "payload": {},
+      "priority": 40,
+      "max_attempts": 3
+    },
+    {
+      "stage": "sync",
+      "job_name": "sync-review-sheet",
+      "payload": {},
+      "priority": 50,
+      "max_attempts": 3
+    },
+    {
+      "stage": "backup",
+      "job_name": "backup-export",
+      "payload": {},
+      "priority": 60,
+      "max_attempts": 3
+    }
+  ],
+  "risks": [
+    {
+      "id": "missing_sminfo_credentials",
+      "stage": "sminfo",
+      "severity": "high",
+      "signal": "SMINFO_USER_ID or SMINFO_PASSWORD is not present in the runtime environment.",
+      "mitigation": "Mark the work item blocked instead of retrying. Operator must add credentials to .env.local or deployment secret storage, then reset the blocked item."
+    },
+    {
+      "id": "sheet_required_for_projection",
+      "stage": "sync",
+      "severity": "medium",
+      "signal": "REVIEW_SHEET_ID is absent or Google Sheets API access fails.",
+      "mitigation": "Keep Mother DB as source of truth and show the queue item as blocked or failed until sheet access is restored."
+    },
+    {
+      "id": "external_site_rate_limit",
+      "stage": "sminfo",
+      "severity": "medium",
+      "signal": "SMINFO connection reset, login failure, or repeated lookup errors.",
+      "mitigation": "Use the existing SMINFO minimum interval and max-attempt caps; failed company lookups stay visible in queue state."
+    },
+    {
+      "id": "chain_stall",
+      "stage": "all",
+      "severity": "medium",
+      "signal": "A dependency task is not done, so downstream stages do not become due.",
+      "mitigation": "Use agent_work_queue.status, dependency_task_id, and loop dashboard recent run timestamps to locate the stalled stage."
+    }
+  ]
+}

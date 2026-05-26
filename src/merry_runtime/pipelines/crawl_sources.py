@@ -69,77 +69,98 @@ def crawl_sources(
     wiki_store: SQLiteWikiStore | None = None,
     fetch_url: Callable[[str], str] = fetch_url_text,
     fetch_platum_page: Callable[[str, int], str] = fetch_platum_facetwp_page,
+    thevc_source_fetcher: Callable[[dict[str, Any]], Any] | None = None,
     sminfo_stale_days: int = 30,
+    publish_crawl_status: bool = False,
     run_id: str | None = None,
 ) -> CrawlResult:
     started_at = _now()
-    run_id = run_id or _stable_run_id(targets)
-    active_targets = [_normalize_target(target) for target in targets if _is_active_target(target)]
+    run_id = run_id or _generated_run_id(targets=targets, started_at=started_at)
+    active_target_rows = [dict(target) for target in targets if _is_active_target(target)]
+    active_targets = [_normalize_target(target) for target in active_target_rows]
     existing_portfolio_news_keys_by_tab: dict[str, set[tuple[str, str]]] = {}
     portfolio_news_batches: dict[str, PortfolioNewsProjectionBatch] = {}
 
     sources: list[dict[str, str]] = []
     sheet_projection_sources: list[dict[str, str]] = []
     warnings: list[str] = []
-    for target in active_targets:
-        html = fetch_url(target["url"])
-        if target["source_kind"] == THEVC_INVESTMENT_CHANNEL:
-            extracted_sources = extract_thevc_investment_sources(
-                html,
-                source_url=target["url"],
-                max_cards=int(target.get("max_cards") or 20),
-                fetch_detail_url=fetch_url if _truthy(target.get("detail_enrichment"), default=True) else None,
-            )
-            sources.extend(extracted_sources)
-            sheet_projection_sources.extend(extracted_sources)
-            continue
-        if target["source_kind"] == PLATUM_INVESTMENT_CHANNEL:
-            extracted_sources, target_warnings = _extract_platum_sources_from_pages(
-                first_page_html=html,
-                target=target,
-                fetch_platum_page=fetch_platum_page,
-                review_queue=review_queue,
-            )
-            warnings.extend(target_warnings)
-            portfolio_news_sheet_tab = _portfolio_news_sheet_tab(target)
-            existing_portfolio_news_keys = existing_portfolio_news_keys_by_tab.setdefault(
-                portfolio_news_sheet_tab,
-                _existing_portfolio_news_keys(review_queue=review_queue, sheet_tab=portfolio_news_sheet_tab),
-            )
-            new_sources = [
-                source
-                for source in extracted_sources
-                if not _is_existing_platum_news_source(source=source, structured_store=structured_store)
-            ]
-            sources.extend(new_sources)
-            sheet_candidate_sources = (
-                extracted_sources
-                if portfolio_news_sheet_tab != _DEFAULT_PORTFOLIO_NEWS_SHEET_TAB
-                else new_sources
-            )
-            new_sheet_sources = [
-                source
-                for source in sheet_candidate_sources
-                if not _is_existing_portfolio_news_sheet_source(source=source, existing_keys=existing_portfolio_news_keys)
-            ]
-            for source in new_sheet_sources:
-                source_key = _portfolio_news_source_key(source)
-                if source_key is not None:
-                    existing_portfolio_news_keys.add(source_key)
-            sheet_projection_sources.extend(new_sheet_sources)
-            if new_sheet_sources:
-                batch = portfolio_news_batches.get(portfolio_news_sheet_tab)
-                if batch is None:
-                    batch = PortfolioNewsProjectionBatch(
-                        sheet_tab=portfolio_news_sheet_tab,
-                        slack_heading=_portfolio_news_slack_heading(target),
-                        notify_recent_days=_portfolio_notify_recent_days(target),
-                        sources=[],
+    owned_thevc_fetcher = None
+    try:
+        for target in active_targets:
+            if target["source_kind"] == THEVC_INVESTMENT_CHANNEL:
+                if _uses_thevc_playwright(target):
+                    if thevc_source_fetcher is None:
+                        from merry_runtime.adapters.thevc_playwright import TheVCPlaywrightClient
+
+                        owned_thevc_fetcher = TheVCPlaywrightClient.from_env()
+                        thevc_source_fetcher = owned_thevc_fetcher.fetch_investment_result
+                    extracted_sources, target_warnings = _fetch_thevc_playwright_sources(
+                        target=target,
+                        thevc_source_fetcher=thevc_source_fetcher,
                     )
-                    portfolio_news_batches[portfolio_news_sheet_tab] = batch
-                batch.sources.extend(new_sheet_sources)
-            continue
-        raise ValueError(f"Unsupported crawl source_kind: {target['source_kind']}")
+                    warnings.extend(target_warnings)
+                else:
+                    html = fetch_url(target["url"])
+                    extracted_sources = extract_thevc_investment_sources(
+                        html,
+                        source_url=target["url"],
+                        max_cards=int(target.get("max_cards") or 20),
+                        fetch_detail_url=fetch_url if _truthy(target.get("detail_enrichment"), default=True) else None,
+                    )
+                sources.extend(extracted_sources)
+                sheet_projection_sources.extend(extracted_sources)
+                continue
+            if target["source_kind"] == PLATUM_INVESTMENT_CHANNEL:
+                html = fetch_url(target["url"])
+                extracted_sources, target_warnings = _extract_platum_sources_from_pages(
+                    first_page_html=html,
+                    target=target,
+                    fetch_platum_page=fetch_platum_page,
+                    review_queue=review_queue,
+                )
+                warnings.extend(target_warnings)
+                portfolio_news_sheet_tab = _portfolio_news_sheet_tab(target)
+                existing_portfolio_news_keys = existing_portfolio_news_keys_by_tab.setdefault(
+                    portfolio_news_sheet_tab,
+                    _existing_portfolio_news_keys(review_queue=review_queue, sheet_tab=portfolio_news_sheet_tab),
+                )
+                new_sources = [
+                    source
+                    for source in extracted_sources
+                    if not _is_existing_platum_news_source(source=source, structured_store=structured_store)
+                ]
+                sources.extend(new_sources)
+                sheet_candidate_sources = (
+                    extracted_sources
+                    if portfolio_news_sheet_tab != _DEFAULT_PORTFOLIO_NEWS_SHEET_TAB
+                    else new_sources
+                )
+                new_sheet_sources = [
+                    source
+                    for source in sheet_candidate_sources
+                    if not _is_existing_portfolio_news_sheet_source(source=source, existing_keys=existing_portfolio_news_keys)
+                ]
+                for source in new_sheet_sources:
+                    source_key = _portfolio_news_source_key(source)
+                    if source_key is not None:
+                        existing_portfolio_news_keys.add(source_key)
+                sheet_projection_sources.extend(new_sheet_sources)
+                if new_sheet_sources:
+                    batch = portfolio_news_batches.get(portfolio_news_sheet_tab)
+                    if batch is None:
+                        batch = PortfolioNewsProjectionBatch(
+                            sheet_tab=portfolio_news_sheet_tab,
+                            slack_heading=_portfolio_news_slack_heading(target),
+                            notify_recent_days=_portfolio_notify_recent_days(target),
+                            sources=[],
+                        )
+                        portfolio_news_batches[portfolio_news_sheet_tab] = batch
+                    batch.sources.extend(new_sheet_sources)
+                continue
+            raise ValueError(f"Unsupported crawl source_kind: {target['source_kind']}")
+    finally:
+        if owned_thevc_fetcher is not None:
+            owned_thevc_fetcher.close()
 
     ingest_result = None
     notified_count = 0
@@ -230,6 +251,13 @@ def crawl_sources(
         ],
         key_fields=("run_id",),
     )
+    if review_queue is not None and publish_crawl_status:
+        _publish_crawl_target_status(
+            review_queue=review_queue,
+            targets=active_target_rows,
+            crawled_at=started_at,
+            error_message=_join_warnings(warnings),
+        )
     return result
 
 
@@ -239,6 +267,28 @@ def _normalize_target(target: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("crawl target requires url")
     source_kind = _canonical_source_kind(str(target.get("source_kind") or target.get("channel") or THEVC_INVESTMENT_CHANNEL).strip())
     return {**target, "url": url, "source_kind": source_kind}
+
+
+def _fetch_thevc_playwright_sources(
+    *,
+    target: dict[str, Any],
+    thevc_source_fetcher: Callable[[dict[str, Any]], Any],
+) -> tuple[list[dict[str, str]], list[str]]:
+    from merry_runtime.adapters.thevc_playwright import TheVCHumanVerificationError
+
+    try:
+        fetch_result = thevc_source_fetcher(target)
+    except TheVCHumanVerificationError as exc:
+        return [], [f"THE VC human verification blocked crawl: {exc}"]
+    extracted_sources = _thevc_sources_from_fetch_result(fetch_result)
+    warning_message = str(getattr(fetch_result, "warning_message", "") or "").strip()
+    return extracted_sources, [warning_message] if warning_message else []
+
+
+def _thevc_sources_from_fetch_result(fetch_result: Any) -> list[dict[str, str]]:
+    if hasattr(fetch_result, "sources"):
+        return list(getattr(fetch_result, "sources") or [])
+    return list(fetch_result or [])
 
 
 def _extract_platum_sources_from_pages(
@@ -313,9 +363,95 @@ def _canonical_source_kind(source_kind: str) -> str:
     return aliases.get(source_kind.casefold(), source_kind)
 
 
+def _uses_thevc_playwright(target: dict[str, Any]) -> bool:
+    backend = str(
+        target.get("thevc_backend")
+        or target.get("browser_backend")
+        or target.get("backend")
+        or ""
+    ).strip().casefold()
+    if backend in {"playwright", "browser"}:
+        return True
+    return _truthy(target.get("use_playwright"), default=False)
+
+
 def _is_active_target(target: dict[str, Any]) -> bool:
     status = str(target.get("status") or "").strip().casefold()
     return status not in {"done", "disabled", "skip", "skipped", "inactive"}
+
+
+_CRAWL_SOURCE_STATUS_HEADERS = (
+    "url",
+    "source_kind",
+    "max_cards",
+    "max_articles",
+    "max_pages",
+    "portfolio_watchlist_path",
+    "portfolio_watchlist_sheet_tab",
+    "portfolio_news_sheet_tab",
+    "portfolio_news_slack_heading",
+    "portfolio_notify_recent_days",
+    "thevc_backend",
+    "browser_backend",
+    "use_playwright",
+    "detail_enrichment",
+    "thevc_login_required",
+    "channel",
+    "company",
+    "region",
+    "industry",
+    "tags",
+    "confidence",
+    "status",
+    "last_crawled_at",
+    "error_message",
+)
+_CRAWL_SOURCE_IDENTITY_FIELDS = tuple(
+    field for field in _CRAWL_SOURCE_STATUS_HEADERS if field not in {"last_crawled_at", "error_message"}
+)
+
+
+def _publish_crawl_target_status(
+    *,
+    review_queue: ReviewQueue,
+    targets: list[dict[str, Any]],
+    crawled_at: str,
+    error_message: str,
+) -> None:
+    rows = [dict(row) for row in review_queue.read_pending_reviews(sheet_tab="Crawl Sources")]
+    if not rows:
+        return
+    target_keys = {_crawl_target_identity(target) for target in targets}
+    if not target_keys:
+        return
+    updated_rows = []
+    for row in rows:
+        updated = dict(row)
+        if _crawl_target_identity(row) in target_keys:
+            updated["last_crawled_at"] = crawled_at
+            updated["error_message"] = error_message
+        updated_rows.append(updated)
+    review_queue.replace_rows(
+        sheet_tab="Crawl Sources",
+        headers=_crawl_source_status_headers(updated_rows),
+        rows=updated_rows,
+    )
+
+
+def _crawl_target_identity(row: dict[str, Any]) -> tuple[str, ...]:
+    return tuple(str(row.get(field) or "").strip().casefold() for field in _CRAWL_SOURCE_IDENTITY_FIELDS)
+
+
+def _crawl_source_status_headers(rows: list[dict[str, Any]]) -> tuple[str, ...]:
+    headers: list[str] = []
+    for row in rows:
+        for key in row:
+            if key not in headers:
+                headers.append(key)
+    for key in _CRAWL_SOURCE_STATUS_HEADERS:
+        if key not in headers:
+            headers.append(key)
+    return tuple(headers)
 
 
 def _truthy(value: Any, *, default: bool) -> bool:
@@ -835,8 +971,8 @@ def _notify_portfolio_news(
     return len(items)
 
 
-def _stable_run_id(targets: list[dict[str, Any]]) -> str:
-    payload = json.dumps(targets, ensure_ascii=False, sort_keys=True)
+def _generated_run_id(*, targets: list[dict[str, Any]], started_at: str) -> str:
+    payload = json.dumps({"started_at": started_at, "targets": targets}, ensure_ascii=False, sort_keys=True)
     return f"run_crawl_{hashlib.sha1(payload.encode('utf-8')).hexdigest()[:12]}"
 
 

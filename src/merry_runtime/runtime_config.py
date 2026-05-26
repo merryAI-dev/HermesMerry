@@ -24,6 +24,8 @@ _INVESTOR_RESEARCH_BATCH_LIMIT_MIN = 1
 _INVESTOR_RESEARCH_BATCH_LIMIT_MAX = 50
 _INVESTOR_RESEARCH_SEARCH_MAX_RESULTS_MIN = 1
 _INVESTOR_RESEARCH_SEARCH_MAX_RESULTS_MAX = 10
+_AGENT_WORK_QUEUE_BATCH_LIMIT_MIN = 1
+_AGENT_WORK_QUEUE_BATCH_LIMIT_MAX = 50
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,17 +51,13 @@ class RuntimeConfig:
     mother_db_path: Path = Path("/workspace/hermes/mother.db")
     backup_root: Path = Path("/workspace/hermes/backups")
     bigquery_write_mode: str = "merge"
-    agent_loop_jobs: tuple[str, ...] = (
-        "crawl-sources",
-        "ingest-sources",
-        "resolve-entities",
-        "score-candidates",
-        "sync-review-sheet",
-        "calibrate-scores",
-    )
+    agent_loop_jobs: tuple[str, ...] = ("agent-work-queue",)
     agent_loop_interval_seconds: int = 3600
     agent_loop_max_cycles: int = 0
+    allow_unbounded_loop: bool = False
     hermes_agent_id: str = "hermes-agent"
+    agent_work_queue_spec_path: Path = Path("configs/agent_work_queue.discovery.json")
+    agent_work_queue_batch_limit: int = 10
     sminfo_user_id: str = ""
     sminfo_password: str = ""
     sminfo_min_interval_seconds: int = 35
@@ -78,6 +76,12 @@ class RuntimeConfig:
     investor_research_batch_limit: int = 20
     investor_research_stale_days: int = 7
     investor_research_search_max_results: int = 5
+    thevc_user_email: str = ""
+    thevc_password: str = ""
+    thevc_browser_state_path: Path = Path("/workspace/hermes/thevc-state.json")
+    thevc_browser_headless: bool = True
+    thevc_browser_channel: str = ""
+    thevc_timeout_seconds: int = 30
 
     @classmethod
     def from_env(cls) -> RuntimeConfig:
@@ -109,7 +113,17 @@ class RuntimeConfig:
             agent_loop_jobs=_parse_jobs(os.getenv("AGENT_LOOP_JOBS", "")),
             agent_loop_interval_seconds=_parse_int(os.getenv("AGENT_LOOP_INTERVAL_SECONDS", ""), default=3600),
             agent_loop_max_cycles=_parse_int(os.getenv("AGENT_LOOP_MAX_CYCLES", ""), default=0),
+            allow_unbounded_loop=_parse_bool(os.getenv("HERMES_ALLOW_UNBOUNDED_LOOP", ""), default=False),
             hermes_agent_id=_parse_agent_id(),
+            agent_work_queue_spec_path=Path(
+                os.getenv("AGENT_WORK_QUEUE_SPEC_PATH", "configs/agent_work_queue.discovery.json")
+            ),
+            agent_work_queue_batch_limit=_parse_bounded_int(
+                os.getenv("AGENT_WORK_QUEUE_BATCH_LIMIT", ""),
+                default=10,
+                minimum=_AGENT_WORK_QUEUE_BATCH_LIMIT_MIN,
+                maximum=_AGENT_WORK_QUEUE_BATCH_LIMIT_MAX,
+            ),
             sminfo_user_id=os.getenv("SMINFO_USER_ID", ""),
             sminfo_password=os.getenv("SMINFO_PASSWORD", ""),
             sminfo_min_interval_seconds=max(
@@ -176,6 +190,15 @@ class RuntimeConfig:
                 minimum=_INVESTOR_RESEARCH_SEARCH_MAX_RESULTS_MIN,
                 maximum=_INVESTOR_RESEARCH_SEARCH_MAX_RESULTS_MAX,
             ),
+            thevc_user_email=os.getenv("THEVC_USER_EMAIL", ""),
+            thevc_password=os.getenv("THEVC_PASSWORD", ""),
+            thevc_browser_state_path=Path(os.getenv("THEVC_BROWSER_STATE_PATH", "/workspace/hermes/thevc-state.json")),
+            thevc_browser_headless=_parse_bool(os.getenv("THEVC_BROWSER_HEADLESS", ""), default=True),
+            thevc_browser_channel=os.getenv("THEVC_BROWSER_CHANNEL", ""),
+            thevc_timeout_seconds=max(
+                1,
+                _parse_int(os.getenv("THEVC_TIMEOUT_SECONDS", ""), default=30),
+            ),
         )
 
     def validate_for_job(self, job_name: str, *, has_inline_sources: bool = False) -> None:
@@ -208,6 +231,8 @@ class RuntimeConfig:
             required.append("SLACK_CHANNEL")
         elif job_name == "backup-export":
             required.extend(["MOTHER_DB_PATH", "BACKUP_ROOT"])
+        elif job_name == "agent-work-queue":
+            pass
         elif job_name == "enrich-sminfo":
             required.extend(["REVIEW_SHEET_ID", "SMINFO_USER_ID", "SMINFO_PASSWORD"])
         elif job_name == "draft-outreach-emails":
@@ -236,6 +261,12 @@ class RuntimeConfig:
             raise RuntimeConfigError(
                 "BIGQUERY_WRITE_MODE=append is limited to one-cycle canaries; "
                 "set AGENT_LOOP_MAX_CYCLES=1 or use BIGQUERY_WRITE_MODE=merge for an always-on loop"
+            )
+        if max_cycles <= 0 and not self.allow_unbounded_loop:
+            raise RuntimeConfigError(
+                "AGENT_LOOP_MAX_CYCLES=0 starts an unbounded loop and can accrue Runpod compute charges. "
+                "Set HERMES_ALLOW_UNBOUNDED_LOOP=1 only for an intentionally always-on CPU/control-plane runtime, "
+                "or use AGENT_LOOP_MAX_CYCLES=1 for canaries and batch runs."
             )
 
     def _validate_structured_store_backend(self) -> None:
@@ -278,6 +309,8 @@ class RuntimeConfig:
             "AC_ID": self.default_ac_id,
             "RAW_ROOT": str(self.raw_root),
             "HERMES_AGENT_ID": self.hermes_agent_id,
+            "AGENT_WORK_QUEUE_SPEC_PATH": str(self.agent_work_queue_spec_path),
+            "AGENT_WORK_QUEUE_BATCH_LIMIT": str(self.agent_work_queue_batch_limit),
             "SMINFO_USER_ID": self.sminfo_user_id,
             "SMINFO_PASSWORD": self.sminfo_password,
             "OUTREACH_DRAFT_BATCH_LIMIT": str(self.outreach_draft_batch_limit),
@@ -293,19 +326,18 @@ class RuntimeConfig:
             "INVESTOR_RESEARCH_BATCH_LIMIT": str(self.investor_research_batch_limit),
             "INVESTOR_RESEARCH_STALE_DAYS": str(self.investor_research_stale_days),
             "INVESTOR_RESEARCH_SEARCH_MAX_RESULTS": str(self.investor_research_search_max_results),
+            "THEVC_USER_EMAIL": self.thevc_user_email,
+            "THEVC_PASSWORD": self.thevc_password,
+            "THEVC_BROWSER_STATE_PATH": str(self.thevc_browser_state_path),
+            "THEVC_BROWSER_HEADLESS": "1" if self.thevc_browser_headless else "0",
+            "THEVC_BROWSER_CHANNEL": self.thevc_browser_channel,
+            "THEVC_TIMEOUT_SECONDS": str(self.thevc_timeout_seconds),
         }[name]
 
 
 def _parse_jobs(value: str) -> tuple[str, ...]:
     if not value.strip():
-        return (
-            "crawl-sources",
-            "ingest-sources",
-            "resolve-entities",
-            "score-candidates",
-            "sync-review-sheet",
-            "calibrate-scores",
-        )
+        return ("agent-work-queue",)
     return tuple(part.strip() for part in value.split(",") if part.strip())
 
 
@@ -333,6 +365,12 @@ def _parse_int(value: str, *, default: int) -> int:
     if not value.strip():
         return default
     return int(value)
+
+
+def _parse_bool(value: str, *, default: bool) -> bool:
+    if not value.strip():
+        return default
+    return value.strip().casefold() in {"1", "true", "yes", "y", "on"}
 
 
 def _parse_bounded_int(value: str, *, default: int, minimum: int, maximum: int) -> int:

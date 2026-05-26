@@ -1,0 +1,11 @@
+# .understandignore - Hermes runtime graph inputs.
+__pycache__/
+.git/
+.venv/
+.pytest_cache/
+.ruff_cache/
+output/
+tmp/
+*.png
+*.pdf
+uv.lock

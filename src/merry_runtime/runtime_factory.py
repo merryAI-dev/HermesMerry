@@ -21,6 +21,7 @@ from merry_runtime.adapters.web_search import PublicWebSearchClient
 from merry_runtime.job_runner import RuntimeAdapters
 from merry_runtime.runtime_config import RuntimeConfig, RuntimeConfigError
 from merry_runtime.wiki_store import SQLiteWikiStore
+from merry_runtime.adapters.thevc_playwright import TheVCPlaywrightClient
 
 
 def build_runtime(
@@ -90,6 +91,14 @@ def build_runtime(
             )
             if config.anthropic_api_key
             else None
+        ),
+        thevc_client=TheVCPlaywrightClient(
+            user_email=config.thevc_user_email,
+            password=config.thevc_password,
+            storage_state_path=config.thevc_browser_state_path,
+            headless=config.thevc_browser_headless,
+            browser_channel=config.thevc_browser_channel,
+            timeout_ms=config.thevc_timeout_seconds * 1000,
         ),
     )
 

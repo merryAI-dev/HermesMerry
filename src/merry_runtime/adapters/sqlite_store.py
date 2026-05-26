@@ -116,6 +116,67 @@ class SQLiteStructuredStore:
                 raise
         return [self._deserialize_row(table="sminfo_enrichment_queue", row=row) for row in leased_rows]
 
+    def lease_agent_work_tasks(
+        self,
+        *,
+        max_items: int,
+        reference_time: str,
+        agent_id: str,
+        leased_at: str,
+        stale_running_seconds: int = 3600,
+    ) -> list[dict[str, object]]:
+        stale_cutoff = _stale_cutoff(reference_time=reference_time, seconds=stale_running_seconds)
+        with sqlite3.connect(self.db_path, isolation_level=None) as connection:
+            connection.row_factory = sqlite3.Row
+            connection.execute("PRAGMA journal_mode=WAL")
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                rows = connection.execute(
+                    """
+                    select q.* from agent_work_queue q
+                    left join agent_work_queue dep
+                      on q.dependency_task_id != '' and dep.task_id = q.dependency_task_id
+                    where q.next_run_at <= ?
+                      and (
+                        q.status in ('pending', 'retry')
+                        or (q.status = 'running' and q.locked_at != '' and q.locked_at <= ?)
+                      )
+                      and (q.dependency_task_id = '' or dep.status = 'done')
+                    order by q.priority asc, q.created_at asc
+                    limit ?
+                    """,
+                    (reference_time, stale_cutoff, max(max_items, 0)),
+                ).fetchall()
+                task_ids = [str(row["task_id"]) for row in rows]
+                if not task_ids:
+                    connection.execute("COMMIT")
+                    return []
+                placeholders = ", ".join("?" for _ in task_ids)
+                connection.execute(
+                    f"""
+                    update agent_work_queue
+                    set status = 'running',
+                        locked_at = ?,
+                        locked_by = ?,
+                        updated_at = ?
+                    where task_id in ({placeholders})
+                    """,
+                    (leased_at, agent_id, leased_at, *task_ids),
+                )
+                leased_rows = connection.execute(
+                    f"""
+                    select * from agent_work_queue
+                    where task_id in ({placeholders})
+                    order by priority asc, created_at asc
+                    """,
+                    task_ids,
+                ).fetchall()
+                connection.execute("COMMIT")
+            except Exception:
+                connection.execute("ROLLBACK")
+                raise
+        return [self._deserialize_row(table="agent_work_queue", row=row) for row in leased_rows]
+
     def _initialize_schema(self) -> None:
         with sqlite3.connect(self.db_path) as connection:
             connection.execute("PRAGMA journal_mode=WAL")

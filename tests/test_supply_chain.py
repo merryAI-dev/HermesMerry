@@ -147,6 +147,20 @@ def test_runpod_env_documents_sminfo_enrichment_controls() -> None:
     assert "HERMES_AGENT_ID=runpod-hermes-staging" in env_example
 
 
+def test_runpod_cost_audit_script_is_read_only_and_checks_all_billing_surfaces() -> None:
+    script = (REPO_ROOT / "scripts" / "runpod_cost_audit.sh").read_text()
+
+    assert "pod list --all" in script
+    assert "serverless list --include-workers --include-template" in script
+    assert "network-volume list" in script
+    assert "billing pods" in script
+    assert "billing serverless" in script
+    assert "billing network-volume" in script
+    assert "pod delete" not in script
+    assert "serverless delete" not in script
+    assert "network-volume delete" not in script
+
+
 def test_ghcr_build_script_pushes_linux_amd64_staging_image() -> None:
     script = (REPO_ROOT / "scripts" / "build_ghcr_staging.sh").read_text()
 
