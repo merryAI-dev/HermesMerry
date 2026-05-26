@@ -14,9 +14,9 @@
       "google-sheets",
       "sqlite"
     ],
-    "description": "Queue-driven Hermes x Merry accelerator discovery runtime: crawls allowed source signals, stores evidence in SQLite, enriches candidates through SMINFO when configured, syncs Google Sheets, and renders local AIOps run state.",
-    "analyzedAt": "2026-05-26T03:12:16Z",
-    "gitCommitHash": "fdf0f0cf215f32f46c6e78f1ba53a409790c9b23"
+    "description": "HermesMerry는 액셀러레이터 후보 기업 발굴을 위한 큐 기반 운영 런타임이다. 공개 소스 수집, SQLite Mother DB 누적, SMINFO 보강, Google Sheets 검토 표면, 로컬 AIOps 대시보드를 연결해 사람이 검토 가능한 증거 기반 흐름을 만든다.",
+    "analyzedAt": "2026-05-26T04:19:07Z",
+    "gitCommitHash": "eaa6d6d8cee37e325b3d0def251fb4114974694a"
   },
   "nodes": [
     {
@@ -190,7 +190,7 @@
       "type": "document",
       "name": "README",
       "filePath": "README.md",
-      "summary": "비개발자도 이해할 수 있도록 현재 구현 기능, 조건부 통합, 실행 명령, 운영 확인 지점을 정리한다.",
+      "summary": "비개발자도 이해할 수 있도록 목적, 현재 기능, 조건부 통합, Runpod staging, 운영 확인 방법을 한글로 상세히 설명한다.",
       "tags": [
         "documentation",
         "operator-guide"
@@ -202,7 +202,7 @@
       "type": "document",
       "name": "ONBOARDING",
       "filePath": "docs/ONBOARDING.md",
-      "summary": "Understand 그래프 기반의 신규 합류자용 시스템 흐름, 중요 파일, 큐, 장애 확인 방법을 설명한다.",
+      "summary": "신규 개발자와 운영자를 위해 큐 구조, 주요 파일, 데이터 저장소, 장애 확인 순서, 테스트 명령을 한글로 상세히 안내한다.",
       "tags": [
         "documentation",
         "onboarding",
@@ -215,7 +215,7 @@
       "type": "document",
       "name": "README QA and CEO Review",
       "filePath": "docs/reviews/readme-qa-ceo-review.md",
-      "summary": "README와 온보딩 문서가 코드보다 과장되지 않았는지, 비개발자에게 이해 가능한지 점검한 기록이다.",
+      "summary": "README와 온보딩 문서가 과장 없이 CEO/비개발자에게 전달 가능한지 한글로 점검한 기록이다.",
       "tags": [
         "qa",
         "ceo-review",
