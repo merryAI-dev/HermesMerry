@@ -19,6 +19,7 @@ def test_runtime_config_reads_required_environment(monkeypatch) -> None:
     monkeypatch.setenv("WIKI_ROOT", "/tmp/wiki")
     monkeypatch.setenv("SMINFO_USER_ID", "sminfo-user")
     monkeypatch.setenv("SMINFO_PASSWORD", "sminfo-password")
+    monkeypatch.setenv("SMINFO_LOGIN_URL", "https://example.test/sminfo-login")
     monkeypatch.setenv("SMINFO_MIN_INTERVAL_SECONDS", "35")
     monkeypatch.setenv("SMINFO_BATCH_LIMIT", "20")
     monkeypatch.setenv("SMINFO_STALE_DAYS", "30")
@@ -65,6 +66,7 @@ def test_runtime_config_reads_required_environment(monkeypatch) -> None:
     assert config.bigquery_write_mode == "merge"
     assert config.sminfo_user_id == "sminfo-user"
     assert config.sminfo_password == "sminfo-password"
+    assert config.sminfo_login_url == "https://example.test/sminfo-login"
     assert config.sminfo_min_interval_seconds == 35
     assert config.sminfo_batch_limit == 20
     assert config.sminfo_stale_days == 30
@@ -276,6 +278,31 @@ def test_runtime_config_bounds_sminfo_batch_limit_to_site_safe_range(monkeypatch
 
     monkeypatch.setenv("SMINFO_BATCH_LIMIT", "0")
     assert RuntimeConfig.from_env().sminfo_batch_limit == 1
+
+
+def test_runtime_config_reads_env_local_without_overriding_shell_env(monkeypatch, tmp_path) -> None:
+    env_file = tmp_path / ".env.local"
+    env_file.write_text(
+        "\n".join(
+            (
+                "SMINFO_USER_ID=file-user",
+                "SMINFO_PASSWORD='file-password'",
+                "SMINFO_LOGIN_URL=https://sminfo.example/file-login",
+                "HERMES_AGENT_ID=file-agent",
+            )
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("HERMES_ENV_FILE", str(env_file))
+    monkeypatch.setenv("SMINFO_USER_ID", "shell-user")
+
+    config = RuntimeConfig.from_env()
+
+    assert config.sminfo_user_id == "shell-user"
+    assert config.sminfo_password == "file-password"
+    assert config.sminfo_login_url == "https://sminfo.example/file-login"
+    assert config.hermes_agent_id == "file-agent"
 
 
 def test_runtime_config_reads_sqlite_structured_store_paths(monkeypatch, tmp_path) -> None:

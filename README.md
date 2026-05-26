@@ -120,6 +120,7 @@ AGENT_WORK_QUEUE_SPEC_PATH=configs/agent_work_queue.discovery.json
 AGENT_LOOP_JOBS=agent-work-queue
 SMINFO_USER_ID=your-sminfo-id
 SMINFO_PASSWORD=your-sminfo-password
+SMINFO_LOGIN_URL=https://sminfo.mss.go.kr/cm/sv/CSV001R0.do
 THEVC_USER_EMAIL=optional-thevc-email
 THEVC_PASSWORD=optional-thevc-password
 ANTHROPIC_API_KEY=optional-claude-key
@@ -132,6 +133,8 @@ ANTHROPIC_API_KEY=optional-claude-key
 - SQLite DB 파일
 - `tmp/` 아래 실행 산출물
 - Google/Slack/Claude/Runpod 관련 토큰
+
+`RuntimeConfig.from_env()`는 현재 작업 디렉터리의 `.env.local`을 자동으로 읽습니다. 같은 키가 shell 환경변수에도 있으면 shell 값이 우선합니다. 다른 env 파일을 쓰고 싶으면 `HERMES_ENV_FILE=/path/to/env`를 지정합니다.
 
 ## 자주 쓰는 명령
 

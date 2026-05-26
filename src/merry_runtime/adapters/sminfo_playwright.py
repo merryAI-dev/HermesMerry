@@ -21,6 +21,7 @@ DETAIL_SEARCH_URL = "https://sminfo.mss.go.kr/gc/sf/GSF002R0.print"
 class SminfoPlaywrightClient:
     user_id: str
     password: str
+    login_url: str = LOGIN_URL
     headless: bool = True
     timeout_ms: int = 30000
     min_interval_seconds: int = 35
@@ -105,7 +106,7 @@ class SminfoPlaywrightClient:
     def _ensure_logged_in(self, page: Any) -> None:
         if self._logged_in:
             return
-        page.goto(LOGIN_URL, wait_until="domcontentloaded", timeout=self.timeout_ms)
+        page.goto(self.login_url, wait_until="domcontentloaded", timeout=self.timeout_ms)
         if page.get_by_role("link", name="로그아웃").count() == 0:
             page.get_by_role("textbox", name="아이디").fill(self.user_id)
             page.get_by_role("textbox", name="비밀번호").fill(self.password)

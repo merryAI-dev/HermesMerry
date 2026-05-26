@@ -309,6 +309,7 @@ def test_runtime_factory_builds_sminfo_client_only_when_credentials_are_configur
 
     assert isinstance(runtime.sminfo_client, SminfoPlaywrightClient)
     assert runtime.sminfo_client.user_id == "user"
+    assert runtime.sminfo_client.login_url == config.sminfo_login_url
     assert runtime.sminfo_client.min_interval_seconds == 35
 
 

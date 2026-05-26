@@ -60,6 +60,7 @@ class RuntimeConfig:
     agent_work_queue_batch_limit: int = 10
     sminfo_user_id: str = ""
     sminfo_password: str = ""
+    sminfo_login_url: str = "https://sminfo.mss.go.kr/cm/sv/CSV001R0.do"
     sminfo_min_interval_seconds: int = 35
     sminfo_batch_limit: int = 20
     sminfo_stale_days: int = 30
@@ -85,119 +86,122 @@ class RuntimeConfig:
 
     @classmethod
     def from_env(cls) -> RuntimeConfig:
+        env_file_values = _load_env_file_values(Path(os.getenv("HERMES_ENV_FILE", ".env.local")))
+        getenv = lambda key, default="": os.environ.get(key, env_file_values.get(key, default))
         return cls(
-            project_id=os.getenv("GCP_PROJECT_ID", ""),
-            dataset_id=os.getenv("BIGQUERY_DATASET", ""),
-            raw_bucket=os.getenv("RAW_BUCKET", ""),
-            review_sheet_id=os.getenv("REVIEW_SHEET_ID", ""),
-            slack_channel=os.getenv("SLACK_CHANNEL", ""),
-            gmail_label_id=os.getenv("GMAIL_LABEL_ID", ""),
-            gmail_user_id=os.getenv("GMAIL_USER_ID", "me"),
-            gmail_from_name=os.getenv("GMAIL_FROM_NAME", "Merry"),
-            apps_script_draft_webhook_url=os.getenv("APPS_SCRIPT_DRAFT_WEBHOOK_URL", ""),
-            apps_script_draft_secret=os.getenv("APPS_SCRIPT_DRAFT_SECRET", ""),
+            project_id=getenv("GCP_PROJECT_ID"),
+            dataset_id=getenv("BIGQUERY_DATASET"),
+            raw_bucket=getenv("RAW_BUCKET"),
+            review_sheet_id=getenv("REVIEW_SHEET_ID"),
+            slack_channel=getenv("SLACK_CHANNEL"),
+            gmail_label_id=getenv("GMAIL_LABEL_ID"),
+            gmail_user_id=getenv("GMAIL_USER_ID", "me"),
+            gmail_from_name=getenv("GMAIL_FROM_NAME", "Merry"),
+            apps_script_draft_webhook_url=getenv("APPS_SCRIPT_DRAFT_WEBHOOK_URL"),
+            apps_script_draft_secret=getenv("APPS_SCRIPT_DRAFT_SECRET"),
             apps_script_draft_timeout_seconds=max(
                 1,
-                _parse_int(os.getenv("APPS_SCRIPT_DRAFT_TIMEOUT_SECONDS", ""), default=10),
+                _parse_int(getenv("APPS_SCRIPT_DRAFT_TIMEOUT_SECONDS"), default=10),
             ),
-            crawl_sheet_tab=os.getenv("CRAWL_SHEET_TAB", "Crawl Sources"),
-            crawl_targets_json=os.getenv("CRAWL_TARGETS_JSON", ""),
-            default_ac_id=os.getenv("AC_ID", ""),
-            wiki_root=Path(os.getenv("WIKI_ROOT", "/tmp/hermes-merry-wiki")),
-            object_store_backend=os.getenv("OBJECT_STORE_BACKEND", "gcs"),
-            raw_root=Path(os.getenv("RAW_ROOT", "/workspace/hermes/raw")),
-            structured_store_backend=_parse_structured_store_backend(os.getenv("STRUCTURED_STORE_BACKEND", "sqlite")),
-            mother_db_path=Path(os.getenv("MOTHER_DB_PATH", "/workspace/hermes/mother.db")),
-            backup_root=Path(os.getenv("BACKUP_ROOT", "/workspace/hermes/backups")),
-            bigquery_write_mode=_parse_bigquery_write_mode(os.getenv("BIGQUERY_WRITE_MODE", "merge")),
-            agent_loop_jobs=_parse_jobs(os.getenv("AGENT_LOOP_JOBS", "")),
-            agent_loop_interval_seconds=_parse_int(os.getenv("AGENT_LOOP_INTERVAL_SECONDS", ""), default=3600),
-            agent_loop_max_cycles=_parse_int(os.getenv("AGENT_LOOP_MAX_CYCLES", ""), default=0),
-            allow_unbounded_loop=_parse_bool(os.getenv("HERMES_ALLOW_UNBOUNDED_LOOP", ""), default=False),
-            hermes_agent_id=_parse_agent_id(),
+            crawl_sheet_tab=getenv("CRAWL_SHEET_TAB", "Crawl Sources"),
+            crawl_targets_json=getenv("CRAWL_TARGETS_JSON"),
+            default_ac_id=getenv("AC_ID"),
+            wiki_root=Path(getenv("WIKI_ROOT", "/tmp/hermes-merry-wiki")),
+            object_store_backend=getenv("OBJECT_STORE_BACKEND", "gcs"),
+            raw_root=Path(getenv("RAW_ROOT", "/workspace/hermes/raw")),
+            structured_store_backend=_parse_structured_store_backend(getenv("STRUCTURED_STORE_BACKEND", "sqlite")),
+            mother_db_path=Path(getenv("MOTHER_DB_PATH", "/workspace/hermes/mother.db")),
+            backup_root=Path(getenv("BACKUP_ROOT", "/workspace/hermes/backups")),
+            bigquery_write_mode=_parse_bigquery_write_mode(getenv("BIGQUERY_WRITE_MODE", "merge")),
+            agent_loop_jobs=_parse_jobs(getenv("AGENT_LOOP_JOBS")),
+            agent_loop_interval_seconds=_parse_int(getenv("AGENT_LOOP_INTERVAL_SECONDS"), default=3600),
+            agent_loop_max_cycles=_parse_int(getenv("AGENT_LOOP_MAX_CYCLES"), default=0),
+            allow_unbounded_loop=_parse_bool(getenv("HERMES_ALLOW_UNBOUNDED_LOOP"), default=False),
+            hermes_agent_id=_parse_agent_id(env_file_values=env_file_values),
             agent_work_queue_spec_path=Path(
-                os.getenv("AGENT_WORK_QUEUE_SPEC_PATH", "configs/agent_work_queue.discovery.json")
+                getenv("AGENT_WORK_QUEUE_SPEC_PATH", "configs/agent_work_queue.discovery.json")
             ),
             agent_work_queue_batch_limit=_parse_bounded_int(
-                os.getenv("AGENT_WORK_QUEUE_BATCH_LIMIT", ""),
+                getenv("AGENT_WORK_QUEUE_BATCH_LIMIT"),
                 default=10,
                 minimum=_AGENT_WORK_QUEUE_BATCH_LIMIT_MIN,
                 maximum=_AGENT_WORK_QUEUE_BATCH_LIMIT_MAX,
             ),
-            sminfo_user_id=os.getenv("SMINFO_USER_ID", ""),
-            sminfo_password=os.getenv("SMINFO_PASSWORD", ""),
+            sminfo_user_id=getenv("SMINFO_USER_ID"),
+            sminfo_password=getenv("SMINFO_PASSWORD"),
+            sminfo_login_url=getenv("SMINFO_LOGIN_URL", "https://sminfo.mss.go.kr/cm/sv/CSV001R0.do"),
             sminfo_min_interval_seconds=max(
                 35,
-                _parse_int(os.getenv("SMINFO_MIN_INTERVAL_SECONDS", ""), default=35),
+                _parse_int(getenv("SMINFO_MIN_INTERVAL_SECONDS"), default=35),
             ),
             sminfo_batch_limit=_parse_bounded_int(
-                os.getenv("SMINFO_BATCH_LIMIT", ""),
+                getenv("SMINFO_BATCH_LIMIT"),
                 default=20,
                 minimum=_SMINFO_BATCH_LIMIT_MIN,
                 maximum=_SMINFO_BATCH_LIMIT_MAX,
             ),
-            sminfo_stale_days=_parse_int(os.getenv("SMINFO_STALE_DAYS", ""), default=30),
+            sminfo_stale_days=_parse_int(getenv("SMINFO_STALE_DAYS"), default=30),
             outreach_draft_batch_limit=_parse_bounded_int(
-                os.getenv("OUTREACH_DRAFT_BATCH_LIMIT", ""),
+                getenv("OUTREACH_DRAFT_BATCH_LIMIT"),
                 default=10,
                 minimum=_OUTREACH_DRAFT_BATCH_LIMIT_MIN,
                 maximum=_OUTREACH_DRAFT_BATCH_LIMIT_MAX,
             ),
-            kvic_api_key=os.getenv("KVIC_API_KEY", ""),
+            kvic_api_key=getenv("KVIC_API_KEY"),
             kvic_sync_interval_seconds=max(
                 _KVIC_SYNC_INTERVAL_SECONDS_MIN,
-                _parse_int(os.getenv("KVIC_SYNC_INTERVAL_SECONDS", ""), default=86400),
+                _parse_int(getenv("KVIC_SYNC_INTERVAL_SECONDS"), default=86400),
             ),
             kvic_request_timeout_seconds=max(
                 1,
-                _parse_int(os.getenv("KVIC_REQUEST_TIMEOUT_SECONDS", ""), default=15),
+                _parse_int(getenv("KVIC_REQUEST_TIMEOUT_SECONDS"), default=15),
             ),
             kvic_fund_description_batch_limit=_parse_bounded_int(
-                os.getenv("KVIC_FUND_DESCRIPTION_BATCH_LIMIT", ""),
+                getenv("KVIC_FUND_DESCRIPTION_BATCH_LIMIT"),
                 default=50,
                 minimum=_KVIC_FUND_DESCRIPTION_BATCH_LIMIT_MIN,
                 maximum=_KVIC_FUND_DESCRIPTION_BATCH_LIMIT_MAX,
             ),
             kvic_fund_description_stale_days=max(
                 1,
-                _parse_int(os.getenv("KVIC_FUND_DESCRIPTION_STALE_DAYS", ""), default=30),
+                _parse_int(getenv("KVIC_FUND_DESCRIPTION_STALE_DAYS"), default=30),
             ),
             kvic_fund_search_max_results=_parse_bounded_int(
-                os.getenv("KVIC_FUND_SEARCH_MAX_RESULTS", ""),
+                getenv("KVIC_FUND_SEARCH_MAX_RESULTS"),
                 default=5,
                 minimum=_KVIC_FUND_SEARCH_MAX_RESULTS_MIN,
                 maximum=_KVIC_FUND_SEARCH_MAX_RESULTS_MAX,
             ),
-            anthropic_api_key=os.getenv("ANTHROPIC_API_KEY", ""),
-            hermes_llm_model=os.getenv("HERMES_LLM_MODEL", "claude-sonnet-4-6"),
+            anthropic_api_key=getenv("ANTHROPIC_API_KEY"),
+            hermes_llm_model=getenv("HERMES_LLM_MODEL", "claude-sonnet-4-6"),
             hermes_llm_timeout_seconds=max(
                 1,
-                _parse_int(os.getenv("HERMES_LLM_TIMEOUT_SECONDS", ""), default=30),
+                _parse_int(getenv("HERMES_LLM_TIMEOUT_SECONDS"), default=30),
             ),
             investor_research_batch_limit=_parse_bounded_int(
-                os.getenv("INVESTOR_RESEARCH_BATCH_LIMIT", ""),
+                getenv("INVESTOR_RESEARCH_BATCH_LIMIT"),
                 default=20,
                 minimum=_INVESTOR_RESEARCH_BATCH_LIMIT_MIN,
                 maximum=_INVESTOR_RESEARCH_BATCH_LIMIT_MAX,
             ),
             investor_research_stale_days=max(
                 1,
-                _parse_int(os.getenv("INVESTOR_RESEARCH_STALE_DAYS", ""), default=7),
+                _parse_int(getenv("INVESTOR_RESEARCH_STALE_DAYS"), default=7),
             ),
             investor_research_search_max_results=_parse_bounded_int(
-                os.getenv("INVESTOR_RESEARCH_SEARCH_MAX_RESULTS", ""),
+                getenv("INVESTOR_RESEARCH_SEARCH_MAX_RESULTS"),
                 default=5,
                 minimum=_INVESTOR_RESEARCH_SEARCH_MAX_RESULTS_MIN,
                 maximum=_INVESTOR_RESEARCH_SEARCH_MAX_RESULTS_MAX,
             ),
-            thevc_user_email=os.getenv("THEVC_USER_EMAIL", ""),
-            thevc_password=os.getenv("THEVC_PASSWORD", ""),
-            thevc_browser_state_path=Path(os.getenv("THEVC_BROWSER_STATE_PATH", "/workspace/hermes/thevc-state.json")),
-            thevc_browser_headless=_parse_bool(os.getenv("THEVC_BROWSER_HEADLESS", ""), default=True),
-            thevc_browser_channel=os.getenv("THEVC_BROWSER_CHANNEL", ""),
+            thevc_user_email=getenv("THEVC_USER_EMAIL"),
+            thevc_password=getenv("THEVC_PASSWORD"),
+            thevc_browser_state_path=Path(getenv("THEVC_BROWSER_STATE_PATH", "/workspace/hermes/thevc-state.json")),
+            thevc_browser_headless=_parse_bool(getenv("THEVC_BROWSER_HEADLESS"), default=True),
+            thevc_browser_channel=getenv("THEVC_BROWSER_CHANNEL"),
             thevc_timeout_seconds=max(
                 1,
-                _parse_int(os.getenv("THEVC_TIMEOUT_SECONDS", ""), default=30),
+                _parse_int(getenv("THEVC_TIMEOUT_SECONDS"), default=30),
             ),
         )
 
@@ -313,6 +317,7 @@ class RuntimeConfig:
             "AGENT_WORK_QUEUE_BATCH_LIMIT": str(self.agent_work_queue_batch_limit),
             "SMINFO_USER_ID": self.sminfo_user_id,
             "SMINFO_PASSWORD": self.sminfo_password,
+            "SMINFO_LOGIN_URL": self.sminfo_login_url,
             "OUTREACH_DRAFT_BATCH_LIMIT": str(self.outreach_draft_batch_limit),
             "KVIC_API_KEY": self.kvic_api_key,
             "KVIC_SYNC_INTERVAL_SECONDS": str(self.kvic_sync_interval_seconds),
@@ -353,12 +358,33 @@ def _parse_structured_store_backend(value: str) -> str:
     return value.strip().lower()
 
 
-def _parse_agent_id() -> str:
+def _parse_agent_id(*, env_file_values: dict[str, str] | None = None) -> str:
     for name in ("HERMES_AGENT_ID", "RUNPOD_POD_ID", "HOSTNAME"):
-        value = os.getenv(name, "").strip()
+        value = os.getenv(name, env_file_values.get(name, "") if env_file_values else "").strip()
         if value:
             return value
     return "hermes-agent"
+
+
+def _load_env_file_values(path: Path) -> dict[str, str]:
+    if not path.exists() or not path.is_file():
+        return {}
+    values: dict[str, str] = {}
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        if key:
+            values[key] = _strip_env_value(value.strip())
+    return values
+
+
+def _strip_env_value(value: str) -> str:
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+        return value[1:-1]
+    return value
 
 
 def _parse_int(value: str, *, default: int) -> int:

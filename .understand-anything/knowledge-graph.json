@@ -14,9 +14,9 @@
       "google-sheets",
       "sqlite"
     ],
-    "description": "HermesMerry는 액셀러레이터 후보 기업 발굴을 위한 큐 기반 운영 런타임이다. 공개 소스 수집, SQLite Mother DB 누적, SMINFO 보강, Google Sheets 검토 표면, 로컬 AIOps 대시보드를 연결해 사람이 검토 가능한 증거 기반 흐름을 만든다.",
-    "analyzedAt": "2026-05-26T04:19:07Z",
-    "gitCommitHash": "eaa6d6d8cee37e325b3d0def251fb4114974694a"
+    "description": "HermesMerry는 액셀러레이터 후보 기업 발굴을 위한 큐 기반 운영 런타임이다. 공개 소스 수집, SQLite Mother DB 누적, SMINFO 보강, Google Sheets 검토 표면, 로컬 AIOps 대시보드를 연결하며, 로컬 .env.local 시크릿을 자동으로 읽어 운영 설정을 구성한다.",
+    "analyzedAt": "2026-05-26T08:01:25Z",
+    "gitCommitHash": "63eae97f58625731b3b96c2f1324e240ca18c839"
   },
   "nodes": [
     {
@@ -24,7 +24,7 @@
       "type": "module",
       "name": "RuntimeConfig",
       "filePath": "src/merry_runtime/runtime_config.py",
-      "summary": "환경변수에서 런타임 백엔드, 루프 잡, 자격증명, 배치 크기, 외부 서비스 설정을 읽고 잡별 필수 조건을 검증한다.",
+      "summary": "환경변수와 .env.local에서 런타임 백엔드, 루프 잡, SMINFO 로그인 URL/계정, 외부 서비스 설정을 읽고 잡별 필수 조건을 검증한다.",
       "tags": [
         "configuration",
         "env",
@@ -87,7 +87,7 @@
       "type": "module",
       "name": "sminfo_enrichment_queue",
       "filePath": "src/merry_runtime/ingestion/sminfo_queue.py",
-      "summary": "기업명/대표자/홈페이지 힌트로 SMINFO 조회 작업을 안정적인 task_id와 retry 상태로 표현한다.",
+      "summary": "SMINFO 조회 대상 기업을 보수적으로 정규화하고 큐 task, stale window, retry/backoff 상태를 계산한다.",
       "tags": [
         "queue",
         "sminfo"
@@ -202,7 +202,7 @@
       "type": "document",
       "name": "ONBOARDING",
       "filePath": "docs/ONBOARDING.md",
-      "summary": "신규 개발자와 운영자를 위해 큐 구조, 주요 파일, 데이터 저장소, 장애 확인 순서, 테스트 명령을 한글로 상세히 안내한다.",
+      "summary": "신규 개발자와 운영자를 위해 큐 구조, 주요 파일, .env.local 기반 SMINFO 설정, 장애 확인 순서, 테스트 명령을 한글로 안내한다.",
       "tags": [
         "documentation",
         "onboarding",

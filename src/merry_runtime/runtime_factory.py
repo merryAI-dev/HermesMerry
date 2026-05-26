@@ -72,6 +72,7 @@ def build_runtime(
             SminfoPlaywrightClient(
                 user_id=config.sminfo_user_id,
                 password=config.sminfo_password,
+                login_url=config.sminfo_login_url,
                 min_interval_seconds=config.sminfo_min_interval_seconds,
             )
             if config.sminfo_user_id and config.sminfo_password

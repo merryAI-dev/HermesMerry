@@ -132,6 +132,16 @@ python3 -m merry_runtime.jobs render-loop-dashboard --output tmp/hermes/loop-das
 6. dashboard HTML을 렌더링해 최근 실행 시간이 보이는지 확인합니다.
 7. 문제가 있으면 큐 상태와 `error_message`를 기준으로 어디서 막혔는지 판단합니다.
 
+SMINFO 계정은 `.env.local`의 아래 키를 봅니다. 실제 값은 저장소에 커밋하지 않습니다.
+
+```bash
+SMINFO_USER_ID=...
+SMINFO_PASSWORD=...
+SMINFO_LOGIN_URL=https://sminfo.mss.go.kr/cm/sv/CSV001R0.do
+```
+
+런타임은 기본적으로 현재 작업 디렉터리의 `.env.local`을 읽습니다. shell에 같은 키가 export되어 있으면 shell 값이 우선합니다.
+
 ## 테스트
 
 전체 테스트:
