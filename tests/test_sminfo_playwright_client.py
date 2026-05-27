@@ -69,6 +69,40 @@ class _SearchResultClickPage:
         self.waited_load_states.append((state, timeout))
 
 
+class _AmbiguousSearchPage:
+    url = "https://sminfo.mss.go.kr/gc/sf/GSF002R0.print"
+
+    def goto(self, *_args: object, **_kwargs: object) -> None:
+        return None
+
+    def get_by_label(self, _name: str) -> _FakeLocator:
+        return _FakeLocator()
+
+    def get_by_role(self, _role: str, *, name: str) -> _FakeLocator:
+        return _FakeLocator()
+
+    def wait_for_load_state(self, *_args: object, **_kwargs: object) -> None:
+        return None
+
+    def evaluate(self, *_args: object, **_kwargs: object) -> list[dict[str, object]]:
+        return [
+            {"index": 0, "cells": ["(주)씨위드", "대표A", "중소기업", "제조업", "서울"]},
+            {"index": 1, "cells": ["씨위드 주식회사", "대표B", "중소기업", "바이오", "부산"]},
+        ]
+
+
+class _AmbiguousSearchClient(SminfoPlaywrightClient):
+    def __init__(self) -> None:
+        super().__init__(user_id="user", password="password")
+        self.fake_page = _AmbiguousSearchPage()
+
+    def _ensure_page(self) -> _AmbiguousSearchPage:
+        return self.fake_page
+
+    def _ensure_logged_in(self, page: _AmbiguousSearchPage) -> None:
+        return None
+
+
 def test_sminfo_playwright_client_rate_limits_between_lookup_attempts() -> None:
     slept: list[float] = []
     times = iter([100.0, 110.0])
@@ -106,3 +140,12 @@ def test_click_search_result_waits_for_detail_report_navigation() -> None:
     assert page.evaluated_args == [1]
     assert page.waited_urls == [("**/IEI001R0.do**", 45000)]
     assert page.waited_load_states == [("networkidle", 45000)]
+
+
+def test_sminfo_playwright_client_serializes_ambiguous_search_results() -> None:
+    client = _AmbiguousSearchClient()
+
+    profile = client.lookup_company(company_name="씨위드", candidate={})
+
+    assert profile.match_status == "ambiguous"
+    assert profile.raw_payload["search_results"][0]["company_name"] == "(주)씨위드"

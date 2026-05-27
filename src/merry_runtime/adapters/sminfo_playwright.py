@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from typing import Any
 
 from merry_runtime.ingestion.sminfo import (
@@ -64,7 +64,7 @@ class SminfoPlaywrightClient:
                 requested_company=company_name,
                 match_status=decision.status,
                 error_message=decision.rationale,
-                raw_payload={"search_results": [result.__dict__ for result in results]},
+                raw_payload={"search_results": [asdict(result) for result in results]},
             )
 
         _click_search_result(page, decision.result.result_index, timeout_ms=self.timeout_ms)
