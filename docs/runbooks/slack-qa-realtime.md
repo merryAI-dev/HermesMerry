@@ -1,13 +1,15 @@
 # Slack QA 실시간 초안 에이전트
 
-`axr-qa` 채널에 QA성 메시지가 올라오면 Hermes Merry가 최근 메시지를 주기적으로 읽고, 로컬 GitHub 코드 근거를 검색한 뒤 스레드에 원인 분석 초안을 남깁니다.
+`axr-qa` 채널에 QA성 메시지가 올라오면 Hermes Merry가 최근 메시지를 주기적으로 읽고, 로컬 GitHub 코드 근거를 검색한 뒤 Hermes Agent 루프에 대응을 위임합니다. 워커는 Slack 입출력과 중복 방지만 담당하고, 판단/문구 작성은 Hermes가 맡습니다.
 
 ## 동작 방식
 
 - 대상 채널: `C0AH3LQ00AD` (`axr-qa`)
 - 실행 방식: Slack history polling, 기본 20초 간격
 - 응답 방식: 새 QA 메시지의 스레드에 초안 작성
-- 근거 수집: 설정된 repo에서 `rg`로 관련 키워드 검색
+- 근거 수집: 설정된 repo에서 `rg`로 관련 키워드 사전 검색
+- 답글 작성: 기본값은 `SLACK_QA_DELEGATE=hermes`, Hermes CLI의 기존 Agent 루프 사용
+- fallback: Hermes 위임 실패 시 deterministic local 초안으로 대체
 - 중복 방지: `tmp/hermes/slack-qa-realtime-state.json`에 처리 키 저장
 - 과거 메시지 보호: 서비스 시작 시 `--ignore-existing-on-start`로 기존 QA는 처리 완료로만 표시
 
@@ -50,3 +52,21 @@ uv run python scripts/slack_qa_realtime_agent.py --once --limit 20 --send
 - `SLACK_APP_TOKEN`은 Socket Mode 옵션을 쓸 때만 필요합니다.
 
 기본 운영은 Socket Mode가 아니라 polling입니다. 기존 Hermes Slack gateway와 이벤트 수신을 두고 경쟁하지 않기 위해서입니다.
+
+## Hermes 위임 설정
+
+기본값은 Hermes 위임입니다.
+
+```bash
+SLACK_QA_DELEGATE=hermes
+SLACK_QA_HERMES_PROVIDER=openai-codex
+SLACK_QA_HERMES_MODEL=gpt-5.3-codex
+SLACK_QA_HERMES_TOOLSETS=terminal
+SLACK_QA_HERMES_MAX_TURNS=20
+```
+
+Hermes 루프를 우회하고 deterministic 초안만 확인하려면:
+
+```bash
+uv run python scripts/slack_qa_realtime_agent.py --once --limit 20 --delegate local
+```
