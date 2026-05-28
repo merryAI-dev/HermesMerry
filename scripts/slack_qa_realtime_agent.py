@@ -173,7 +173,7 @@ def _process_recent_history(
         planned.append(plan)
         newly_processed.add(plan["dedupe_key"])
         if send:
-            _post_draft(client, channel=channel, thread_ts=plan["thread_ts"], text=plan["draft"])
+            _post_plan(client, channel=channel, plan=plan)
 
     return {
         "dry_run": not send,
@@ -320,7 +320,7 @@ def _listen_socket_mode(
         processed_keys.add(plan["dedupe_key"])
         _save_processed_keys(state_path, processed_keys)
         if send:
-            _post_draft(web_client, channel=channel, thread_ts=plan["thread_ts"], text=plan["draft"])
+            _post_plan(web_client, channel=channel, plan=plan)
         else:
             print(json.dumps(plan, ensure_ascii=False), flush=True)
 
@@ -380,12 +380,14 @@ def _plan_message(
     else:
         draft = build_qa_draft(event, evidence)
 
+    thread_draft = draft
+    channel_notice = ""
     issue_url = ""
     issue_error = ""
     if create_issue:
         try:
             issue_title = build_qa_issue_title(event)
-            issue_body = build_qa_issue_body(event, hermes_diagnosis=draft, evidence=evidence)
+            issue_body = build_qa_issue_body(event, hermes_diagnosis=thread_draft, evidence=evidence)
             issue_url = create_github_issue(
                 repo_full_name=github_repo,
                 title=issue_title,
@@ -393,7 +395,7 @@ def _plan_message(
                 assignees=github_assignees,
                 labels=github_labels,
             )
-            draft = build_slack_issue_reply(
+            channel_notice = build_slack_issue_reply(
                 issue_url=issue_url,
                 reviewer_slack_user_id=reviewer_slack_user_id,
             )
@@ -406,6 +408,7 @@ def _plan_message(
                     f"GitHub 이슈 생성은 실패했습니다. 보람님 확인이 필요합니다. ({issue_error})",
                 ]
             )
+            thread_draft = draft
     return {
         "dedupe_key": event.dedupe_key,
         "channel": channel,
@@ -419,7 +422,9 @@ def _plan_message(
         "handoff_error": handoff_error,
         "issue_url": issue_url,
         "issue_error": issue_error,
-        "draft": draft,
+        "thread_draft": thread_draft,
+        "channel_notice": channel_notice,
+        "draft": thread_draft,
     }
 
 
@@ -439,6 +444,16 @@ def _message_text_for_parsing(message: dict[str, Any]) -> str:
 
 def _post_draft(client: Any, *, channel: str, thread_ts: str, text: str) -> None:
     client.chat_postMessage(channel=channel, thread_ts=thread_ts, text=text)
+
+
+def _post_plan(client: Any, *, channel: str, plan: dict[str, Any]) -> None:
+    thread_text = str(plan.get("thread_draft") or plan.get("draft") or "").strip()
+    if thread_text:
+        _post_draft(client, channel=channel, thread_ts=str(plan["thread_ts"]), text=thread_text)
+
+    channel_notice = str(plan.get("channel_notice") or "").strip()
+    if channel_notice:
+        client.chat_postMessage(channel=channel, text=channel_notice)
 
 
 def _web_client() -> Any:
