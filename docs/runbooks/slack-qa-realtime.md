@@ -9,6 +9,8 @@
 - 응답 방식: 새 QA 메시지의 스레드에 초안 작성
 - 근거 수집: 설정된 repo에서 `rg`로 관련 키워드 사전 검색
 - 답글 작성: 기본값은 `SLACK_QA_DELEGATE=hermes`, Hermes CLI의 기존 Agent 루프 사용
+- GitHub 이슈화: `--send` 운영 시 Hermes 1차 진단을 GitHub issue로 생성하고 Slack 스레드에는 이슈 링크를 남김
+- 보람 멘션: 기본 reviewer Slack ID는 `U099F3KA1CL`
 - fallback: Hermes 위임 실패 시 deterministic local 초안으로 대체
 - 중복 방지: `tmp/hermes/slack-qa-realtime-state.json`에 처리 키 저장
 - 과거 메시지 보호: 서비스 시작 시 `--ignore-existing-on-start`로 기존 QA는 처리 완료로만 표시
@@ -63,10 +65,21 @@ SLACK_QA_HERMES_PROVIDER=openai-codex
 SLACK_QA_HERMES_MODEL=gpt-5.3-codex
 SLACK_QA_HERMES_TOOLSETS=terminal
 SLACK_QA_HERMES_MAX_TURNS=20
+SLACK_QA_CREATE_GITHUB_ISSUE=1
+SLACK_QA_GITHUB_REPO=merryAI-dev/startup-diagnostic-platform
+SLACK_QA_GITHUB_ASSIGNEES=merryAI-dev
+SLACK_QA_REVIEWER_SLACK_USER_ID=U099F3KA1CL
 ```
 
 Hermes 루프를 우회하고 deterministic 초안만 확인하려면:
 
 ```bash
 uv run python scripts/slack_qa_realtime_agent.py --once --limit 20 --delegate local
+```
+
+Slack 스레드에는 아래 형식으로 남깁니다.
+
+```text
+https://github.com/merryAI-dev/startup-diagnostic-platform/issues/123
+깃허브 이슈로 처리해두었어요 :-) <@U099F3KA1CL> 검토해주세요 보람!
 ```

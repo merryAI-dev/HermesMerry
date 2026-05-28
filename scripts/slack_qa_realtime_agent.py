@@ -10,12 +10,20 @@ from pathlib import Path
 from typing import Any, Sequence
 
 from merry_runtime.github_qa_context import collect_repo_evidence
+from merry_runtime.github_qa_issue import (
+    build_qa_issue_body,
+    build_qa_issue_title,
+    build_slack_issue_reply,
+    create_github_issue,
+)
 from merry_runtime.hermes_qa_delegation import build_hermes_qa_prompt, run_hermes_qa_handoff
 from merry_runtime.slack_qa_triage import build_github_search_terms, build_qa_draft, extract_qa_event
 
 
 DEFAULT_QA_CHANNEL = "C0AH3LQ00AD"
 DEFAULT_STATE_FILE = "tmp/hermes/slack-qa-realtime-state.json"
+DEFAULT_GITHUB_REPO = "merryAI-dev/startup-diagnostic-platform"
+DEFAULT_BORAM_SLACK_USER_ID = "U099F3KA1CL"
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -36,6 +44,30 @@ def main(argv: Sequence[str] | None = None) -> int:
         default=os.getenv("SLACK_QA_DELEGATE", "hermes"),
         help="Draft generator. hermes uses Hermes Agent CLI; local uses deterministic fallback.",
     )
+    parser.add_argument("--github-repo", default=os.getenv("SLACK_QA_GITHUB_REPO", DEFAULT_GITHUB_REPO))
+    parser.add_argument(
+        "--github-assignee",
+        action="append",
+        default=_env_list("SLACK_QA_GITHUB_ASSIGNEES", default="merryAI-dev"),
+        help="GitHub issue assignee. May be repeated.",
+    )
+    parser.add_argument(
+        "--github-label",
+        action="append",
+        default=_env_list("SLACK_QA_GITHUB_LABELS"),
+        help="GitHub issue label. May be repeated; label must already exist.",
+    )
+    parser.add_argument(
+        "--reviewer-slack-user",
+        default=os.getenv("SLACK_QA_REVIEWER_SLACK_USER_ID", DEFAULT_BORAM_SLACK_USER_ID),
+        help="Slack user ID to mention after creating the issue.",
+    )
+    parser.add_argument(
+        "--create-github-issue",
+        action=argparse.BooleanOptionalAction,
+        default=_env_bool("SLACK_QA_CREATE_GITHUB_ISSUE", True),
+        help="Create a GitHub issue when --send is active.",
+    )
     parser.add_argument(
         "--ignore-existing-on-start",
         action="store_true",
@@ -55,6 +87,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             processed_keys=processed_keys,
             send=args.send,
             delegate=args.delegate,
+            github_issue_enabled=args.create_github_issue and args.send,
+            github_repo=args.github_repo,
+            github_assignees=args.github_assignee,
+            github_labels=args.github_label,
+            reviewer_slack_user_id=args.reviewer_slack_user,
         )
         if args.send:
             _save_processed_keys(state_path, processed_keys | set(result["processed_keys"]))
@@ -69,6 +106,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             processed_keys=processed_keys,
             send=args.send,
             delegate=args.delegate,
+            github_issue_enabled=args.create_github_issue and args.send,
+            github_repo=args.github_repo,
+            github_assignees=args.github_assignee,
+            github_labels=args.github_label,
+            reviewer_slack_user_id=args.reviewer_slack_user,
         )
     else:
         _poll_history(
@@ -81,6 +123,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             poll_interval=args.poll_interval,
             ignore_existing_on_start=args.ignore_existing_on_start,
             delegate=args.delegate,
+            github_issue_enabled=args.create_github_issue,
+            github_repo=args.github_repo,
+            github_assignees=args.github_assignee,
+            github_labels=args.github_label,
+            reviewer_slack_user_id=args.reviewer_slack_user,
         )
     return 0
 
@@ -93,6 +140,11 @@ def _process_recent_history(
     processed_keys: set[str],
     send: bool,
     delegate: str,
+    github_issue_enabled: bool,
+    github_repo: str,
+    github_assignees: list[str],
+    github_labels: list[str],
+    reviewer_slack_user_id: str,
 ) -> dict[str, Any]:
     from slack_sdk import WebClient
 
@@ -109,6 +161,11 @@ def _process_recent_history(
             repo_paths=repo_paths,
             processed_keys=processed_keys | newly_processed,
             delegate=delegate,
+            create_issue=github_issue_enabled,
+            github_repo=github_repo,
+            github_assignees=github_assignees,
+            github_labels=github_labels,
+            reviewer_slack_user_id=reviewer_slack_user_id,
         )
         if plan is None:
             skipped.append({"ts": str(message.get("ts") or ""), "reason": "not_qa_or_duplicate"})
@@ -139,6 +196,11 @@ def _poll_history(
     poll_interval: int,
     ignore_existing_on_start: bool,
     delegate: str,
+    github_issue_enabled: bool,
+    github_repo: str,
+    github_assignees: list[str],
+    github_labels: list[str],
+    reviewer_slack_user_id: str,
 ) -> None:
     print(
         json.dumps(
@@ -148,6 +210,8 @@ def _poll_history(
                 "send": send,
                 "poll_interval": poll_interval,
                 "delegate": delegate,
+                "github_issue_enabled": github_issue_enabled and send,
+                "github_repo": github_repo,
                 "repo_paths": [str(path) for path in repo_paths],
             },
             ensure_ascii=False,
@@ -162,6 +226,11 @@ def _poll_history(
             processed_keys=processed_keys,
             send=False,
             delegate=delegate,
+            github_issue_enabled=False,
+            github_repo=github_repo,
+            github_assignees=github_assignees,
+            github_labels=github_labels,
+            reviewer_slack_user_id=reviewer_slack_user_id,
         )
         seen_keys = set(result["processed_keys"])
         if seen_keys:
@@ -182,6 +251,11 @@ def _poll_history(
             processed_keys=processed_keys,
             send=send,
             delegate=delegate,
+            github_issue_enabled=github_issue_enabled and send,
+            github_repo=github_repo,
+            github_assignees=github_assignees,
+            github_labels=github_labels,
+            reviewer_slack_user_id=reviewer_slack_user_id,
         )
         new_keys = set(result["processed_keys"])
         if new_keys:
@@ -199,6 +273,11 @@ def _listen_socket_mode(
     processed_keys: set[str],
     send: bool,
     delegate: str,
+    github_issue_enabled: bool,
+    github_repo: str,
+    github_assignees: list[str],
+    github_labels: list[str],
+    reviewer_slack_user_id: str,
 ) -> None:
     from slack_sdk.socket_mode import SocketModeClient
     from slack_sdk.socket_mode.response import SocketModeResponse
@@ -229,6 +308,11 @@ def _listen_socket_mode(
             repo_paths=repo_paths,
             processed_keys=processed_keys,
             delegate=delegate,
+            create_issue=github_issue_enabled and send,
+            github_repo=github_repo,
+            github_assignees=github_assignees,
+            github_labels=github_labels,
+            reviewer_slack_user_id=reviewer_slack_user_id,
         )
         if plan is None:
             return
@@ -249,6 +333,8 @@ def _listen_socket_mode(
                 "channel": channel,
                 "send": send,
                 "delegate": delegate,
+                "github_issue_enabled": github_issue_enabled and send,
+                "github_repo": github_repo,
                 "repo_paths": [str(path) for path in repo_paths],
             },
             ensure_ascii=False,
@@ -266,6 +352,11 @@ def _plan_message(
     repo_paths: list[Path],
     processed_keys: set[str],
     delegate: str,
+    create_issue: bool,
+    github_repo: str,
+    github_assignees: list[str],
+    github_labels: list[str],
+    reviewer_slack_user_id: str,
 ) -> dict[str, Any] | None:
     ts = str(message.get("ts") or "")
     thread_ts = str(message.get("thread_ts") or ts)
@@ -288,6 +379,33 @@ def _plan_message(
             draft = build_qa_draft(event, evidence)
     else:
         draft = build_qa_draft(event, evidence)
+
+    issue_url = ""
+    issue_error = ""
+    if create_issue:
+        try:
+            issue_title = build_qa_issue_title(event)
+            issue_body = build_qa_issue_body(event, hermes_diagnosis=draft, evidence=evidence)
+            issue_url = create_github_issue(
+                repo_full_name=github_repo,
+                title=issue_title,
+                body=issue_body,
+                assignees=github_assignees,
+                labels=github_labels,
+            )
+            draft = build_slack_issue_reply(
+                issue_url=issue_url,
+                reviewer_slack_user_id=reviewer_slack_user_id,
+            )
+        except Exception as exc:
+            issue_error = str(exc)
+            draft = "\n".join(
+                [
+                    draft,
+                    "",
+                    f"GitHub 이슈 생성은 실패했습니다. 보람님 확인이 필요합니다. ({issue_error})",
+                ]
+            )
     return {
         "dedupe_key": event.dedupe_key,
         "channel": channel,
@@ -299,6 +417,8 @@ def _plan_message(
         "evidence": [item.to_dict() for item in evidence],
         "draft_source": draft_source,
         "handoff_error": handoff_error,
+        "issue_url": issue_url,
+        "issue_error": issue_error,
         "draft": draft,
     }
 
@@ -335,6 +455,18 @@ def _repo_paths(values: list[str]) -> list[Path]:
     if not configured:
         configured = [str(Path.cwd())]
     return [Path(value).expanduser().resolve() for value in configured]
+
+
+def _env_list(name: str, *, default: str = "") -> list[str]:
+    raw = os.getenv(name, default)
+    return [item.strip() for item in raw.split(",") if item.strip()]
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() not in {"0", "false", "no", "off", ""}
 
 
 def _load_processed_keys(path: Path) -> set[str]:
