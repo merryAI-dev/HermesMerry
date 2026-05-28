@@ -69,8 +69,10 @@ def test_slack_issue_reply_fixed_mentions_boram() -> None:
     reply = build_slack_issue_reply(
         issue_url="https://github.com/merryAI-dev/startup-diagnostic-platform/issues/123",
         reviewer_slack_user_id="U099F3KA1CL",
+        issue_title="[QA 1차 진단] 기업 회원가입 요청 확인 불가",
     )
 
+    assert reply.startswith("[QA 1차 진단] 기업 회원가입 요청 확인 불가")
     assert "깃허브 이슈로 처리해두었어요 :-)" in reply
     assert "<@U099F3KA1CL>" in reply
     assert "검토해주세요 보람!" in reply

@@ -89,14 +89,18 @@ def create_github_issue(
     return url
 
 
-def build_slack_issue_reply(*, issue_url: str, reviewer_slack_user_id: str) -> str:
+def build_slack_issue_reply(*, issue_url: str, reviewer_slack_user_id: str, issue_title: str = "") -> str:
     reviewer = f"<@{reviewer_slack_user_id}>" if reviewer_slack_user_id else "보람"
-    return "\n".join(
+    lines = []
+    if issue_title.strip():
+        lines.append(issue_title.strip())
+    lines.extend(
         [
             f"{issue_url}",
             f"깃허브 이슈로 처리해두었어요 :-) {reviewer} 검토해주세요 보람!",
         ]
     )
+    return "\n".join(lines)
 
 
 def _format_evidence(evidence: list[RepoEvidence]) -> str:

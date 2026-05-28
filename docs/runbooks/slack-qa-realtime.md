@@ -10,7 +10,7 @@
 - 근거 수집: 설정된 repo에서 `rg`로 관련 키워드 사전 검색
 - 답글 작성: 기본값은 `SLACK_QA_DELEGATE=hermes`, Hermes CLI의 기존 Agent 루프 사용
 - GitHub 이슈화: `--send` 운영 시 Hermes 1차 진단을 GitHub issue로 생성
-- Slack 응답: Hermes 1차 진단은 QA 접수 메시지 스레드 댓글, GitHub issue 링크와 보람 멘션은 채널 일반 메시지로 발송
+- Slack 응답: Hermes 1차 진단은 QA 접수 메시지 스레드 댓글, 생성한 GitHub issue 제목/본문도 같은 스레드 댓글로 발송, GitHub issue 제목/링크와 보람 멘션은 채널 일반 메시지로 발송
 - 보람 멘션: 기본 reviewer Slack ID는 `U099F3KA1CL`
 - fallback: Hermes 위임 실패 시 deterministic local 초안으로 대체
 - 중복 방지: `tmp/hermes/slack-qa-realtime-state.json`에 처리 키 저장
@@ -78,9 +78,10 @@ Hermes 루프를 우회하고 deterministic 초안만 확인하려면:
 uv run python scripts/slack_qa_realtime_agent.py --once --limit 20 --delegate local
 ```
 
-Slack 채널에는 아래 형식으로 일반 메시지를 남깁니다. Hermes 진단 본문은 QA 접수 메시지의 스레드 댓글로 남깁니다.
+Slack 채널에는 아래 형식으로 일반 메시지를 남깁니다. Hermes 진단 본문과 생성한 GitHub issue 제목/본문은 QA 접수 메시지의 스레드 댓글로 남깁니다.
 
 ```text
+[QA 1차 진단] 기업에서 회원가입 요청까지 하신 기록은 있는데 플랫폼 내에서는 확인이 불가능합니다. 혹시 이 계정 삭제처리가 된 것일까요?
 https://github.com/merryAI-dev/startup-diagnostic-platform/issues/123
 깃허브 이슈로 처리해두었어요 :-) <@U099F3KA1CL> 검토해주세요 보람!
 ```

@@ -16,7 +16,11 @@ from merry_runtime.github_qa_issue import (
     build_slack_issue_reply,
     create_github_issue,
 )
-from merry_runtime.hermes_qa_delegation import build_hermes_qa_prompt, run_hermes_qa_handoff
+from merry_runtime.hermes_qa_delegation import (
+    build_hermes_qa_execution_prompt,
+    build_hermes_qa_prompt,
+    run_hermes_qa_handoff,
+)
 from merry_runtime.slack_qa_triage import build_github_search_terms, build_qa_draft, extract_qa_event
 
 
@@ -371,9 +375,42 @@ def _plan_message(
     handoff_error = ""
     if delegate == "hermes":
         try:
-            prompt = build_hermes_qa_prompt(event, evidence, repo_paths=repo_paths)
+            if create_issue:
+                prompt = build_hermes_qa_execution_prompt(
+                    event,
+                    evidence,
+                    repo_paths=repo_paths,
+                    github_repo=github_repo,
+                    reviewer_slack_user_id=reviewer_slack_user_id,
+                    slack_channel=channel,
+                    thread_ts=thread_ts,
+                )
+            else:
+                prompt = build_hermes_qa_prompt(event, evidence, repo_paths=repo_paths)
             draft = run_hermes_qa_handoff(prompt, repo_cwd=repo_paths[0] if repo_paths else Path.cwd())
+            if create_issue:
+                return {
+                    "dedupe_key": event.dedupe_key,
+                    "channel": channel,
+                    "message_ts": ts,
+                    "thread_ts": thread_ts,
+                    "summary": event.summary,
+                    "requester_name": event.requester_name,
+                    "terms": terms,
+                    "evidence": [item.to_dict() for item in evidence],
+                    "draft_source": "hermes-loop",
+                    "handoff_error": "",
+                    "issue_url": "",
+                    "issue_error": "",
+                    "handled_by_hermes": True,
+                    "hermes_result": draft,
+                    "thread_draft": "",
+                    "channel_notice": "",
+                    "draft": "",
+                }
         except Exception as exc:
+            if create_issue:
+                raise RuntimeError(f"Hermes loop QA execution failed: {exc}") from exc
             draft_source = "local-fallback"
             handoff_error = str(exc)
             draft = build_qa_draft(event, evidence)
@@ -384,7 +421,7 @@ def _plan_message(
     channel_notice = ""
     issue_url = ""
     issue_error = ""
-    if create_issue:
+    if create_issue and delegate != "hermes":
         try:
             issue_title = build_qa_issue_title(event)
             issue_body = build_qa_issue_body(event, hermes_diagnosis=thread_draft, evidence=evidence)
@@ -398,6 +435,7 @@ def _plan_message(
             channel_notice = build_slack_issue_reply(
                 issue_url=issue_url,
                 reviewer_slack_user_id=reviewer_slack_user_id,
+                issue_title=issue_title,
             )
         except Exception as exc:
             issue_error = str(exc)
@@ -447,6 +485,9 @@ def _post_draft(client: Any, *, channel: str, thread_ts: str, text: str) -> None
 
 
 def _post_plan(client: Any, *, channel: str, plan: dict[str, Any]) -> None:
+    if plan.get("handled_by_hermes"):
+        return
+
     thread_text = str(plan.get("thread_draft") or plan.get("draft") or "").strip()
     if thread_text:
         _post_draft(client, channel=channel, thread_ts=str(plan["thread_ts"]), text=thread_text)

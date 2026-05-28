@@ -3,7 +3,11 @@ from __future__ import annotations
 from pathlib import Path
 
 from merry_runtime.github_qa_context import RepoEvidence
-from merry_runtime.hermes_qa_delegation import build_hermes_qa_prompt, run_hermes_qa_handoff
+from merry_runtime.hermes_qa_delegation import (
+    build_hermes_qa_execution_prompt,
+    build_hermes_qa_prompt,
+    run_hermes_qa_handoff,
+)
 from merry_runtime.slack_qa_triage import QATriageEvent
 
 
@@ -65,3 +69,33 @@ def test_run_hermes_handoff_invokes_hermes_cli_with_query_and_image(tmp_path: Pa
     assert "--image" in command
     assert str(image) in command
     assert calls[0]["kwargs"]["cwd"] == tmp_path
+
+
+def test_build_execution_prompt_makes_hermes_own_github_and_slack_actions(tmp_path: Path) -> None:
+    repo = tmp_path / "startup-diagnostic-platform"
+    event = QATriageEvent(
+        summary="기업 회원가입 요청이 플랫폼에서 보이지 않습니다.",
+        requester_slack_user_id="U09AT2VU9PU",
+        channel="C0AH3LQ00AD",
+        message_ts="177.1",
+        thread_ts="177.1",
+    )
+
+    prompt = build_hermes_qa_execution_prompt(
+        event,
+        [],
+        repo_paths=[repo],
+        github_repo="merryAI-dev/startup-diagnostic-platform",
+        reviewer_slack_user_id="U099F3KA1CL",
+        slack_channel="C0AH3LQ00AD",
+        thread_ts="177.1",
+    )
+
+    assert "초안 생성이 아니라 실제 실행 작업" in prompt
+    assert "gh issue create --repo merryAI-dev/startup-diagnostic-platform" in prompt
+    assert "slack_sdk.WebClient" in prompt
+    assert "channel=C0AH3LQ00AD" in prompt
+    assert "thread_ts=177.1" in prompt
+    assert "두 번째 댓글: 생성한 GitHub issue 제목과 본문" in prompt
+    assert "[QA 1차 진단] <GitHub issue 제목>" in prompt
+    assert "이 메시지는 스레드 댓글이 아닙니다" in prompt
