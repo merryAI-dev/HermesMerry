@@ -1,0 +1,52 @@
+# Slack QA 실시간 초안 에이전트
+
+`axr-qa` 채널에 QA성 메시지가 올라오면 Hermes Merry가 최근 메시지를 주기적으로 읽고, 로컬 GitHub 코드 근거를 검색한 뒤 스레드에 원인 분석 초안을 남깁니다.
+
+## 동작 방식
+
+- 대상 채널: `C0AH3LQ00AD` (`axr-qa`)
+- 실행 방식: Slack history polling, 기본 20초 간격
+- 응답 방식: 새 QA 메시지의 스레드에 초안 작성
+- 근거 수집: 설정된 repo에서 `rg`로 관련 키워드 검색
+- 중복 방지: `tmp/hermes/slack-qa-realtime-state.json`에 처리 키 저장
+- 과거 메시지 보호: 서비스 시작 시 `--ignore-existing-on-start`로 기존 QA는 처리 완료로만 표시
+
+## 실행/중지
+
+현재 로컬 launchd 서비스로 등록되어 있습니다.
+
+```bash
+launchctl print gui/$(id -u)/ai.axr.qa-realtime
+launchctl kickstart -k gui/$(id -u)/ai.axr.qa-realtime
+launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/ai.axr.qa-realtime.plist
+```
+
+로그는 아래에서 확인합니다.
+
+```bash
+tail -f tmp/hermes/logs/slack-qa-realtime.out.log
+tail -f tmp/hermes/logs/slack-qa-realtime.err.log
+```
+
+## 수동 점검
+
+실제 Slack에 쓰지 않고 최근 메시지만 분석합니다.
+
+```bash
+uv run python scripts/slack_qa_realtime_agent.py --once --limit 20
+```
+
+실제 스레드에 초안을 남깁니다.
+
+```bash
+uv run python scripts/slack_qa_realtime_agent.py --once --limit 20 --send
+```
+
+## 필요한 시크릿
+
+스크립트는 현재 shell 환경변수, repo `.env.local`, `~/.hermes/.env` 순서로 Slack 토큰을 찾습니다.
+
+- `SLACK_BOT_TOKEN`
+- `SLACK_APP_TOKEN`은 Socket Mode 옵션을 쓸 때만 필요합니다.
+
+기본 운영은 Socket Mode가 아니라 polling입니다. 기존 Hermes Slack gateway와 이벤트 수신을 두고 경쟁하지 않기 위해서입니다.
