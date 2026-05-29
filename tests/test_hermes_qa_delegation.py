@@ -129,6 +129,8 @@ def test_execution_prompt_enforces_firestore_read_only_tenant_ledger_rules(tmp_p
     assert "/Users/boram/InnerPlatform/firebase/firestore.rules" in prompt
     assert "/Users/boram/InnerPlatform/src/app/lib/firebase.ts" in prompt
     assert "현재 운영 tenant는 보통 `mysc`" in prompt
+    assert "scripts/firestore_readonly_audit.py" in prompt
+    assert "HERMES_FIRESTORE_IMPERSONATE_SERVICE_ACCOUNT" in prompt
     assert "orgs/{tenantId}/..." in prompt
     assert "orgs/{orgId}/members/{uid}" in prompt
     assert "orgs/{orgId}/projects/{projectId}" in prompt

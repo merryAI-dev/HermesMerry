@@ -146,6 +146,7 @@ def _firestore_read_only_guidance() -> str:
 - 운영 URL은 `https://inner-platform.vercel.app/`, 별칭 도메인은 `https://submit-mysc.com`입니다.
 - Firebase 프로젝트 ID와 설정은 코드상 Firebase 설정, `.env`, Vercel env를 기준으로 확인합니다.
 - Firebase 관련 파일은 `/Users/boram/InnerPlatform/firebase/firestore.rules`, `/Users/boram/InnerPlatform/firebase/storage.rules`, `/Users/boram/InnerPlatform/src/app/lib/firebase.ts`, `/Users/boram/InnerPlatform/src/app/lib/firebase-context.tsx`를 우선 봅니다.
+- Firestore 실물 조회가 필요하면 `scripts/firestore_readonly_audit.py`를 우선 사용합니다. 장기 JSON 키 대신 `HERMES_FIRESTORE_IMPERSONATE_SERVICE_ACCOUNT`로 read-only 서비스 계정 impersonation을 사용합니다.
 - 모든 주요 데이터는 먼저 `orgs/{tenantId}/...` tenant scope에서 확인합니다. 현재 운영 tenant는 보통 `mysc`입니다.
 - tenant가 다르면 같은 프로젝트명이어도 다른 데이터로 봅니다.
 - `orgs/{orgId}/members/{uid}`가 권한 원장의 출발점입니다. email/name/label보다 uid와 role(admin, finance, pm, viewer)을 우선합니다.
