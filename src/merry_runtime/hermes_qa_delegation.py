@@ -95,6 +95,9 @@ def build_hermes_qa_execution_prompt(
 - GitHub repo: {github_repo}
 - 보람 Slack user ID: {reviewer_slack_user_id}
 
+Firestore read-only 운영 원장 원칙:
+{_firestore_read_only_guidance()}
+
 Slack QA:
 {event.summary}
 
@@ -125,6 +128,7 @@ Slack QA:
 주의:
 - 코드 수정/배포를 했다고 말하지 마세요. 이 작업은 1차 진단과 이슈화입니다.
 - 근거가 부족하면 단정하지 말고 확인 필요로 표현하세요.
+- Firestore는 read-only audit만 수행하세요. Firestore write/delete/update/set/batch/transaction은 어떤 경우에도 실행하지 마세요.
 - 시크릿, 토큰, 쿠키는 출력하지 마세요.
 
 최종 응답:
@@ -134,6 +138,29 @@ Slack QA:
 - Slack 채널 메시지 발송 여부
 만 간단히 보고하세요.
 """
+
+
+def _firestore_read_only_guidance() -> str:
+    return """- Firestore는 화면 상태 저장소가 아니라 tenant 단위 운영 원장입니다.
+- InnerPlatform canonical repo는 `https://github.com/merryAI-dev/InnerPlatform`, 로컬 경로는 `/Users/boram/InnerPlatform`입니다.
+- 운영 URL은 `https://inner-platform.vercel.app/`, 별칭 도메인은 `https://submit-mysc.com`입니다.
+- Firebase 프로젝트 ID와 설정은 코드상 Firebase 설정, `.env`, Vercel env를 기준으로 확인합니다.
+- Firebase 관련 파일은 `/Users/boram/InnerPlatform/firebase/firestore.rules`, `/Users/boram/InnerPlatform/firebase/storage.rules`, `/Users/boram/InnerPlatform/src/app/lib/firebase.ts`, `/Users/boram/InnerPlatform/src/app/lib/firebase-context.tsx`를 우선 봅니다.
+- 모든 주요 데이터는 먼저 `orgs/{tenantId}/...` tenant scope에서 확인합니다. 현재 운영 tenant는 보통 `mysc`입니다.
+- tenant가 다르면 같은 프로젝트명이어도 다른 데이터로 봅니다.
+- `orgs/{orgId}/members/{uid}`가 권한 원장의 출발점입니다. email/name/label보다 uid와 role(admin, finance, pm, viewer)을 우선합니다.
+- `orgs/{orgId}/projects/{projectId}`를 canonical project source로 봅니다. 프로젝트명, PM명, 등록자명은 display label일 수 있으므로 단독 기준으로 쓰지 않습니다.
+- `project_requests`는 등록/승인 원문입니다. registrationSource보다 linked request status와 linked project를 우선 확인합니다.
+- cashflow/actual/projection은 계산값이 아니라 저장 원장입니다. transactions는 actual의 근거, `cashflow_weeks` 또는 legacy `cashflowWeeks`는 주차별 저장 결과로 봅니다.
+- 컬렉션명이 혼재될 수 있으니 `cashflow_weeks`와 legacy `cashflowWeeks`를 모두 schema alias 후보로 점검합니다.
+- 우선 확인 컬렉션: `orgs/{tenantId}/members`, `orgs/{tenantId}/projects`, `orgs/{tenantId}/project_requests`, `orgs/{tenantId}/transactions`, `orgs/{tenantId}/cashflow_weeks`, `orgs/{tenantId}/cashflowWeeks`, `orgs/{tenantId}/projects/{projectId}/expense_sheets`, `orgs/{tenantId}/projects/{projectId}/expense_intake`, `orgs/{tenantId}/audit_logs`.
+- Hermes는 Firestore를 직접 수정하는 자동화 봇이 아니라 운영 원장의 정합성을 점검하는 read-only 에이전트입니다.
+- Firestore에서는 get/list/query만 허용됩니다. create/set/update/delete/batch/transaction은 금지입니다.
+- 불일치가 있으면 영향 범위와 추천 patch를 dry-run 계획으로만 작성합니다. Hermes가 Firestore에 직접 쓰거나 지우면 안 됩니다.
+- 삭제는 금지입니다. 삭제가 필요해 보여도 archived/trashed/status 필드 사용을 추천안으로만 제시합니다.
+- nested object는 얕게 덮어쓰면 안 됩니다. cashflow, project financials, owner metadata는 기존 값을 읽고 필요한 필드만 deep merge하는 계획만 제시합니다.
+- loading 중 null, 권한 sync 지연, project sync 지연을 오류로 단정하지 않습니다. 상태값 변화는 audit event로 보고 redirect나 destructive update의 근거로 삼지 않습니다.
+- 핵심: 이름이 아니라 ID 연결을 보고, 쓰기 전 단계가 아니라 쓰기 제안 전 단계에서 read-only audit과 deep merge plan을 먼저 만듭니다."""
 
 
 def run_hermes_qa_handoff(

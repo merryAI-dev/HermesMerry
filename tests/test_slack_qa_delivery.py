@@ -61,3 +61,9 @@ def test_post_plan_skips_when_hermes_loop_already_handled_actions() -> None:
     )
 
     assert calls == []
+
+
+def test_default_github_repo_targets_innerplatform_for_firestore_qa() -> None:
+    module = _load_realtime_agent_module()
+
+    assert module.DEFAULT_GITHUB_REPO == "merryAI-dev/InnerPlatform"

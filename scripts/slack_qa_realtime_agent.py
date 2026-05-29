@@ -26,7 +26,7 @@ from merry_runtime.slack_qa_triage import build_github_search_terms, build_qa_dr
 
 DEFAULT_QA_CHANNEL = "C0AH3LQ00AD"
 DEFAULT_STATE_FILE = "tmp/hermes/slack-qa-realtime-state.json"
-DEFAULT_GITHUB_REPO = "merryAI-dev/startup-diagnostic-platform"
+DEFAULT_GITHUB_REPO = "merryAI-dev/InnerPlatform"
 DEFAULT_BORAM_SLACK_USER_ID = "U099F3KA1CL"
 
 

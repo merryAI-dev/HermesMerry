@@ -99,3 +99,42 @@ def test_build_execution_prompt_makes_hermes_own_github_and_slack_actions(tmp_pa
     assert "두 번째 댓글: 생성한 GitHub issue 제목과 본문" in prompt
     assert "[QA 1차 진단] <GitHub issue 제목>" in prompt
     assert "이 메시지는 스레드 댓글이 아닙니다" in prompt
+
+
+def test_execution_prompt_enforces_firestore_read_only_tenant_ledger_rules(tmp_path: Path) -> None:
+    repo = tmp_path / "innerplatform"
+    event = QATriageEvent(
+        summary="PM 포털에서 프로젝트가 보이지 않습니다.",
+        requester_slack_user_id="U123",
+        channel="C123",
+        message_ts="177.1",
+        thread_ts="177.1",
+    )
+
+    prompt = build_hermes_qa_execution_prompt(
+        event,
+        [],
+        repo_paths=[repo],
+        github_repo="merryAI-dev/InnerPlatform",
+        reviewer_slack_user_id="U099F3KA1CL",
+        slack_channel="C123",
+        thread_ts="177.1",
+    )
+
+    assert "Firestore read-only 운영 원장 원칙" in prompt
+    assert "https://github.com/merryAI-dev/InnerPlatform" in prompt
+    assert "/Users/boram/InnerPlatform" in prompt
+    assert "https://inner-platform.vercel.app/" in prompt
+    assert "https://submit-mysc.com" in prompt
+    assert "/Users/boram/InnerPlatform/firebase/firestore.rules" in prompt
+    assert "/Users/boram/InnerPlatform/src/app/lib/firebase.ts" in prompt
+    assert "현재 운영 tenant는 보통 `mysc`" in prompt
+    assert "orgs/{tenantId}/..." in prompt
+    assert "orgs/{orgId}/members/{uid}" in prompt
+    assert "orgs/{orgId}/projects/{projectId}" in prompt
+    assert "project_requests" in prompt
+    assert "cashflow_weeks" in prompt
+    assert "cashflowWeeks" in prompt
+    assert "get/list/query만 허용" in prompt
+    assert "create/set/update/delete/batch/transaction은 금지" in prompt
+    assert "Hermes가 Firestore에 직접 쓰거나 지우면 안 됩니다" in prompt
